@@ -1,0 +1,1111 @@
+#+TITLE: Doom Emacs Configuration
+#+author: Abdelrahman Madkour
+#+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
+#+property: header-args :tangle no :results silent
+* Introduction
+This is my doom emacs config or whatever. Not perfect by any means and will ever be a work in progress, kinda like me hahahah I am so funny...kill yourself
+* Basic Configuration
+#+begin_src emacs-lisp
+;; ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
+#+end_src
+** Personal Information
+Name and email and stuff, don't spam me please. I guess I will have to encrypt this at some point if I make this public.
+#+begin_src emacs-lisp
+;; Some functionality uses this to identify you, e.g. GPG configuration, email
+;; clients, file templates and snippets.
+(setq user-full-name "Abdelrahman Madkour"
+      user-mail-address "a3madkour@gmail.com")
+#+end_src
+
+Here is where I would load the email stuff
+#+begin_src emacs-lisp
+
+#+end_src
+** Doom configuration
+*** Modules
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle no
+:END:
+Doom has this lovely /modular configuration base/ that takes a lot of work out of
+configuring Emacs. Each module (when enabled) can provide a list of packages to
+install (on ~doom sync~) and configuration to be applied. The modules can also
+have flags applied to tweak their behavior.
+
+#+name: init.el
+#+begin_src emacs-lisp :tangle "init.el" :noweb no-export :comments none
+;;; init.el -*- lexical-binding: t; -*-
+
+;; This file controls what Doom modules are enabled and what order they load in.
+;; Press 'K' on a module to view its documentation, and 'gd' to browse its directory.
+
+(doom! :completion
+       <<doom-completion>>
+
+       :ui
+       <<doom-ui>>
+
+       :editor
+       <<doom-editor>>
+
+       :emacs
+       <<doom-emacs>>
+
+       :term
+       <<doom-term>>
+
+       :checkers
+       <<doom-checkers>>
+
+       :tools
+       <<doom-tools>>
+
+       :os
+       <<doom-os>>
+
+       :lang
+       <<doom-lang>>
+
+       :email
+       <<doom-email>>
+
+       :app
+       <<doom-app>>
+
+       :config
+       <<doom-config>>
+       )
+#+end_src
+
+**** Structure
+As you may have noticed by this point, this is a [[https://en.wikipedia.org/wiki/Literate_programming][literate]] configuration. Doom
+has good support for this which we access though the ~literate~ module.
+
+While we're in the ~:config~ section, we'll use Dooms nicer defaults, along with
+the bindings and smartparens behaviour (the flags aren't documented, but they exist).
+#+name: doom-config
+#+begin_src emacs-lisp
+literate
+(default +bindings +smartparens)
+#+end_src
+
+**** Interface
+here's a lot that can be done to enhance Emacs' capabilities.
+I reckon enabling half the modules Doom provides should do it.
+
+#+name: doom-completion
+#+begin_src emacs-lisp
+(company                     ; the ultimate code completion backend
+ +childframe)                ; better UI for company (Emacs 26+)
+;;helm                       ; the *other* search engine for love and life
+;;ido                        ; the other *other* search engine...
+;; (ivy                         ; a search engine for love and life
+;;  +icons                      ; ... icons are nice
+;;  ;; +childframe                 ; better UI for company (Emacs 26+)
+;;  +fuzzy                      ; enable fuzzy search backend
+;;  +prescient                 ; ... I know what I want(ed)
+;;  )
+(vertico +icons)
+#+end_src
+
+#+name: doom-ui
+#+begin_src emacs-lisp
+deft                       ; notational velocity for Emacs
+doom                         ; what makes DOOM look the way it does
+doom-dashboard               ; a nifty splash screen for Emacs
+doom-quit                    ; DOOM quit-message prompts when you quit Emacs
+emoji
+;; fill-column                ; a `fill-column' indicator
+hl-todo                      ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
+hydra                      ; quick documentation for related commands
+;; indent-guides              ; highlighted indent columns, notoriously slow
+;; (ligatures
+;; +iosevka
+;; +hasklig
+;; +fira
+;; +extra)           ; ligatures and symbols to make your code pretty again
+minimap                    ; show a map of the code on the side
+modeline                     ; snazzy, Atom-inspired modeline, plus API
+nav-flash                    ; blink the current line after jumping
+;;neotree                    ; a project drawer, like NERDTree for vim
+ophints                      ; highlight the region an operation acts on
+(popup                       ; tame sudden yet inevitable temporary windows
+ ;; +all                        ; catch all popups that start with an asterix
+ +defaults)                  ; default popup rules
+;;(tabs                      ; an tab bar for Emacs
+;;  +centaur-tabs)           ; ... with prettier tabs
+treemacs                     ; a project drawer, like neotree but cooler
+unicode                    ; extended unicode support for various languages
+vc-gutter                    ; vcs diff in the fringe
+vi-tilde-fringe              ; fringe tildes to mark beyond EOB
+(window-select +numbers)     ; visually switch windows
+workspaces                   ; tab emulation, persistence & separate workspaces
+zen                          ; distraction-free coding or writing
+#+end_src
+
+#+name: doom-editor
+#+begin_src emacs-lisp
+(evil +everywhere)           ; come to the dark side, we have cookies
+file-templates               ; auto-snippets for empty files
+fold                         ; (nigh) universal code folding
+(format +onsave)             ; automated prettiness
+;;god                        ; run Emacs commands without modifier keys
+;;lispy                      ; vim for lisp, for people who don't like vim
+multiple-cursors             ; editing in many places at once
+;;objed                      ; text object editing for the innocent
+;;parinfer                   ; turn lisp into python, sort of
+rotate-text                  ; cycle region at point between text candidates
+;; snippets                     ; my elves. They type so I don't have to
+word-wrap                  ; soft wrapping with language-aware indent
+#+end_src
+
+#+name: doom-emacs
+#+begin_src emacs-lisp
+(dired +ranger +icons)               ; making dired pretty [functional]
+electric                     ; smarter, keyword-based electric-indent
+(ibuffer +icons)             ; interactive buffer management
+(undo +tree)                 ; persistent, smarter undo for your inevitable mistakes
+vc                           ; version-control and Emacs, sitting in a tree
+#+end_src
+
+#+name: doom-term
+#+begin_src emacs-lisp
+eshell                     ; the elisp shell that works everywhere
+;;shell                      ; simple shell REPL for Emacs
+;; term                       ; basic terminal emulator for Emacs
+vterm                        ; the best terminal emulation in Emacs
+#+end_src
+
+#+name: doom-checkers
+#+begin_src emacs-lisp
+syntax                       ; tasing you for every semicolon you forget
+spell                        ; tasing you for misspelling mispelling
+grammar                      ; tasing grammar mistake every you make
+#+end_src
+
+#+name: doom-tools
+#+begin_src emacs-lisp
+;; ansible                      ; a crucible for infrastructure as code
+(debugger                    ; FIXME stepping through code, to help you add bugs
+ +lsp)
+;;direnv                     ; be direct about your environment
+(docker                     ; port everything to containers
+ +lsp)
+editorconfig               ; let someone else argue about tabs vs spaces
+ein                        ; tame Jupyter notebooks with emacs
+(eval +overlay)              ; run code, run (also, repls)
+gist                       ; interacting with github gists
+(lookup                      ; helps you navigate your code and documentation
+ +dictionary                 ; dictionary/thesaurus is nice
+ +offline
+ +docsets)                   ; ...or in Dash docsets locally
+lsp                          ; Language Server Protocol
+(magit                       ; a git porcelain for Emacs
+ +forge)                     ; interface with git forges
+make                         ; run make tasks from Emacs
+biblio
+pass                       ; password manager for nerds
+pdf                          ; pdf enhancements
+prodigy                    ; FIXME managing external services & code builders
+rgb                          ; creating color strings
+taskrunner                 ; taskrunner for all your projects
+;;terraform                  ; infrastructure as code
+;;tmux                       ; an API for interacting with tmux
+;; upload                       ; map local to remote projects via ssh/ftp
+#+end_src
+
+#+name: doom-os
+#+begin_src emacs-lisp
+(:if IS-MAC macos)              ; MacOS-specific commands
+;; tty                          ; improve the terminal Emacs experience
+#+end_src
+
+**** Language support
+We can be rather liberal with enabling support for languages as the associated
+packages/configuration are (usually) only loaded when first opening an
+associated file.
+
+#+name: doom-lang
+#+begin_src emacs-lisp
+;; agda                      ; types of types of types of types...
+(cc +lsp)                    ; C/C++/Obj-C madness
+clojure                    ; java with a lisp
+;;common-lisp                ; if you've seen one lisp, you've seen them all
+coq                        ; proofs-as-programs
+;;crystal                    ; ruby at the speed of c
+(csharp +lsp)                ; unity, .NET, and mono shenanigans
+data                      ; config/data formats
+;; (dart +flutter)            ; paint ui and not much else
+;;elixir                     ; erlang done right
+;;elm                        ; care for a cup of TEA?
+emacs-lisp                   ; drown in parentheses
+;;erlang                     ; an elegant language for a more civilized age
+ess                          ; emacs speaks statistics
+;;faust                      ; dsp, but you get to keep your soul
+;;fsharp                     ; ML stands for Microsoft's Language
+;;fstar                      ; (dependent) types and (monadic) effects and Z3
+(gdscript +lsp)              ; the language you waited for
+(go +lsp)                  ; the hipster dialect
+(haskell +dante)             ; a language that's lazier than I am
+;;hy                         ; readability of scheme w/ speed of python
+;;idris                      ;
+json                       ; At least it ain't XML
+(java +lsp)          ; the poster child for carpal tunnel syndrome
+(javascript +lsp)            ; all(hope(abandon(ye(who(enter(here))))))
+julia                      ; a better, faster MATLAB
+;;kotlin                     ; a better, slicker Java(Script)
+(latex                       ; writing papers in Emacs has never been so fun
+ +latexmk                    ; what else would you use?
+ +cdlatex                    ; quick maths symbols
+ +lsp
+ +fold)                      ; fold the clutter away nicities
+;;lean                       ; proof that mathematicians need help
+;;factor                     ; for when scripts are stacked against you
+ledger                     ; an accounting system in Emacs
+lua                          ; one-based indices? one-based indices
+markdown                     ; writing docs for people to ignore
+;; nim                        ; python + lisp at the speed of c
+;;nix                        ; I hereby declare "nix geht mehr!"
+ocaml                      ; an objective camel
+(org                         ; organize your plain life in plain text
+ +pretty                     ; yessss my pretties! (nice unicode symbols)
+ +dragndrop                  ; drag & drop files/images into org buffers
+ +hugo                     ; use Emacs for hugo blogging
+ +journal
+ +jupyter                    ; ipython/jupyter support for babel
+ +pandoc                     ; export-with-pandoc support
+ +gnuplot                    ; who doesn't like pretty pictures
+ +noter
+ +pomodoro                 ; be fruitful with the tomato technique
+ +present                    ; using org-mode for presentations
+ +roam2)                      ; wander around notes
+;; )
+;;perl                       ; write code no one else can comprehend
+;;php                        ; perl's insecure younger brother
+;;plantuml                   ; diagrams for confusing people more
+;;purescript                 ; javascript, but functional
+(python                     ; beautiful is better than ugly
+ +conda
+ +pyright
+ +lsp)
+;;qt                         ; the 'cutest' gui framework ever
+racket                     ; a DSL for DSLs
+;;raku                       ; the artist formerly known as perl6
+rest                       ; Emacs as a REST client
+rst                        ; ReST in peace
+;;(ruby +rails)              ; 1.step {|i| p "Ruby is #{i.even? ? 'love' : 'life'}"}
+(rust +lsp)                  ; Fe2O3.unwrap().unwrap().unwrap().unwrap()
+;;scala                      ; java, but good
+scheme                       ; a fully conniving family of lisps
+(sh +lsp)                           ; she sells {ba,z,fi}sh shells on the C xor
+sml                        ; no, the /other/ ML
+;;solidity                   ; do you need a blockchain? No.
+;;swift                      ; who asked for emoji variables?
+;;terra                      ; Earth and Moon in alignment for performance.
+(web                          ; the tubes
+ +css
+ +html)
+(yaml                         ; JSON, but readable
+ +lsp)
+#+end_src
+
+**** Everything in Emacs
+
+#+name: doom-email
+#+begin_src emacs-lisp
+(mu4e +org +gmail)
+;;notmuch
+;;(wanderlust +gmail)
+#+end_src
+
+#+name: doom-app
+#+begin_src emacs-lisp
+emms
+everywhere        ; *leave* Emacs!? You must be joking
+calendar
+irc                          ; how neckbeards socialize
+(rss +org)                   ; emacs as an RSS reader
+twitter                    ; twitter client https://twitter.com/vnought
+#+end_src
+*** Visual Settings
+**** Font Face
+#+begin_src emacs-lisp
+;; Doom exposes five (optional) variables for controlling fonts in Doom. Here
+;; are the three important ones:
+;;
+;; + `doom-font'
+;; + `doom-variable-pitch-font'
+;; + `doom-big-font' -- used for `doom-big-font-mode'; use this for
+;;   presentations or streaming.
+;;
+;; They all accept either a font-spec, font string ("Input Mono-12"), or xlfd
+;; font string. You generally only need these two:
+(setq doom-font (font-spec :family "monospace" :size 14))
+#+end_src
+**** Theme and modeline
+#+begin_src emacs-lisp
+;; There are two ways to load a theme. Both assume the theme is installed and
+;; available. You can either set `doom-theme' or manually load a theme with the
+;; `load-theme' function. This is the default:
+(setq doom-theme 'doom-monokai-classic)
+#+end_src
+**** Miscellaneous
+#+begin_src emacs-lisp
+;; This determines the style of line numbers in effect. If set to `nil', line
+;; numbers are disabled. For relative line numbers, set this to `relative'.
+(setq display-line-numbers-type 'relative)
+
+;; (global-display-line-numbers-mode 't)
+
+; Disable line numbers for some modes
+;; (dolist (mode '(term-mode-hook
+;; 		shell-mode-hook
+;;         org-mode-hook
+;; 		eshell-mode-hook))
+;;   (add-hook mode (lambda () (display-line-numbers-mode 0))))
+#+end_src
+** Other things
+*** Systemd daemon
+#+begin_src emacs-lisp
+;; (defun greedily-do-daemon-setup ()
+;;   (require 'org)
+;;   (when (require 'mu4e nil t)
+;;     (setq mu4e-confirm-quit t)
+;;     (setq +mu4e-lock-greedy t)
+;;     (setq +mu4e-lock-relaxed t)
+;;     (+mu4e-lock-add-watcher)
+;;     (when (+mu4e-lock-available t)
+;;       (mu4e~start)))
+;;   (when (require 'elfeed nil t)
+;;     (run-at-time nil (* 8 60 60) #'elfeed-update)))
+
+;; (when (daemonp)
+;;   (add-hook 'emacs-startup-hook #'greedily-do-daemon-setup))
+#+end_src
+*** Window management
+#+begin_src emacs-lisp
+(setq split-height-threshold nil)
+(setq split-width-threshold 0)
+#+end_src
+
+* Packages
+The "package.el" file shouldn't be byte compiled.
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+;; -*- no-byte-compile: t; -*-
+#+end_src
+** General Packages
+*** Shell
+**** Eshell git prompt
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! eshell-git-prompt)
+#+end_src
+
+#+begin_src emacs-lisp
+(after! eshell
+          (eshell-git-prompt-use-theme 'powerline)
+)
+#+end_src
+*** Fun
+**** Spotify
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! smudge)
+#+end_src
+#+begin_src emacs-lisp
+(use-package! smudge
+  :config
+  (setq smudge-oauth2-client-id "48e1012bfd264c129bf0c89966817aca"
+    smudge-oauth2-client-secret "e6c298a6bf1343f1a3b05253c252af16")
+)
+#+end_src
+**** Academic Phrases
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! academic-phrases)
+#+end_src
+*** UI
+**** Treemacs
+#+begin_src emacs-lisp
+(add-hook! treemacs-mode
+  (treemacs-load-theme "doom-colors")
+  )
+#+end_src
+**** Command Log
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! command-log-mode)
+#+end_src
+#+begin_src emacs-lisp
+(use-package! command-log-mode)
+#+end_src
+
+*** Window Management
+**** EXWM
+***** Core
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+;; (package! exwm)
+#+end_src
+#+begin_src emacs-lisp
+;; (defun a3madkour/run-in-background (command)
+;;   (let ((command-parts (split-string command "[ ]+")))
+;;     (apply #'call-process `(,(car command-parts) nil 0 nil ,@(cdr command-parts)))))
+
+;; ;; (defun a3madkour/set-wallpaper ()
+;; ;;   (interactive)
+;; ;;   ;; NOTE: You will need to update this to a valid background path!
+;; ;;   (start-process-shell-command
+;; ;;    "feh" nil  "feh --bg-scale /usr/share/backgrounds/matt-mcnulty-nyc-2nd-ave.jpg"))
+
+;; (defun a3madkour/exwm-init-hook ()
+;;   ;; Make workspace 1 be the one where we land at startup
+;;   (exwm-workspace-switch-create 0)
+
+;;   ;; Open eshell by default
+;;   ;;(eshell)
+
+;;   ;; Show battery status in the mode line
+;;   (display-battery-mode 1)
+
+;;   ;; Show the time and date in modeline
+;;   ;; (setq display-time-day-and-date t)
+;;   ;; (display-time-mode 1)
+;;   ;; Also take a look at display-time-format and format-time-string
+
+;;   (a3madkour/start-panel)
+;;   ;; Launch apps that will run in the background
+;;   (a3madkour/run-in-background "dunst")
+;;   (a3madkour/run-in-background "nm-applet")
+;;   (a3madkour/run-in-background "pasystray")
+;;   (a3madkour/run-in-background "blueman-applet"))
+
+;; (defun a3madkour/exwm-update-class ()
+;;   (exwm-workspace-rename-buffer exwm-class-name))
+
+;; (defun a3madkour/exwm-update-title ()
+;;   (pcase exwm-class-name
+;;     ("Brave-browser" (exwm-workspace-rename-buffer (format "Brave-browser: %s" exwm-title)))))
+
+;; ;; This function should be used only after configuring autorandr!
+;; (defun a3madkour/update-displays ()
+;;   (a3madkour/run-in-background "autorandr --change --force")
+;;   (message "Display config: %s"
+;;            (string-trim (shell-command-to-string "autorandr --current"))))
+
+;; (use-package! exwm
+;;   :config
+;;   ;; Set the default number of workspace
+;;   (setq exwm-workspace-number 5)
+
+;;   ;; When window "class" updates, use it to set the buffer name
+;;   (add-hook! 'exwm-update-class-hook #'a3madkour/exwm-update-class)
+
+  ;; When window title updates, use it to set the buffer name
+  ;; (add-hook! 'exwm-update-title-hook #'a3madkour/exwm-update-title)
+
+  ;; When EXWM starts up, do some extra configuration
+  ;; (add-hook! 'exwm-init-hook #'a3madkour/exwm-init-hook )
+
+  ;; (start-process-shell-command "xmodmap" nil "xmodmap ~/.emacs.d/exwm/Xmodmap")
+
+  ;; (require 'exwm-randr)
+  ;; (exwm-randr-enable)
+
+  ;; (setq exwm-randr-workspace-monitor-plist
+  ;;       (pcase (system-name)
+  ;;         ("labmachine" '(2 "HDMI-1" 3 "HDMI-1"))
+  ;;         ("linuxmachine" '(2 "DP-1-2" 3 "DP-1-2"))))
+
+  ;; ;; React to display connectivity changes, do initial display update
+  ;; (add-hook 'exwm-randr-screen-change-hook #'a3madkour/update-displays)
+  ;; (a3madkour/update-displays)
+
+  ;; (require 'exwm-systemtray)
+  ;; (exwm-systemtray-enable)
+
+  ;; Automatically send the mouse cursor to the selected workspace's display
+  ;; (setq exwm-workspace-warp-cursor t)
+
+  ;; Window focus should follow the mouse pointer
+  ;; (setq mouse-autoselect-window t
+  ;;       focus-follows-mouse t)
+
+  ;; (setq exwm-input-prefix-keys
+  ;;       '(?\C-x
+  ;;         ?\C-u
+  ;;         ?\C-h
+  ;;         ?\M-x
+  ;;         ?\M-`
+  ;;         ?\M-&
+  ;;         ?\M-:
+  ;;         ?\C-\M-j
+  ;;         ?\C-\ ))
+
+  ;; (define-key exwm-mode-map [?\C-q]   'exwm-input-send-next-key)
+
+
+  ;; (setq exwm-input-global-keys
+  ;;       `(
+          ;; Reset to line-mode (C-c C-k switches to char-mode via exwm-input-release-keyboard)
+  ;;         ([?\s-r] . exwm-reset)
+
+  ;;         ;; Move between windows
+  ;;         ([?\s-h] . windmove-left)
+  ;;         ([?\s-l] . windmove-right)
+  ;;         ([?\s-k] . windmove-up)
+  ;;         ([?\s-j] . windmove-down)
+
+  ;;         ;; Launch applications via shell command
+  ;;         ([?\s-&] . (lambda (command)
+  ;;                      (interactive (list (read-shell-command "$ ")))
+  ;;                      (start-process-shell-command command nil command)))
+
+  ;;         ;; Switch workspace
+  ;;         ([?\s-w] . exwm-workspace-switch)
+  ;;         ([?\s-`] . (lambda () (interactive) (exwm-workspace-switch-create 0)))
+
+  ;;         ;; 's-N': Switch to certain workspace with Super (Win) plus a number key (0 - 9)
+  ;;         ,@(mapcar (lambda (i)
+  ;;                     `(,(kbd (format "s-%d" i)) .
+  ;;                       (lambda ()
+  ;;                         (interactive)
+  ;;                         (exwm-workspace-switch-create ,i))))
+  ;;                   (number-sequence 0 9))))
+
+  ;; (exwm-input-set-key (kbd "s-SPC") 'counsel-linux-app)
+
+  ;; (exwm-enable)
+  ;; )
+#+end_src
+
+**** Desktop Environment
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+;; (package! desktop-environment)
+#+end_src
+#+begin_src emacs-lisp
+;; (use-package! desktop-environment
+;;   :after exwm
+;;   :config (desktop-environment-mode)
+;;   :custom
+;;   (desktop-environment-brightness-small-increment "2%+")
+;;   (desktop-environment-brightness-small-decrement "2%-")
+;;   (desktop-environment-brightness-normal-increment "5%+")
+;;   (desktop-environment-brightness-normal-decrement "5%-"))
+#+end_src
+**** Polybar
+#+begin_src emacs-lisp
+;; Make sure the server is started (better to do this in your main Emacs config!)
+;; (server-start)
+
+;; (defvar a3madkour/polybar-process nil
+;;   "Holds the process of the running Polybar instance, if any")
+
+;; (defun a3madkour/kill-panel ()
+;;   (interactive)
+;;   (when a3madkour/polybar-process
+;;     (ignore-errors
+;;       (kill-process a3madkour/polybar-process)))
+;;   (setq a3madkour/polybar-process nil))
+
+;; (defun a3madkour/start-panel ()
+;;   (interactive)
+;;   (a3madkour/kill-panel)
+;;   (setq a3madkour/polybar-process (start-process-shell-command "polybar" nil "polybar panel")))
+
+;; (defun a3madkour/send-polybar-hook (module-name hook-index)
+;;   (start-process-shell-command "polybar-msg" nil (format "polybar-msg hook %s %s" module-name hook-index)))
+
+;; (defun a3madkour/send-polybar-exwm-workspace ()
+;;   (a3madkour/send-polybar-hook "exwm-workspace" 1))
+
+;; ;; Update panel indicator when workspace changes
+;; (add-hook 'exwm-workspace-switch-hook #'a3madkour/send-polybar-exwm-workspace)
+#+end_src
+**** Dunst
+#+begin_src emacs-lisp
+;; (defun a3madkour/disable-desktop-notifications ()
+;;   (interactive)
+;;   (start-process-shell-command "notify-send" nil "notify-send \"DUNST_COMMAND_PAUSE\""))
+
+;; (defun a3madkour/enable-desktop-notifications ()
+;;   (interactive)
+;;   (start-process-shell-command "notify-send" nil "notify-send \"DUNST_COMMAND_RESUME\""))
+
+;; (defun a3madkour/toggle-desktop-notifications ()
+;;   (interactive)
+;;   (start-process-shell-command "notify-send" nil "notify-send \"DUNST_COMMAND_TOGGLE\""))
+#+end_src
+*** Email
+**** Mu4e
+#+begin_src emacs-lisp
+ (after! mu4e
+   ;;   :config
+   ;;   ;; This is set to 't' to avoid mail syncing issues when using mbsync
+   (setq mu4e-change-filenames-when-moving t)
+
+   ;;   ;; Refresh mail using isync every 10 minutes
+   (setq mu4e-update-interval (* 10 60))
+   (setq mu4e-get-mail-command "mbsync -a")
+   (setq mu4e-root-maildir "~/Mail")
+
+
+   (setq mu4e-contexts
+         (list
+          ;; Personal account
+          (make-mu4e-context
+           :name "Personal"
+           :match-func
+           (lambda (msg)
+             (when msg
+               (string-prefix-p "/Gmail" (mu4e-message-field msg :maildir))))
+           :vars '((user-mail-address . "a3madkour@gmail.com")
+                   (user-full-name    . "Abdelrahman Madkour Gmail")
+                   (mu4e-drafts-folder  . "/Gmail/Drafts")
+                   (mu4e-sent-folder  . "/Gmail/Sent Mail")
+                   (mu4e-refile-folder  . "/Gmail/All Mail")
+                   (mu4e-trash-folder  . "/Gmail/Trash")))
+
+          ;; Maroon Loop account
+          (make-mu4e-context
+           :name "Maroon"
+           :match-func
+           (lambda (msg)
+             (when msg
+               (string-prefix-p "/MaroonLoop" (mu4e-message-field msg :maildir))))
+           :vars '((user-mail-address . "loopmaroon@gmail.com")
+                   (user-full-name    . "Maroon Loop Gmail")
+                   (mu4e-drafts-folder  . "/MaroonLoop/Drafts")
+                   (mu4e-sent-folder  . "/MaroonLoop/Sent Mail")
+                   (mu4e-refile-folder  . "/MaroonLoop/All Mail")
+                   (mu4e-trash-folder  . "/MaroonLoop/Trash")))))
+
+   (setq mu4e-maildir-shortcuts
+         '((:maildir "/Gmail/Inbox"    :key ?i)
+           (:maildir "/Gmail/Sent Mail" :key ?s)
+           (:maildir "/Gmail/Trash"     :key ?t)
+           (:maildir "/Gmail/Drafts"    :key ?d)
+           (:maildir "/Gmail/All Mail"  :key ?a)))
+   (mu4e t)
+   )
+#+end_src
+*** Screenwriting
+**** Fountain
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! fountain-mode)
+#+end_src
+*** Calendar
+**** Org-gcal
+#+begin_src emacs-lisp
+(require 'org-gcal)
+(setq org-gcal-client-id "497062789073-ebje9tkqvv79gnm1e0q5uvdgaaqp6mt0.apps.googleusercontent.com"
+      org-gcal-client-secret "WPeCGrJjihtqRm_D3oz9PWmS"
+      org-gcal-file-alist '(("a3madkour@gmail.com" .  "~/org/gcal.org")))
+
+(add-hook! 'evil-org-agenda-mode-hook 'org-gcal-fetch)
+(add-hook! 'cfw:calendar-mode-hook 'org-gcal-fetch)
+#+end_src
+*** Messaging
+*** Cooking
+**** Org-chef
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-chef)
+#+end_src
+*** Time management
+**** Org clock csv
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-clock-csv)
+#+end_src
+
+** Language Packages
+*** Python
+**** Debugger
+#+begin_src emacs-lisp
+(add-hook 'python-mode-hook (lambda ()
+                            (setq dap-python-debugger 'debugpy)))
+#+end_src
+**** Sphinx
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! sphinx-doc)
+#+end_src
+#+begin_src emacs-lisp
+(add-hook 'python-mode-hook (lambda ()
+                            (require 'sphinx-doc)
+                            (sphinx-doc-mode t)))
+(map!
+ :mode python-mode
+ :localleader
+       "d" #'sphinx-doc
+ )
+#+end_src
+**** IPython Notebook
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! ein)
+#+end_src
+*** GDScript
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! gdscript-mode)
+#+end_src
+*** Org Mode
+**** System Config
+#+begin_src emacs-lisp
+;; If you use `org' and don't want your org files in the default location below,
+;; change `org-directory'. It must be set before org loads!
+(setq org-directory "~/org/")
+#+end_src
+***** Loading Org
+#+begin_src emacs-lisp
+;; (defun a3madkour/org-mode-setup ()
+;; (org-indent-mode)
+;; (org-superstar-mode 1)
+;; (variable-pitch-mode 1)
+;; )
+#+end_src
+
+#+begin_src emacs-lisp
+;; (use-package! org
+;; :hook (org-mode . a3madkour/org-mode-setup))
+#+end_src
+***** Font Setup
+#+begin_src emacs-lisp
+(defun a3madkour/org-font-setup ()
+  ;; Replace list hyphen with dot
+  (font-lock-add-keywords 'org-mode
+                          '(("^ *\\([-]\\) "
+                             (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "•"))))))
+
+  ;; Set faces for heading levels
+  (dolist (face '((org-level-1 . 1.2)
+                  (org-level-2 . 1.1)
+                  (org-level-3 . 1.05)
+                  (org-level-4 . 1.0)
+                  (org-level-5 . 1.1)
+                  (org-level-6 . 1.1)
+                  (org-level-7 . 1.1)
+                  (org-level-8 . 1.1)))
+    (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
+
+  ;; Ensure that anything that should be fixed-pitch in Org files appears that way
+  (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
+  (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-table nil   :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
+  (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
+  (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
+  (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch))
+#+end_src
+
+***** After Org is loaded
+#+begin_src emacs-lisp
+(after! org
+#+end_src
+****** Basic Setup
+#+begin_src emacs-lisp
+(setq
+ org_notes "~/org/notes"
+ bib_notes "~/org/bib-notes"
+ zot_bib  "~/org/bib-notes/library.bib"
+ deft-directory org_notes
+ deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
+ org-cite-global-bibliography (list zot_bib)
+ org-cite-default-bibliography (list zot_bib)
+ deft-use-filename-as-title 't
+ deft-recursive 't
+ deft-default-extension "org"
+ org-roam-directory org_notes
+ )
+#+end_src
+
+****** Org Tempo
+#+begin_src emacs-lisp
+  (require 'org-tempo)
+  (add-to-list 'org-structure-template-alist '("sh" . "src sh"))
+  (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+  (add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
+  (add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
+  (add-to-list 'org-structure-template-alist '("py" . "src python"))
+  (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
+  (add-to-list 'org-structure-template-alist '("json" . "src json"))
+#+end_src
+****** Org Capture
+#+begin_src emacs-lisp
+  (setq org-capture-templates
+        '(("t" "Todo" entry (file+datetree "~/org/tasks.org")
+           "* TODO %?\n")
+          ("u" "Unscheduled task" entry (file+headline "~/org/tasks.org" "Unscheduled tasks")
+           "* TODO %?\n")
+          ("c" "Cookbook" entry (file "~/org/cookbook.org")
+           "%(org-chef-get-recipe-from-url)"
+           :empty-lines 1)
+          ("z" "Manual Cookbook" entry (file "~/org/cookbook.org")
+           "* %^{Recipe title: }\n  :PROPERTIES:\n  :source-url:\n  :servings:\n  :prep-time:\n  :cook-time:\n  :ready-in:\n  :END:\n** Ingredients\n   %?\n** Directions\n\n")
+          ("b" "Manual Book" entry (file "~/org/reading-list.org")
+           "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
+          ("r" "Research Journal" entry (file+datetree "~/org/research-journal.org")
+           "* %T \n %?")
+          ("m" "Meeting" entry (file"~/org/meetings.org")
+           "* %t \n %?")
+          ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
+           "* %?\n")
+          ("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
+           "* %?\n")
+          ("a" "App idea" entry (file+headline "~/org/ideas.org" "App")
+           "* %?\n")
+          ("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
+           "* %?\n")
+          ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
+           "* %?\n")
+          ))
+#+end_src
+****** Ox-pandoc
+#+begin_src emacs-lisp
+;; default options for all output formats
+(setq org-pandoc-options '((standalone . t)))
+;; cancel above settings only for 'docx' format
+(setq org-pandoc-options-for-docx '((standalone . nil)))
+;; special settings for beamer-pdf and latex-pdf exporters
+(setq org-pandoc-options-for-beamer-pdf '((pdf-engine . "xelatex")))
+(setq org-pandoc-options-for-latex-pdf '((pdf-engine . "pdflatex")))
+;; special extensions for markdown_github output
+(setq org-pandoc-format-extensions '(markdown_github+pipe_tables+raw_html))
+#+end_src
+****** Org Agenda
+#+begin_src emacs-lisp
+  (setq org-agenda-files
+    (quote
+     ("~/org/gcal.org" "~/org/tasks.org" "~/org/habits.org")))
+#+end_src
+
+#+begin_src emacs-lisp
+  (setq evil-org-key-theme '(textobjects navigation additional insert todo))
+  (setq org-todo-keywords
+        '((sequence "TODO(t!)" "NEXT(n!)" "DOINGNOW(d!)" "BLOCKED(b!)" "FOLLOWUP(f!)" "TICKLE(T!)" "|" "CANCELLED(c!)" "DONE(F!)")))
+  (setq org-todo-keyword-faces
+        '(("TODO" . org-warning)
+          ("DOINGNOW" . "#E35DBF")
+          ("CANCELED" . (:foreground "white" :background "#4d4d4d" :weight bold))
+          ("NEXT" . "#008080")
+        	("DONE" . "PaleGreen"))
+        )
+#+end_src
+
+#+begin_src emacs-lisp
+  (setq org-agenda-start-with-log-mode t)
+  (setq org-log-done 'time)
+  (setq org-log-into-drawer t)
+#+end_src
+******* Org-super-agenda
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-super-agenda)
+#+end_src
+
+****** Org Habit
+#+begin_src emacs-lisp
+  (require 'org-habit)
+  (add-to-list 'org-modules 'org-habit)
+  (setq org-habit-graph-column 60)
+#+end_src
+****** Bibtex
+#+begin_src emacs-lisp
+(setq
+ bibtex-completion-notes-path bib_notes
+ bibtex-completion-bibliography zot_bib
+ bibtex-completion-pdf-field "file"
+ bibtex-completion-notes-template-multiple-files
+ (concat
+  "#+title: ${title}\n"
+  "* Org Noter\n"
+  ":PROPERTIES:\n"
+  ":Custom_ID: ${=key=}\n"
+  ":NOTER_DOCUMENT: %(orb-process-file-field \"${=key=}\")\n"
+  ":AUTHOR: ${author-abbrev}\n"
+  ":JOURNAL: ${journaltitle}\n"
+  ":DATE: ${date}\n"
+  ":YEAR: ${year}\n"
+  ":DOI: ${doi}\n"
+  ":URL: ${url}\n"
+  ":END:\n\n"
+  )
+ )
+#+end_src
+****** Org Latex
+Make sure you use bibtex as part of the export process
+#+begin_src emacs-lisp
+(setq org-latex-pdf-process
+      '("latexmk -shell-escape -bibtex -pdf %f"))
+#+end_src
+****** Load Font Setup
+#+begin_src emacs-lisp
+  (a3madkour/org-font-setup)
+)
+#+end_src
+***** Behaviour
+****** Org Books
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-books
+  :recipe (:host github :repo "lepisma/org-books"))
+#+end_src
+
+#+begin_src emacs-lisp
+(after! org-books
+  (setq org-books-file "~/org/reading-list.org")
+)
+#+end_src
+****** Org Ref
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-ref)
+#+end_src
+#+begin_src emacs-lisp
+(use-package! org-ref
+  :config
+  (setq
+   org-ref-completion-library 'org-ref-ivy-cite
+   org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename-helm-bibtex
+   org-ref-default-bibliography (list zot_bib)
+   org-ref-bibliography-notes (concat bib_notes "/bibnotes.org")
+   org-ref-note-title-format "%y - %t\n :PROPERTIES:\n  :Custom_ID: %k\n  :NOTER_DOCUMENT: %F\n :AUTHOR: %9a\n  :JOURNAL: %j\n  :YEAR: %y\n  :VOLUME: %v\n  :PAGES: %p\n  :DOI: %D\n  :URL: %U\n :END:\n\n"
+   org-ref-notes-directory bib_notes
+   org-ref-notes-function 'orb-edit-notes
+   ))
+#+end_src
+****** Org Roam Bibtex
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-roam-bibtex)
+#+end_src
+
+#+begin_src emacs-lisp
+(use-package! org-roam-bibtex
+  :after (org-roam)
+  :hook (org-roam-mode . org-roam-bibtex-mode)
+  :config
+  (setq orb-preformat-keywords
+        '("=key=" "title" "url" "file" "author-or-editor" "keywords"))
+  (setq orb-templates
+        '(("r" "ref" plain (function org-roam-capture--get-point) ""
+           :file-name "${citekey}"
+           :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n" ; <--
+           :unnarrowed t)))
+  (setq orb-preformat-keywords   '(("citekey" . "=key=") "title" "url" "file" "author-or-editor" "keywords"))
+
+   (setq orb-templates
+        '(("n" "ref+noter" plain (function org-roam-capture--get-point)
+           ""
+           :file-name "${slug}"
+           :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n#+ROAM_TAGS:
+
+- tags ::
+- keywords :: ${keywords}
+\* ${title}
+:PROPERTIES:
+:Custom_ID: ${citekey}
+:URL: ${url}
+:AUTHOR: ${author-or-editor}
+:NOTER_DOCUMENT: %(orb-process-file-field \"${citekey}\")
+:NOTER_PAGE:
+:END:")))
+  )
+#+end_src
+****** Org Noter
+Doom installs org-noter via the init.el file. This is just for configuration.
+#+begin_src emacs-lisp
+(use-package! org-noter
+  :after (:any org pdf-view)
+  :config
+  (setq
+   ;; Split the window horizontally
+   ;; org-noter-notes-window-location 'horizontal-split
+   ;; Please stop opening frames
+   org-noter-always-create-frame nil
+   ;; Everything is relative to the main notes file
+   org-noter-notes-search-path (list bib_notes)
+   )
+  )
+#+end_src
+
+Make the evil state normal when looking at a pdf in org-noter
+#+begin_src emacs-lisp
+(add-hook! org-noter-doc-mode
+  (evil-normal-state)
+  )
+#+end_src
+*
+****** Org PDFTools
+Doom installs org-pdftools via the init.el file. This is just for configuration.
+#+begin_src emacs-lisp
+(use-package! org-pdftools
+  :hook (org-load . org-pdftools-setup-link))
+#+end_src
+****** Org Noter PDFTools
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-noter-pdftools)
+#+end_src
+****** Org Latex Impatient
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-latex-impatient)
+#+end_src
+* Keybindings
+** Insert
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "i"
+      "b" #'org-books-add-url
+      )
+)
+;;adding a keymap for insert note in org-noter
+;; (map!
+;;  :ne "SPC i n" #'org-noter-insert-note
+;; )
+(map!
+ :mode org-noter-doc-mode
+ :ne "i" #'org-noter-insert-note
+ )
+#+end_src
+** Projectile
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "p"
+       "l" #'projectile-replace
+       )
+)
+#+end_src
+** Toggles
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "t"
+       "C" #'centered-window-mode)
+)
+#+end_src
+** Agenda
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "d"
+      :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
+      :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
+      "c" #'cfw:open-org-calendar
+      )
+)
+#+end_src
+** Langtool
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "l"
+      "b" #'langtool-check
+      "c" #'langtool-corrct-buffer
+      "m" #'langtool-show-message-at-point
+      "d" #'langtool-check-done
+      "n" #'langtool-goto-next-eror
+      "p" #'langtool-goto-previous-error
+      )
+)
+#+end_src
+** Bibtex actions
+#+begin_src emacs-lisp
+(map! :leader
+      (:prefix "r"
+      "n" #'bibtex-actions-open-notes
+      "p" #'bibtex-actions-open-pdf
+      "o" #'bibtex-actions-open
+      "c" #'bibtex-actions-insert-citation
+      "b" #'bibtex-actions-insert-bibtex
+      )
+)
+#+end_src
+* Fix(es)?
+** Org-mode error
+#+begin_src emacs-lisp
+(add-hook 'org-mode-hook (lambda () (electric-indent-local-mode -1)))
+#+end_src
