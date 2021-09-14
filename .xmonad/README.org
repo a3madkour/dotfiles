@@ -523,7 +523,7 @@ myKeys =
     -- Toggle show/hide these programs.  They run on a hidden workspace.
     -- When you toggle them to show, it brings them to your current workspace.
     -- Toggle them to hide and it sends them back to hidden workspace (NSP).
-        , ("C-s t", namedScratchpadAction myScratchPads "terminal")
+        -- , ("C-s t", namedScratchpadAction myScratchPads "terminal")
 
     -- KB_GROUP Set wallpaper
     -- Set wallpaper with either 'xwallwaper'. Type 'SUPER+F1' to launch sxiv in the
@@ -561,7 +561,6 @@ myKeys =
 
 * Main
 This is the "main" of XMonad. This where everything in our configs comes together and works.
-TODO figure out how to use updatePointer
 
 #+BEGIN_SRC haskell
 main :: IO ()
@@ -587,7 +586,7 @@ main = do
         , borderWidth        = myBorderWidth
         , normalBorderColor  = myNormColor
         , focusedBorderColor = myFocusColor
-        , logHook = dynamicLogWithPP $ namedScratchpadFilterOutWorkspacePP $ xmobarPP 
+        , logHook = dynamicLogWithPP  xmobarPP
               -- the following variables beginning with 'pp' are settings for xmobar.
               { ppOutput = \x -> hPutStrLn xmproc0 x                          -- xmobar on monitor 1
                               >> hPutStrLn xmproc1 x                          -- xmobar on monitor 2
@@ -602,5 +601,7 @@ main = do
               , ppExtras  = [windowCount]                                     -- # of windows current workspace
               , ppOrder  = \(ws:l:t:ex) -> [ws,l]++ex++[t]                    -- order of things in xmobar
               }
+
+          >> updatePointer (0.5,  0.5) (0,0)
         } `additionalKeysP` myKeys
 #+END_SRC
