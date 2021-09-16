@@ -139,6 +139,7 @@ myStartupHook = do
     spawnOnce "picom &"
     spawnOnce "nm-applet &"
     spawnOnce "xsetroot -cursor_name left_ptr"
+    spawnOnce "autorandr --change"
     spawnOnce "conky -c $HOME/.config/conky/doomone-xmonad.conkyrc"
     spawnOnce "trayer --edge top --align right --widthtype request --padding 6 --SetDockType true --SetPartialStrut true --expand true --monitor 1 --transparent true --alpha 0 --tint 0x282c34  --height 22 &"
     spawnOnce "/usr/bin/emacs --daemon &" -- emacs daemon for the emacsclient
@@ -396,12 +397,13 @@ myManageHook = composeAll
      , className =? "splash"          --> doFloat
      , className =? "toolbar"         --> doFloat
      , className =? "Yad"             --> doCenterFloat
-     , className =? "brave-browser"   --> doShift ( myWorkspaces !! 1 )
+     , className =? "Brave-browser"   --> doShift ( myWorkspaces !! 1 )
      , className =? "mpv"             --> doShift ( myWorkspaces !! 7 )
      , className =? "Gimp"            --> doShift ( myWorkspaces !! 8 )
      , (className =? "firefox" <&&> resource =? "Dialog") --> doFloat  -- Float Firefox Dialog
      , isFullscreen -->  doFullFloat
-     ] <+> namedScratchpadManageHook myScratchPads
+     , manageDocks
+     ]
 #+END_SRC
 
 * Keybindings
@@ -571,7 +573,7 @@ main = do
     xmproc2 <- spawnPipe "xmobar -x 2 $HOME/.config/xmobar/xmobarrc"
     -- the xmonad, ya know...what the WM is named after!
     xmonad $ ewmh def
-        { manageHook         = myManageHook <+> manageDocks
+        { manageHook         = myManageHook <+> manageHook defaultConfig
         , handleEventHook    = docksEventHook
                                -- Uncomment this line to enable fullscreen support on things like YouTube/Netflix.
                                -- This works perfect on SINGLE monitor systems. On multi-monitor systems,
