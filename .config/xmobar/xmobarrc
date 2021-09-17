@@ -52,7 +52,6 @@ Config
       , Run Com "echo" ["<fn=2>\xf0f3</fn>"] "bell" 3600
                         -- Check for pacman updates (script found in .local/bin)
       , Run Com ".local/bin/pacupdate" [] "pacupdate" 36000
-                        -- Time and date
                         -- Battery information. This is likely to require some customization
         -- based upon your specific hardware. Or, for a desktop you may want
         -- to just remove this section entirely.
@@ -70,6 +69,24 @@ Config
           , "AC <left>%: <timeleft>"
           ]
           10
+      ,Run Weather "KBOS" ["-t", "<fn=2> \xf0c2 </fn><tempC>C"] 36000
+                        -- Time and date
+      -- ,Run WeatherX "LEBL"
+         -- [ ("clear", "🌣")
+         -- , ("sunny", "🌣")
+         -- , ("mostly clear", "🌤")
+         -- , ("mostly sunny", "🌤")
+         -- , ("partly sunny", "⛅")
+         -- , ("fair", "🌑")
+         -- , ("cloudy","☁")
+         -- , ("overcast","☁")
+         -- , ("partly cloudy", "⛅")
+         -- , ("mostly cloudy", "🌧")
+         -- , ("considerable cloudiness", "⛈")]
+         -- ["-t", "<fn=2><skyConditionS></fn> <tempC>° <rh>%  <windKmh> (<hour>)"
+         -- , "-L","10", "-H", "25", "--normal", "black"
+         -- , "--high", "lightgoldenrod4", "--low", "darkseagreen4"]
+         -- 18000
       , Run Date "<fn=2>\xf017</fn>  %b %d %Y - (%H:%M) " "date" 50
                         -- Script that dynamically adjusts xmobar padding depending on number of trayer icons.
       , Run
@@ -84,5 +101,5 @@ Config
   , sepChar = "%"
   , alignSep = "}{"
   , template =
-      " <icon=test.xpm/>   <fc=#666666>|</fc> %UnsafeStdinReader% }{<box type=Bottom width=2 mb=2 color=#51afef><fc=#51afef>%battery%</fc></box> <box type=Bottom width=2 mb=2 color=#ecbe7b><fc=#ecbe7b><action=`alacritty -e htop`>%cpu%</action></fc></box>    <box type=Bottom width=2 mb=2 color=#ff6c6b><fc=#ff6c6b><action=`alacritty -e htop`>%memory%</action></fc></box>  <box type=Bottom width=2 mb=2 color=#a9a1e1><fc=#a9a1e1><action=`alacritty -e htop`>%disku%</action></fc></box>  <box type=Bottom width=2 mb=2 color=#46d9ff><fc=#46d9ff>%date%</fc></box> %trayerpad%"
+      " <icon=test.xpm/>   <fc=#666666>|</fc> %UnsafeStdinReader% }{<box type=Bottom width=2 mb=2 color=#98be65><fc=#98be65>%KBOS%</fc></box>  <box type=Bottom width=2 mb=2 color=#51afef><fc=#51afef>%battery%</fc></box> <box type=Bottom width=2 mb=2 color=#ecbe7b><fc=#ecbe7b><action=`alacritty -e htop`>%cpu%</action></fc></box>    <box type=Bottom width=2 mb=2 color=#ff6c6b><fc=#ff6c6b><action=`alacritty -e htop`>%memory%</action></fc></box>  <box type=Bottom width=2 mb=2 color=#a9a1e1><fc=#a9a1e1><action=`alacritty -e htop`>%disku%</action></fc></box>  <box type=Bottom width=2 mb=2 color=#46d9ff><fc=#46d9ff>%date%</fc></box> %trayerpad%"
   }
