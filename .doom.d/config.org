@@ -154,7 +154,7 @@ multiple-cursors             ; editing in many places at once
 ;;objed                      ; text object editing for the innocent
 ;;parinfer                   ; turn lisp into python, sort of
 rotate-text                  ; cycle region at point between text candidates
-;; snippets                     ; my elves. They type so I don't have to
+snippets                     ; my elves. They type so I don't have to
 word-wrap                  ; soft wrapping with language-aware indent
 #+end_src
 
@@ -346,7 +346,7 @@ twitter                    ; twitter client https://twitter.com/vnought
 ;; There are two ways to load a theme. Both assume the theme is installed and
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
-(setq doom-theme 'doom-monokai-classic)
+(setq doom-theme 'doom-molokai)
 #+end_src
 **** Miscellaneous
 #+begin_src emacs-lisp
@@ -1071,13 +1071,13 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+end_src
 ** Agenda
 #+begin_src emacs-lisp
-(map! :leader
-      (:prefix "d"
-      :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
-      :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
-      "c" #'cfw:open-org-calendar
-      )
-)
+;; (map! :leader
+;;       (:prefix "d"
+;;       :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
+;;       :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
+;;       "c" #'cfw:open-org-calendar
+;;       )
+;; )
 #+end_src
 ** Langtool
 #+begin_src emacs-lisp
@@ -1103,6 +1103,11 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
       "b" #'bibtex-actions-insert-bibtex
       )
 )
+#+end_src
+* Registers
+#+begin_src emacs-lisp
+(set-register ?h '(file . "~/org/habits.org"))
+(set-register ?t '(file . "~/org/tasks.org"))
 #+end_src
 * Fix(es)?
 ** Org-mode error

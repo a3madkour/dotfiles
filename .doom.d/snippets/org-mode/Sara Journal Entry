@@ -1,8 +1,9 @@
 # -*- mode: snippet -*-
 # name: Sara Journal Entry
-# key:
+# key: <sj
 # --
 * `(let ((x(org-insert-time-stamp  (current-time)))))`
 ** Thoughts
+$0
 ** Feelings
 ** Memories
