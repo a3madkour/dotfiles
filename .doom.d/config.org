@@ -133,7 +133,7 @@ ophints                      ; highlight the region an operation acts on
  +defaults)                  ; default popup rules
 ;;(tabs                      ; an tab bar for Emacs
 ;;  +centaur-tabs)           ; ... with prettier tabs
-treemacs                     ; a project drawer, like neotree but cooler
+;; treemacs                     ; a project drawer, like neotree but cooler
 unicode                    ; extended unicode support for various languages
 vc-gutter                    ; vcs diff in the fringe
 vi-tilde-fringe              ; fringe tildes to mark beyond EOB
@@ -210,7 +210,7 @@ rgb                          ; creating color strings
 taskrunner                 ; taskrunner for all your projects
 ;;terraform                  ; infrastructure as code
 ;;tmux                       ; an API for interacting with tmux
-;; upload                       ; map local to remote projects via ssh/ftp
+upload                       ; map local to remote projects via ssh/ftp
 #+end_src
 
 #+name: doom-os
@@ -319,8 +319,8 @@ sml                        ; no, the /other/ ML
 
 #+name: doom-app
 #+begin_src emacs-lisp
-emms
-everywhere        ; *leave* Emacs!? You must be joking
+;; emms
+;; everywhere        ; *leave* Emacs!? You must be joking
 calendar
 irc                          ; how neckbeards socialize
 (rss +org)                   ; emacs as an RSS reader

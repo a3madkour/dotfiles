@@ -101,6 +101,7 @@ myStartupHook = do
     spawnOnce "lxsession &"
     spawnOnce "picom &"
     spawnOnce "nm-applet &"
+    spawnOnce "setxkbmap -option caps:escape"
     spawnOnce "xsetroot -cursor_name left_ptr"
     spawnOnce "autorandr --change"
     spawnOnce "conky -c $HOME/.config/conky/doomone-xmonad.conkyrc"
@@ -209,7 +210,7 @@ tall     = renamed [Replace "tall"]
            $ addTabs shrinkText myTabTheme
            $ subLayout [] (smartBorders Simplest)
            $ limitWindows 12
-           $ mySpacing' 8
+           $ mySpacing 8
            $ ResizableTall 1 (3/100) (1/2) []
 magnify  = renamed [Replace "magnify"]
            $ smartBorders

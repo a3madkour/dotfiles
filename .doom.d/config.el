@@ -31,7 +31,7 @@
 ;; There are two ways to load a theme. Both assume the theme is installed and
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
-(setq doom-theme 'doom-monokai-classic)
+(setq doom-theme 'doom-molokai)
 ;; Theme and modeline:1 ends here
 
 ;; [[file:config.org::*Miscellaneous][Miscellaneous:1]]
@@ -654,13 +654,13 @@
 ;; Toggles:1 ends here
 
 ;; [[file:config.org::*Agenda][Agenda:1]]
-(map! :leader
-      (:prefix "d"
-      :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
-      :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
-      "c" #'cfw:open-org-calendar
-      )
-)
+;; (map! :leader
+;;       (:prefix "d"
+;;       :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
+;;       :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
+;;       "c" #'cfw:open-org-calendar
+;;       )
+;; )
 ;; Agenda:1 ends here
 
 ;; [[file:config.org::*Langtool][Langtool:1]]
@@ -687,6 +687,11 @@
       )
 )
 ;; Bibtex actions:1 ends here
+
+;; [[file:config.org::*Registers][Registers:1]]
+(set-register ?h '(file . "~/org/habits.org"))
+(set-register ?t '(file . "~/org/tasks.org"))
+;; Registers:1 ends here
 
 ;; [[file:config.org::*Org-mode error][Org-mode error:1]]
 (add-hook 'org-mode-hook (lambda () (electric-indent-local-mode -1)))
