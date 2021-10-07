@@ -454,6 +454,9 @@ myKeys =
         , ("M-a", spawn myEmacs)
         , ("M-c", spawn myEditor)
         , ("M-b", spawn myBrowser)
+        , ("M-s", spawn "mpg123 ~/Sync/donotquestionmyallegiancecomrade.mp3") -- Important
+        , ("M-x", spawn "pkill mpg123") -- Equally Important
+        , ("M-z", spawn "passdmenu") -- Passwods
 
     -- KB_GROUP Kill windows
         , ("M-S-c", kill1)     -- Kill the currently focused client
