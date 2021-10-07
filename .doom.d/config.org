@@ -1104,6 +1104,14 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
       )
 )
 #+end_src
+** Search
+#+begin_src emacs-lisp
+(map! :map doom-leader-search-map
+      (
+       "m" #'consult-multi-occur
+       )
+)
+#+end_src
 * Registers
 #+begin_src emacs-lisp
 (set-register ?h '(file . "~/org/habits.org"))
