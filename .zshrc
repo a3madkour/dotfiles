@@ -8,6 +8,8 @@ fi
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 
+alias xppen="/usr/lib/pentablet/pentablet"
+
 export PATH="$PATH:$HOME/miniconda3/bin"
 export PATH="$PATH:$HOME/.emacs.d/bin"
 

@@ -226,7 +226,7 @@ associated file.
 
 #+name: doom-lang
 #+begin_src emacs-lisp
-;; agda                      ; types of types of types of types...
+agda                      ; types of types of types of types...
 (cc +lsp)                    ; C/C++/Obj-C madness
 clojure                    ; java with a lisp
 ;;common-lisp                ; if you've seen one lisp, you've seen them all
@@ -245,7 +245,7 @@ ess                          ; emacs speaks statistics
 ;;fstar                      ; (dependent) types and (monadic) effects and Z3
 (gdscript +lsp)              ; the language you waited for
 (go +lsp)                  ; the hipster dialect
-(haskell +dante)             ; a language that's lazier than I am
+(haskell +lsp)             ; a language that's lazier than I am
 ;;hy                         ; readability of scheme w/ speed of python
 ;;idris                      ;
 json                       ; At least it ain't XML
@@ -823,6 +823,10 @@ The "package.el" file shouldn't be byte compiled.
 #+end_src
 ****** Org Capture
 #+begin_src emacs-lisp
+(defun org-get-habit-type ()
+  (setq habit-type (read-string "Enter Habit Type: "))
+  habit-type
+)
   (setq org-capture-templates
         '(("t" "Todo" entry (file+datetree "~/org/tasks.org")
            "* TODO %?\n")
@@ -849,6 +853,8 @@ The "package.el" file shouldn't be byte compiled.
            "* %?\n")
           ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
            "* %?\n")
+          ("h" "Habit" entry (file+function "~/org/habits.org" org-get-habit-type)
+           "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
           ))
 #+end_src
 ****** Ox-pandoc
@@ -1095,7 +1101,7 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 ** Bibtex actions
 #+begin_src emacs-lisp
 (map! :leader
-      (:prefix "r"
+      (:prefix "z"
       "n" #'bibtex-actions-open-notes
       "p" #'bibtex-actions-open-pdf
       "o" #'bibtex-actions-open
