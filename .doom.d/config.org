@@ -688,17 +688,6 @@ The "package.el" file shouldn't be byte compiled.
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! fountain-mode)
 #+end_src
-*** Calendar
-**** Org-gcal
-#+begin_src emacs-lisp
-(require 'org-gcal)
-(setq org-gcal-client-id "497062789073-ebje9tkqvv79gnm1e0q5uvdgaaqp6mt0.apps.googleusercontent.com"
-      org-gcal-client-secret "WPeCGrJjihtqRm_D3oz9PWmS"
-      org-gcal-file-alist '(("a3madkour@gmail.com" .  "~/org/gcal.org")))
-
-(add-hook! 'evil-org-agenda-mode-hook 'org-gcal-fetch)
-(add-hook! 'cfw:calendar-mode-hook 'org-gcal-fetch)
-#+end_src
 *** Messaging
 *** Cooking
 **** Org-chef
@@ -709,6 +698,22 @@ The "package.el" file shouldn't be byte compiled.
 **** Org clock csv
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-clock-csv)
+#+end_src
+*** Utils
+**** Calendar
+***** Org-gcal
+#+begin_src emacs-lisp
+(require 'org-gcal)
+(setq org-gcal-client-id "497062789073-ebje9tkqvv79gnm1e0q5uvdgaaqp6mt0.apps.googleusercontent.com"
+      org-gcal-client-secret "WPeCGrJjihtqRm_D3oz9PWmS"
+      org-gcal-file-alist '(("a3madkour@gmail.com" .  "~/org/gcal.org")))
+
+(add-hook! 'evil-org-agenda-mode-hook 'org-gcal-fetch)
+(add-hook! 'cfw:calendar-mode-hook 'org-gcal-fetch)
+#+end_src
+**** Ripgrep
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! rg)
 #+end_src
 
 ** Language Packages
@@ -801,8 +806,13 @@ The "package.el" file shouldn't be byte compiled.
  zot_bib  "~/org/bib-notes/library.bib"
  deft-directory org_notes
  deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
+ ;; org-cite-default-bibliography (list zot_bib)
+ org-cite-insert-processor 'oc-bibtex-actions
+ org-cite-follow-processor 'oc-bibtex-actions
+ org-cite-activate-processor 'oc-bibtex-actions
+ bibtex-actions-at-point-function 'embark-act
  org-cite-global-bibliography (list zot_bib)
- org-cite-default-bibliography (list zot_bib)
+ bibtex-actions-bibliography (list zot_bib)
  deft-use-filename-as-title 't
  deft-recursive 't
  deft-default-extension "org"
@@ -907,6 +917,9 @@ The "package.el" file shouldn't be byte compiled.
 #+end_src
 ****** Bibtex
 #+begin_src emacs-lisp
+;; (require 'oc-basic)
+;; (require 'oc-csl)
+;; (require 'oc-natbib)
 (setq
  bibtex-completion-notes-path bib_notes
  bibtex-completion-bibliography zot_bib
@@ -940,6 +953,11 @@ Make sure you use bibtex as part of the export process
 )
 #+end_src
 ***** Behaviour
+****** Citeproc
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! citeproc)
+#+end_src
+
 ****** Org Books
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-books
@@ -953,57 +971,57 @@ Make sure you use bibtex as part of the export process
 #+end_src
 ****** Org Ref
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-(package! org-ref)
+;; (package! org-ref)
 #+end_src
 #+begin_src emacs-lisp
-(use-package! org-ref
-  :config
-  (setq
-   org-ref-completion-library 'org-ref-ivy-cite
-   org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename-helm-bibtex
-   org-ref-default-bibliography (list zot_bib)
-   org-ref-bibliography-notes (concat bib_notes "/bibnotes.org")
-   org-ref-note-title-format "%y - %t\n :PROPERTIES:\n  :Custom_ID: %k\n  :NOTER_DOCUMENT: %F\n :AUTHOR: %9a\n  :JOURNAL: %j\n  :YEAR: %y\n  :VOLUME: %v\n  :PAGES: %p\n  :DOI: %D\n  :URL: %U\n :END:\n\n"
-   org-ref-notes-directory bib_notes
-   org-ref-notes-function 'orb-edit-notes
-   ))
+;; (use-package! org-ref
+;;   :config
+;;   (setq
+;;    org-ref-completion-library 'org-ref-ivy-cite
+;;    org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename-helm-bibtex
+;;    org-ref-default-bibliography (list zot_bib)
+;;    org-ref-bibliography-notes (concat bib_notes "/bibnotes.org")
+;;    org-ref-note-title-format "%y - %t\n :PROPERTIES:\n  :Custom_ID: %k\n  :NOTER_DOCUMENT: %F\n :AUTHOR: %9a\n  :JOURNAL: %j\n  :YEAR: %y\n  :VOLUME: %v\n  :PAGES: %p\n  :DOI: %D\n  :URL: %U\n :END:\n\n"
+;;    org-ref-notes-directory bib_notes
+;;    org-ref-notes-function 'orb-edit-notes
+;;    ))
 #+end_src
 ****** Org Roam Bibtex
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-(package! org-roam-bibtex)
+;; (package! org-roam-bibtex)
 #+end_src
 
 #+begin_src emacs-lisp
-(use-package! org-roam-bibtex
-  :after (org-roam)
-  :hook (org-roam-mode . org-roam-bibtex-mode)
-  :config
-  (setq orb-preformat-keywords
-        '("=key=" "title" "url" "file" "author-or-editor" "keywords"))
-  (setq orb-templates
-        '(("r" "ref" plain (function org-roam-capture--get-point) ""
-           :file-name "${citekey}"
-           :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n" ; <--
-           :unnarrowed t)))
-  (setq orb-preformat-keywords   '(("citekey" . "=key=") "title" "url" "file" "author-or-editor" "keywords"))
+;; (use-package! org-roam-bibtex
+;;   :after (org-roam)
+;;   :hook (org-roam-mode . org-roam-bibtex-mode)
+;;   :config
+;;   (setq orb-preformat-keywords
+;;         '("=key=" "title" "url" "file" "author-or-editor" "keywords"))
+;;   (setq orb-templates
+;;         '(("r" "ref" plain (function org-roam-capture--get-point) ""
+;;            :file-name "${citekey}"
+;;            :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n" ; <--
+;;            :unnarrowed t)))
+;;   (setq orb-preformat-keywords   '(("citekey" . "=key=") "title" "url" "file" "author-or-editor" "keywords"))
 
-   (setq orb-templates
-        '(("n" "ref+noter" plain (function org-roam-capture--get-point)
-           ""
-           :file-name "${slug}"
-           :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n#+ROAM_TAGS:
+;;    (setq orb-templates
+;;         '(("n" "ref+noter" plain (function org-roam-capture--get-point)
+;;            ""
+;;            :file-name "${slug}"
+;;            :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n#+ROAM_TAGS:
 
-- tags ::
-- keywords :: ${keywords}
-\* ${title}
-:PROPERTIES:
-:Custom_ID: ${citekey}
-:URL: ${url}
-:AUTHOR: ${author-or-editor}
-:NOTER_DOCUMENT: %(orb-process-file-field \"${citekey}\")
-:NOTER_PAGE:
-:END:")))
-  )
+;; - tags ::
+;; - keywords :: ${keywords}
+;; \* ${title}
+;; :PROPERTIES:
+;; :Custom_ID: ${citekey}
+;; :URL: ${url}
+;; :AUTHOR: ${author-or-editor}
+;; :NOTER_DOCUMENT: %(orb-process-file-field \"${citekey}\")
+;; :NOTER_PAGE:
+;; :END:")))
+;;   )
 #+end_src
 ****** Org Noter
 Doom installs org-noter via the init.el file. This is just for configuration.
@@ -1028,7 +1046,23 @@ Make the evil state normal when looking at a pdf in org-noter
   (evil-normal-state)
   )
 #+end_src
-*
+
+****** OC bibtex actions
+#+begin_src emacs-lisp
+(use-package! oc-bibtex-actions
+  :after (embark oc org)
+  :config
+(setq
+ org-cite-insert-processor 'oc-bibtex-actions
+ org-cite-follow-processor 'oc-bibtex-actions
+ org-cite-activate-processor 'oc-bibtex-actions
+ bibtex-actions-at-point-function 'embark-act
+;;  org-cite-global-bibliography (list zot_bib)
+;;  bibtex-actions-bibliography (list zot_bib)
+  )
+)
+(require 'oc-bibtex-actions)
+#+end_src
 ****** Org PDFTools
 Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
@@ -1049,6 +1083,7 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 (map! :leader
       (:prefix "i"
       "b" #'org-books-add-url
+      "c" #'org-cite-insert
       )
 )
 ;;adding a keymap for insert note in org-noter
@@ -1106,6 +1141,7 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
       "p" #'bibtex-actions-open-pdf
       "o" #'bibtex-actions-open
       "c" #'bibtex-actions-insert-citation
+      "i" #'org-cite-insert
       "b" #'bibtex-actions-insert-bibtex
       )
 )
@@ -1117,6 +1153,10 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
        "m" #'consult-multi-occur
        )
 )
+#+end_src
+** Hippie Expand
+#+begin_src emacs-lisp
+(global-set-key [remap dabbrev-expand] 'hippie-expand)
 #+end_src
 * Registers
 #+begin_src emacs-lisp

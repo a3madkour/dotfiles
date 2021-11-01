@@ -10,6 +10,7 @@ source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 
 alias xppen="/usr/lib/pentablet/pentablet"
 
+eval $(thefuck --alias)
 export PATH="$PATH:$HOME/miniconda3/bin"
 export PATH="$PATH:$HOME/.emacs.d/bin"
 
