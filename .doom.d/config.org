@@ -202,7 +202,7 @@ lsp                          ; Language Server Protocol
 (magit)                       ; a git porcelain for Emacs
  ;; forge)                     ; interface with git forges
 make                         ; run make tasks from Emacs
-biblio
+;; biblio
 pass                       ; password manager for nerds
 pdf                          ; pdf enhancements
 prodigy                    ; FIXME managing external services & code builders
@@ -806,13 +806,8 @@ The "package.el" file shouldn't be byte compiled.
  zot_bib  "~/org/bib-notes/library.bib"
  deft-directory org_notes
  deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
- ;; org-cite-default-bibliography (list zot_bib)
- org-cite-insert-processor 'oc-bibtex-actions
- org-cite-follow-processor 'oc-bibtex-actions
- org-cite-activate-processor 'oc-bibtex-actions
- bibtex-actions-at-point-function 'embark-act
+ org-cite-default-bibliography (list zot_bib)
  org-cite-global-bibliography (list zot_bib)
- bibtex-actions-bibliography (list zot_bib)
  deft-use-filename-as-title 't
  deft-recursive 't
  deft-default-extension "org"
@@ -953,11 +948,14 @@ Make sure you use bibtex as part of the export process
 )
 #+end_src
 ***** Behaviour
+****** Citar
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! citar)
+#+end_src
 ****** Citeproc
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! citeproc)
 #+end_src
-
 ****** Org Books
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-books
@@ -1047,21 +1045,17 @@ Make the evil state normal when looking at a pdf in org-noter
   )
 #+end_src
 
-****** OC bibtex actions
+****** Citar
 #+begin_src emacs-lisp
-(use-package! oc-bibtex-actions
-  :after (embark oc org)
+(use-package! citar
   :config
 (setq
- org-cite-insert-processor 'oc-bibtex-actions
- org-cite-follow-processor 'oc-bibtex-actions
- org-cite-activate-processor 'oc-bibtex-actions
- bibtex-actions-at-point-function 'embark-act
-;;  org-cite-global-bibliography (list zot_bib)
-;;  bibtex-actions-bibliography (list zot_bib)
+ org-cite-insert-processor 'citar
+ org-cite-follow-processor 'citar
+ org-cite-activate-processor 'citar
+ citar-at-point-function 'embark-act
   )
 )
-(require 'oc-bibtex-actions)
 #+end_src
 ****** Org PDFTools
 Doom installs org-pdftools via the init.el file. This is just for configuration.
@@ -1137,12 +1131,11 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
 (map! :leader
       (:prefix "z"
-      "n" #'bibtex-actions-open-notes
-      "p" #'bibtex-actions-open-pdf
-      "o" #'bibtex-actions-open
-      "c" #'bibtex-actions-insert-citation
+      "n" #'citar-open-notes
+      "o" #'citar-open
+      "c" #'citar-insert-citation
       "i" #'org-cite-insert
-      "b" #'bibtex-actions-insert-bibtex
+      "b" #'citar-insert-bibtex
       )
 )
 #+end_src
