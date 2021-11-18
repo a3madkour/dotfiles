@@ -800,17 +800,34 @@ The "package.el" file shouldn't be byte compiled.
 #+end_src
 ****** Basic Setup
 #+begin_src emacs-lisp
+(defun cm/deft-parse-title (file contents)
+    "Parse the given FILE and CONTENTS and determine the title.
+  If `deft-use-filename-as-title' is nil, the title is taken to
+  be the first non-empty line of the FILE.  Else the base name of the FILE is
+  used as title."
+      (let ((begin (string-match "^#\\+[tT][iI][tT][lL][eE]: .*$" contents)))
+	(if begin
+	    (string-trim (substring contents begin (match-end 0)) "#\\+[tT][iI][tT][lL][eE]: *" "[\n\t ]+")
+	  (deft-base-filename file))))
+
+(advice-add 'deft-parse-title :override #'cm/deft-parse-title)
+
+(setq deft-strip-summary-regexp
+(concat "\\("
+    "[\n\t]" ;; blank
+    "\\|^#\\+[[:alpha:]_]+:.*$" ;; org-mode metadata
+    "\\|^:PROPERTIES:\n\\(.+\n\\)+:END:\n"
+    "\\)"))
+
 (setq
  org_notes "~/org/notes"
- bib_notes "~/org/bib-notes"
- zot_bib  "~/org/bib-notes/library.bib"
+ zot_bib  "~/org/notes/library.bib"
  deft-directory org_notes
- deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
+ ;; deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
  org-cite-default-bibliography (list zot_bib)
  org-cite-global-bibliography (list zot_bib)
- deft-use-filename-as-title 't
- deft-recursive 't
- deft-default-extension "org"
+ ;; deft-use-filename-as-title 't
+ ;; deft-recursive 't
  org-roam-directory org_notes
  )
 #+end_src
@@ -916,7 +933,7 @@ The "package.el" file shouldn't be byte compiled.
 ;; (require 'oc-csl)
 ;; (require 'oc-natbib)
 (setq
- bibtex-completion-notes-path bib_notes
+ bibtex-completion-notes-path org_notes
  bibtex-completion-bibliography zot_bib
  bibtex-completion-pdf-field "file"
  bibtex-completion-notes-template-multiple-files
@@ -948,10 +965,6 @@ Make sure you use bibtex as part of the export process
 )
 #+end_src
 ***** Behaviour
-****** Citar
-#+begin_src emacs-lisp :tangle "packages.el" :comments no
-(package! citar)
-#+end_src
 ****** Citeproc
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! citeproc)
@@ -978,48 +991,36 @@ Make sure you use bibtex as part of the export process
 ;;    org-ref-completion-library 'org-ref-ivy-cite
 ;;    org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename-helm-bibtex
 ;;    org-ref-default-bibliography (list zot_bib)
-;;    org-ref-bibliography-notes (concat bib_notes "/bibnotes.org")
+;;    org-ref-bibliography-notes (concat org_notes "/bibnotes.org")
 ;;    org-ref-note-title-format "%y - %t\n :PROPERTIES:\n  :Custom_ID: %k\n  :NOTER_DOCUMENT: %F\n :AUTHOR: %9a\n  :JOURNAL: %j\n  :YEAR: %y\n  :VOLUME: %v\n  :PAGES: %p\n  :DOI: %D\n  :URL: %U\n :END:\n\n"
-;;    org-ref-notes-directory bib_notes
+;;    org-ref-notes-directory org_notes
 ;;    org-ref-notes-function 'orb-edit-notes
 ;;    ))
 #+end_src
 ****** Org Roam Bibtex
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-;; (package! org-roam-bibtex)
+(package! org-roam-bibtex)
 #+end_src
 
 #+begin_src emacs-lisp
-;; (use-package! org-roam-bibtex
-;;   :after (org-roam)
-;;   :hook (org-roam-mode . org-roam-bibtex-mode)
-;;   :config
-;;   (setq orb-preformat-keywords
-;;         '("=key=" "title" "url" "file" "author-or-editor" "keywords"))
-;;   (setq orb-templates
-;;         '(("r" "ref" plain (function org-roam-capture--get-point) ""
-;;            :file-name "${citekey}"
-;;            :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n" ; <--
-;;            :unnarrowed t)))
-;;   (setq orb-preformat-keywords   '(("citekey" . "=key=") "title" "url" "file" "author-or-editor" "keywords"))
+(use-package! org-roam-bibtex
+  :after (org-roam)
+  :hook (org-roam-mode . org-roam-bibtex-mode)
+  :config
+  (setq orb-preformat-keywords
+        '("=key=" "title" "url" "file" "author-or-editor" "keywords"))
+  (setq org-roam-capture-templates
+             '(("r" "ref" plain 
+           "%?"
+           :target
+           (file+head "${slug}.org" "#+TITLE: ${=key=}: ${title}\n#+ROAM_KEY: ${ref}
 
-;;    (setq orb-templates
-;;         '(("n" "ref+noter" plain (function org-roam-capture--get-point)
-;;            ""
-;;            :file-name "${slug}"
-;;            :head "#+TITLE: ${citekey}: ${title}\n#+ROAM_KEY: ${ref}\n#+ROAM_TAGS:
+- tags ::
+- keywords :: ${keywords}
 
-;; - tags ::
-;; - keywords :: ${keywords}
-;; \* ${title}
-;; :PROPERTIES:
-;; :Custom_ID: ${citekey}
-;; :URL: ${url}
-;; :AUTHOR: ${author-or-editor}
-;; :NOTER_DOCUMENT: %(orb-process-file-field \"${citekey}\")
-;; :NOTER_PAGE:
-;; :END:")))
-;;   )
+\n* ${title}\n  :PROPERTIES:\n  :Custom_ID: ${=key=}\n  :URL: ${url}\n  :AUTHOR: ${author-or-editor}\n  :NOTER_DOCUMENT: %(orb-process-file-field \"${=key=}\")\n  :NOTER_PAGE: \n  :END:\n\n")
+
+           :unnarrowed t))))
 #+end_src
 ****** Org Noter
 Doom installs org-noter via the init.el file. This is just for configuration.
@@ -1033,7 +1034,7 @@ Doom installs org-noter via the init.el file. This is just for configuration.
    ;; Please stop opening frames
    org-noter-always-create-frame nil
    ;; Everything is relative to the main notes file
-   org-noter-notes-search-path (list bib_notes)
+   org-noter-notes-search-path (list org_notes)
    )
   )
 #+end_src
@@ -1046,10 +1047,15 @@ Make the evil state normal when looking at a pdf in org-noter
 #+end_src
 
 ****** Citar
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! citar)
+#+end_src
 #+begin_src emacs-lisp
 (use-package! citar
   :config
 (setq
+ citar-bibliography  '("~/org/notes/library.bib")
+ citar-open-note-function 'orb-citar-edit-note
  org-cite-insert-processor 'citar
  org-cite-follow-processor 'citar
  org-cite-activate-processor 'citar
@@ -1151,10 +1157,13 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
 (global-set-key [remap dabbrev-expand] 'hippie-expand)
 #+end_src
-* Registers
+* Registers/Bookmarks
 #+begin_src emacs-lisp
 (set-register ?h '(file . "~/org/habits.org"))
 (set-register ?t '(file . "~/org/tasks.org"))
+(set-register ?i '(file . "~/org/ideas.org"))
+(setq bookmark-default-file "~/.doom.d/bookmarks")
+(bookmark-load bookmark-default-file t)
 #+end_src
 * Fix(es)?
 ** Org-mode error

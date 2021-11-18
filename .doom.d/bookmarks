@@ -1,0 +1,30 @@
+;;;; Emacs Bookmark Format Version 1;;;; -*- coding: utf-8-emacs; mode: lisp-data -*-
+;;; This format is meant to be slightly human-readable;
+;;; nevertheless, you probably don't want to edit it.
+;;; -*- End Of Bookmark File Format Version Stamp -*-
+(("Meeting"
+ (filename . "~/org/meetings.org")
+ (front-context-string . ")\n(bookmark-prop")
+ (rear-context-string . "rk-set \"Meeting\"")
+ (position . 1))
+("Ideas"
+ (filename . "~/org/ideas.org")
+ (front-context-string . "us that they are")
+ (rear-context-string . "t it is so obvio")
+ (position . 1))
+("Habits"
+ (filename . "/Stuff/a3madkour/org/habits.org")
+ (front-context-string . "HEDULED: <2021-1")
+ (rear-context-string . "an 30 mins\n   SC")
+ (position . 1))
+("Tasks"
+ (filename . "~/org/tasks.org")
+ (front-context-string . "* 2020\n** 2020-0")
+ (rear-context-string)
+ (position . 1))
+("org-capture-last-stored"
+ (filename . "/Stuff/a3madkour/org/notes/deepproblog_neural_probabilistic_logic_programming.org")
+ (front-context-string . "\n* DeepProbLog: ")
+ (rear-context-string . "tic Programming\n")
+ (position . 327))
+)
