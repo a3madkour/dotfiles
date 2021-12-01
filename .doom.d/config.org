@@ -178,7 +178,7 @@ vterm                        ; the best terminal emulation in Emacs
 #+name: doom-checkers
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
-spell                        ; tasing you for misspelling mispelling
+(spell +enchant)
 grammar                      ; tasing grammar mistake every you make
 #+end_src
 
@@ -202,7 +202,7 @@ lsp                          ; Language Server Protocol
 (magit)                       ; a git porcelain for Emacs
  ;; forge)                     ; interface with git forges
 make                         ; run make tasks from Emacs
-;; biblio
+biblio
 pass                       ; password manager for nerds
 pdf                          ; pdf enhancements
 prodigy                    ; FIXME managing external services & code builders
@@ -244,14 +244,14 @@ ess                          ; emacs speaks statistics
 ;;fsharp                     ; ML stands for Microsoft's Language
 ;;fstar                      ; (dependent) types and (monadic) effects and Z3
 (gdscript +lsp)              ; the language you waited for
-(go +lsp)                  ; the hipster dialect
+;; (go +lsp)                  ; the hipster dialect
 (haskell +lsp)             ; a language that's lazier than I am
 ;;hy                         ; readability of scheme w/ speed of python
 ;;idris                      ;
 json                       ; At least it ain't XML
 (java +lsp)          ; the poster child for carpal tunnel syndrome
 (javascript +lsp)            ; all(hope(abandon(ye(who(enter(here))))))
-julia                      ; a better, faster MATLAB
+;; julia                      ; a better, faster MATLAB
 ;;kotlin                     ; a better, slicker Java(Script)
 (latex                       ; writing papers in Emacs has never been so fun
  +latexmk                    ; what else would you use?
@@ -404,6 +404,13 @@ The "package.el" file shouldn't be byte compiled.
           (eshell-git-prompt-use-theme 'powerline)
 )
 #+end_src
+**** Vterm
+Adding find file other window to the commands that you can execute in vterm
+#+begin_src emacs-lisp
+(after! vterm
+(push '("find-file-other-window" find-file-other-window) vterm-eval-cmds)
+)
+#+end_src
 *** Fun
 **** Spotify
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
@@ -444,35 +451,35 @@ The "package.el" file shouldn't be byte compiled.
 #+begin_src emacs-lisp
 ;; (defun a3madkour/run-in-background (command)
 ;;   (let ((command-parts (split-string command "[ ]+")))
-;;     (apply #'call-process `(,(car command-parts) nil 0 nil ,@(cdr command-parts)))))
+    ;; (apply #'call-process `(,(car command-parts) nil 0 nil ,@(cdr command-parts)))))
 
-;; ;; (defun a3madkour/set-wallpaper ()
-;; ;;   (interactive)
-;; ;;   ;; NOTE: You will need to update this to a valid background path!
-;; ;;   (start-process-shell-command
-;; ;;    "feh" nil  "feh --bg-scale /usr/share/backgrounds/matt-mcnulty-nyc-2nd-ave.jpg"))
+;; (defun a3madkour/set-wallpaper ()
+;;   (interactive)
+;;   ;; NOTE: You will need to update this to a valid background path!
+;;   (start-process-shell-command
+;;    "feh" nil  "feh --bg-scale /usr/share/backgrounds/matt-mcnulty-nyc-2nd-ave.jpg"))
 
 ;; (defun a3madkour/exwm-init-hook ()
-;;   ;; Make workspace 1 be the one where we land at startup
-;;   (exwm-workspace-switch-create 0)
+  ;; Make workspace 1 be the one where we land at startup
+  ;; (exwm-workspace-switch-create 0)
 
-;;   ;; Open eshell by default
-;;   ;;(eshell)
+  ;; Open eshell by default
+  ;;(eshell)
 
-;;   ;; Show battery status in the mode line
-;;   (display-battery-mode 1)
+  ;; Show battery status in the mode line
+  ;; (display-battery-mode 1)
 
-;;   ;; Show the time and date in modeline
-;;   ;; (setq display-time-day-and-date t)
-;;   ;; (display-time-mode 1)
-;;   ;; Also take a look at display-time-format and format-time-string
+  ;; Show the time and date in modeline
+  ;; (setq display-time-day-and-date t)
+  ;; (display-time-mode 1)
+  ;; Also take a look at display-time-format and format-time-string
 
-;;   (a3madkour/start-panel)
-;;   ;; Launch apps that will run in the background
-;;   (a3madkour/run-in-background "dunst")
-;;   (a3madkour/run-in-background "nm-applet")
-;;   (a3madkour/run-in-background "pasystray")
-;;   (a3madkour/run-in-background "blueman-applet"))
+  ;; (a3madkour/start-panel)
+  ;; Launch apps that will run in the background
+  ;; (a3madkour/run-in-background "dunst")
+  ;; (a3madkour/run-in-background "nm-applet")
+  ;; (a3madkour/run-in-background "pasystray")
+  ;; (a3madkour/run-in-background "blueman-applet"))
 
 ;; (defun a3madkour/exwm-update-class ()
 ;;   (exwm-workspace-rename-buffer exwm-class-name))
@@ -481,19 +488,19 @@ The "package.el" file shouldn't be byte compiled.
 ;;   (pcase exwm-class-name
 ;;     ("Brave-browser" (exwm-workspace-rename-buffer (format "Brave-browser: %s" exwm-title)))))
 
-;; ;; This function should be used only after configuring autorandr!
+;; This function should be used only after configuring autorandr!
 ;; (defun a3madkour/update-displays ()
 ;;   (a3madkour/run-in-background "autorandr --change --force")
 ;;   (message "Display config: %s"
 ;;            (string-trim (shell-command-to-string "autorandr --current"))))
 
 ;; (use-package! exwm
-;;   :config
-;;   ;; Set the default number of workspace
-;;   (setq exwm-workspace-number 5)
+  ;; :config
+  ;; Set the default number of workspace
+  ;; (setq exwm-workspace-number 5)
 
-;;   ;; When window "class" updates, use it to set the buffer name
-;;   (add-hook! 'exwm-update-class-hook #'a3madkour/exwm-update-class)
+  ;; When window "class" updates, use it to set the buffer name
+  ;; (add-hook! 'exwm-update-class-hook #'a3madkour/exwm-update-class)
 
   ;; When window title updates, use it to set the buffer name
   ;; (add-hook! 'exwm-update-title-hook #'a3madkour/exwm-update-title)
@@ -541,7 +548,7 @@ The "package.el" file shouldn't be byte compiled.
 
   ;; (setq exwm-input-global-keys
   ;;       `(
-          ;; Reset to line-mode (C-c C-k switches to char-mode via exwm-input-release-keyboard)
+  ;;         Reset to line-mode (C-c C-k switches to char-mode via exwm-input-release-keyboard)
   ;;         ([?\s-r] . exwm-reset)
 
   ;;         ;; Move between windows
@@ -701,16 +708,6 @@ The "package.el" file shouldn't be byte compiled.
 #+end_src
 *** Utils
 **** Calendar
-***** Org-gcal
-#+begin_src emacs-lisp
-(require 'org-gcal)
-(setq org-gcal-client-id "497062789073-ebje9tkqvv79gnm1e0q5uvdgaaqp6mt0.apps.googleusercontent.com"
-      org-gcal-client-secret "WPeCGrJjihtqRm_D3oz9PWmS"
-      org-gcal-file-alist '(("a3madkour@gmail.com" .  "~/org/gcal.org")))
-
-(add-hook! 'evil-org-agenda-mode-hook 'org-gcal-fetch)
-(add-hook! 'cfw:calendar-mode-hook 'org-gcal-fetch)
-#+end_src
 **** Ripgrep
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! rg)
@@ -796,6 +793,17 @@ The "package.el" file shouldn't be byte compiled.
 
 ***** After Org is loaded
 #+begin_src emacs-lisp
+(setq
+ org_notes "~/org/notes"
+ zot_bib  "~/org/notes/library.bib"
+ deft-directory org_notes
+ ;; deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
+ org-cite-default-bibliography (list zot_bib)
+ org-cite-global-bibliography (list zot_bib)
+ ;; deft-use-filename-as-title 't
+ ;; deft-recursive 't
+ org-roam-directory org_notes
+ )
 (after! org
 #+end_src
 ****** Basic Setup
@@ -967,7 +975,7 @@ Make sure you use bibtex as part of the export process
 ***** Behaviour
 ****** Citeproc
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-(package! citeproc)
+;; (package! citeproc)
 #+end_src
 ****** Org Books
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
@@ -1048,7 +1056,7 @@ Make the evil state normal when looking at a pdf in org-noter
 
 ****** Citar
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-(package! citar)
+;; (package! citar)
 #+end_src
 #+begin_src emacs-lisp
 (use-package! citar
@@ -1056,9 +1064,9 @@ Make the evil state normal when looking at a pdf in org-noter
 (setq
  citar-bibliography  '("~/org/notes/library.bib")
  citar-open-note-function 'orb-citar-edit-note
- org-cite-insert-processor 'citar
- org-cite-follow-processor 'citar
- org-cite-activate-processor 'citar
+ ;; org-cite-insert-processor 'citar
+ ;; org-cite-follow-processor 'citar
+ ;; org-cite-activate-processor 'citar
  citar-at-point-function 'embark-act
   )
 )
