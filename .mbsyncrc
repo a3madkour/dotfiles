@@ -1,0 +1,55 @@
+IMAPAccount gmail
+Host imap.gmail.com
+User a3madkour@gmail.com
+PassCmd "pass Email/Google | head -n 1"
+SSLType IMAPS
+CertificateFile /etc/ssl/certs/ca-certificates.crt
+
+IMAPStore gmail-remote
+Account gmail
+
+MaildirStore gmail-local
+SubFolders Verbatim
+Path ~/Mail/gmail/
+Inbox ~/Mail/gmail/Inbox
+Trash ~/Mail/gmail/Trash
+
+Channel gmail
+Far :gmail-remote:
+Near :gmail-local:
+Patterns *
+SyncState *
+Create Both
+Expunge Both
+CopyArrivalDate yes
+Sync All
+
+IMAPAccount work
+Host localhost
+User madkour.a@northeastern.edu
+PassCmd "pass neu.edu/prod-web.neu.edu | head -n 1"
+port 1143
+SSLType None
+AuthMechs LOGIN
+# Increase timeout to avoid o365 IMAP hiccups
+Timeout 120
+PipelineDepth 50
+
+IMAPStore work-remote
+Account work
+
+MaildirStore work-local
+# Note the trailing slash on the Path statement!
+Path ~/Mail/work/
+Inbox ~/Mail/work/Inbox
+SubFolders Verbatim
+
+Channel work
+Far :work-remote:
+Near :work-local:
+#Include everything
+Patterns *
+# Sync changes (creations/deletions) with the server
+Create Both
+# Expunge Both
+SyncState *

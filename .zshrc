@@ -9,6 +9,8 @@ source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 
 alias xppen="/usr/lib/pentablet/pentablet"
+alias enf="emacsclient -c"
+alias e="emacsclient"
 
 eval $(thefuck --alias)
 export PATH="$PATH:$HOME/miniconda3/bin"
