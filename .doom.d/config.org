@@ -179,6 +179,7 @@ vterm                        ; the best terminal emulation in Emacs
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
 (spell +enchant)
+;; spell
 grammar                      ; tasing grammar mistake every you make
 #+end_src
 
@@ -430,9 +431,9 @@ Adding find file other window to the commands that you can execute in vterm
 *** UI
 **** Treemacs
 #+begin_src emacs-lisp
-(add-hook! treemacs-mode
-  (treemacs-load-theme "doom-colors")
-  )
+;; (add-hook! treemacs-mode
+;;   (treemacs-load-theme "doom-colors")
+;;   )
 #+end_src
 **** Command Log
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
@@ -713,6 +714,7 @@ Adding find file other window to the commands that you can execute in vterm
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! rg)
 #+end_src
+
 
 ** Language Packages
 *** Python
@@ -1075,8 +1077,13 @@ Make the evil state normal when looking at a pdf in org-noter
 ****** Org PDFTools
 Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
+(after! pdf-tools
+(push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
+)
+
 (use-package! org-pdftools
-  :hook (org-load . org-pdftools-setup-link))
+  :hook (org-load . org-pdftools-setup-link )
+)
 #+end_src
 ****** Org Noter PDFTools
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
