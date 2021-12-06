@@ -113,7 +113,7 @@ deft                       ; notational velocity for Emacs
 doom                         ; what makes DOOM look the way it does
 doom-dashboard               ; a nifty splash screen for Emacs
 doom-quit                    ; DOOM quit-message prompts when you quit Emacs
-emoji
+;;emoji
 ;; fill-column                ; a `fill-column' indicator
 hl-todo                      ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
 hydra                      ; quick documentation for related commands
@@ -313,7 +313,7 @@ sml                        ; no, the /other/ ML
 
 #+name: doom-email
 #+begin_src emacs-lisp
-(mu4e +org +gmail)
+(mu4e)
 ;;notmuch
 ;;(wanderlust +gmail)
 #+end_src
@@ -641,56 +641,22 @@ Adding find file other window to the commands that you can execute in vterm
 *** Email
 **** Mu4e
 #+begin_src emacs-lisp
- ;; (after! mu4e
-   ;;   :config
-   ;;   ;; This is set to 't' to avoid mail syncing issues when using mbsync
-   ;; (setq mu4e-change-filenames-when-moving t)
-
-   ;;   ;; Refresh mail using isync every 10 minutes
-   ;; (setq mu4e-update-interval (* 10 60))
-   ;; (setq mu4e-get-mail-command "mbsync -a")
-   ;; (setq mu4e-root-maildir "~/Mail")
-
-
-   ;; (setq mu4e-contexts
-;;          (list
-;;           ;; Personal account
-;;           (make-mu4e-context
-;;            :name "Personal"
-;;            :match-func
-;;            (lambda (msg)
-;;              (when msg
-;;                (string-prefix-p "/gmail" (mu4e-message-field msg :maildir))))
-;;            :vars '((user-mail-address . "a3madkour@gmail.com")
-;;                    (user-full-name    . "Abdelrahman Madkour Gmail")
-;;                    (mu4e-drafts-folder  . "/Drafts")
-;;                    (mu4e-sent-folder  . "/Sent Mail")
-;;                    (mu4e-refile-folder  . "/All Mail")
-;;                    (mu4e-trash-folder  . "/Trash")))
-
-;;           ;; Maroon Loop account
-;;           ;; (make-mu4e-context
-;;           ;;  :name "Maroon"
-;;           ;;  :match-func
-;;           ;;  (lambda (msg)
-;;           ;;    (when msg
-;;           ;;      (string-prefix-p "/MaroonLoop" (mu4e-message-field msg :maildir))))
-;;           ;;  :vars '((user-mail-address . "loopmaroon@gmail.com")
-;;           ;;          (user-full-name    . "Maroon Loop Gmail")
-;;           ;;          (mu4e-drafts-folder  . "/MaroonLoop/Drafts")
-;;           ;;          (mu4e-sent-folder  . "/MaroonLoop/Sent Mail")
-;;           ;;          (mu4e-refile-folder  . "/MaroonLoop/All Mail")
-;;           ;;          (mu4e-trash-folder  . "/MaroonLoop/Trash")))
-;; ))
-
-   ;; (setq mu4e-maildir-shortcuts
-   ;;       '((:maildir "/Inbox"    :key ?i)
-   ;;         (:maildir "/Sent Mail" :key ?s)
-   ;;         (:maildir "/Trash"     :key ?t)
-   ;;         (:maildir "/Drafts"    :key ?d)
-   ;;         (:maildir "/All Mail"  :key ?a)))
-   ;; (mu4e t)
-   ;; )
+(setq mu4e-context-policy 'ask-if-none
+      mu4e-compose-context-policy 'always-ask)
+(set-email-account! "Personal"
+  '((mu4e-sent-folder       . "/gmail/[Gmail]/Sent Mail")
+    (mu4e-drafts-folder     . "/gmail/[Gmail]/Drafts")
+    (mu4e-trash-folder      . "/gmail/[Gmail]/Trash")
+    (mu4e-refile-folder     . "/gmail/[Gmail]/All Mail")
+    (smtpmail-smtp-user     . "a3madkour@gmail.com"))
+  t)
+(set-email-account! "Work"
+  '((mu4e-sent-folder       . "/work/Sent")
+    (mu4e-drafts-folder     . "/work/Drafts")
+    (mu4e-trash-folder      . "/work/Trash")
+    (mu4e-refile-folder     . "/work/Archive")
+    (smtpmail-smtp-user     . "madkour.a@northeastern.edu"))
+  t)
 #+end_src
 *** Screenwriting
 **** Fountain
@@ -991,23 +957,6 @@ Make sure you use bibtex as part of the export process
   (setq org-books-file "~/org/reading-list.org")
 )
 #+end_src
-****** Org Ref
-#+begin_src emacs-lisp :tangle "packages.el" :comments no
-;; (package! org-ref)
-#+end_src
-#+begin_src emacs-lisp
-;; (use-package! org-ref
-;;   :config
-;;   (setq
-;;    org-ref-completion-library 'org-ref-ivy-cite
-;;    org-ref-get-pdf-filename-function 'org-ref-get-pdf-filename-helm-bibtex
-;;    org-ref-default-bibliography (list zot_bib)
-;;    org-ref-bibliography-notes (concat org_notes "/bibnotes.org")
-;;    org-ref-note-title-format "%y - %t\n :PROPERTIES:\n  :Custom_ID: %k\n  :NOTER_DOCUMENT: %F\n :AUTHOR: %9a\n  :JOURNAL: %j\n  :YEAR: %y\n  :VOLUME: %v\n  :PAGES: %p\n  :DOI: %D\n  :URL: %U\n :END:\n\n"
-;;    org-ref-notes-directory org_notes
-;;    org-ref-notes-function 'orb-edit-notes
-;;    ))
-#+end_src
 ****** Org Roam Bibtex
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-roam-bibtex)
@@ -1037,24 +986,24 @@ Make sure you use bibtex as part of the export process
 Doom installs org-noter via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
 (use-package! org-noter
-  :after (:any org pdf-view)
+ :after (:any org pdf-view)
   :config
-  (setq
+ (setq
    ;; Split the window horizontally
-   ;; org-noter-notes-window-location 'horizontal-split
+   org-noter-notes-window-location 'horizontal-split
    ;; Please stop opening frames
    org-noter-always-create-frame nil
    ;; Everything is relative to the main notes file
-   org-noter-notes-search-path (list org_notes)
-   )
+  org-noter-notes-search-path (list org_notes)
   )
+ )
 #+end_src
 
 Make the evil state normal when looking at a pdf in org-noter
 #+begin_src emacs-lisp
 (add-hook! org-noter-doc-mode
-  (evil-normal-state)
-  )
+ (evil-normal-state)
+ )
 #+end_src
 
 ****** Citar
@@ -1077,12 +1026,13 @@ Make the evil state normal when looking at a pdf in org-noter
 ****** Org PDFTools
 Doom installs org-pdftools via the init.el file. This is just for configuration.
 #+begin_src emacs-lisp
+
 (after! pdf-tools
 (push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
 )
 
 (use-package! org-pdftools
-  :hook (org-load . org-pdftools-setup-link )
+ :hook (org-load . org-pdftools-setup-link )
 )
 #+end_src
 ****** Org Noter PDFTools

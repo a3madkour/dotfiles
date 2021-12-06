@@ -10,9 +10,9 @@ Account gmail
 
 MaildirStore gmail-local
 SubFolders Verbatim
-Path ~/Mail/gmail/
-Inbox ~/Mail/gmail/Inbox
-Trash ~/Mail/gmail/Trash
+Path ~/.mail/gmail/
+Inbox ~/.mail/gmail/Inbox
+Trash ~/.mail/gmail/Trash
 
 Channel gmail
 Far :gmail-remote:
@@ -40,8 +40,8 @@ Account work
 
 MaildirStore work-local
 # Note the trailing slash on the Path statement!
-Path ~/Mail/work/
-Inbox ~/Mail/work/Inbox
+Path ~/.mail/work/
+Inbox ~/.mail/work/Inbox
 SubFolders Verbatim
 
 Channel work
