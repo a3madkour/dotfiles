@@ -178,7 +178,7 @@ vterm                        ; the best terminal emulation in Emacs
 #+name: doom-checkers
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
-(spell +enchant)
+;; (spell +enchant)
 ;; spell
 grammar                      ; tasing grammar mistake every you make
 #+end_src
@@ -386,6 +386,19 @@ twitter                    ; twitter client https://twitter.com/vnought
 #+begin_src emacs-lisp
 (setq split-height-threshold nil)
 (setq split-width-threshold 0)
+#+end_src
+*** To babel or not babel
+#+begin_src emacs-lisp
+(defun a3madkour/org-babel-tangle-config ()
+  (when (string-equal (buffer-file-name)
+                      (expand-file-name "~/dotfiles/.xmonad/README.org"))
+    ;; Dynamic scoping to the rescue
+    (let ((org-confirm-babel-evaluate nil))
+      (org-babel-tangle))))
+
+(add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'a3madkour/org-babel-tangle-config)))
+
+
 #+end_src
 
 * Packages

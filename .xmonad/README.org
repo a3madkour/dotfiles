@@ -1,7 +1,7 @@
 #+TITLE: XMonad Config
 #+PROPERTY: header-args :tangle xmonad.hs
 #+STARTUP: showeverything
-#+AUTHOR: Derek Taylor
+#+AUTHOR:
 #+DATE: 06-16-2021
 
 * Table Of Contents :toc:
