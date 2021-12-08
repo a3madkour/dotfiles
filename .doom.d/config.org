@@ -4,6 +4,7 @@
 #+property: header-args :tangle no :results silent
 * Introduction
 This is my doom emacs config or whatever. Not perfect by any means and will ever be a work in progress, kinda like me hahahah I am so funny...kill yourself
+(Shamelessly ripped off from the lovely [[https://tecosaur.github.io/emacs-config/config.html][tecosaur config]])
 * Basic Configuration
 #+begin_src emacs-lisp
 ;; ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
@@ -178,7 +179,7 @@ vterm                        ; the best terminal emulation in Emacs
 #+name: doom-checkers
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
-;; (spell +enchant)
+(spell +enchant)
 ;; spell
 grammar                      ; tasing grammar mistake every you make
 #+end_src
@@ -694,7 +695,6 @@ Adding find file other window to the commands that you can execute in vterm
 (package! rg)
 #+end_src
 
-
 ** Language Packages
 *** Python
 **** Debugger
@@ -910,6 +910,10 @@ Adding find file other window to the commands that you can execute in vterm
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-super-agenda)
 #+end_src
+#+begin_src emacs-lisp
+(after! org-agenda
+(org-super-agenda-mode))
+#+end_src
 
 ****** Org Habit
 #+begin_src emacs-lisp
@@ -994,6 +998,10 @@ Make sure you use bibtex as part of the export process
 \n* ${title}\n  :PROPERTIES:\n  :Custom_ID: ${=key=}\n  :URL: ${url}\n  :AUTHOR: ${author-or-editor}\n  :NOTER_DOCUMENT: %(orb-process-file-field \"${=key=}\")\n  :NOTER_PAGE: \n  :END:\n\n")
 
            :unnarrowed t))))
+#+end_src
+****** Org Roam Bibtex
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-roam-ui)
 #+end_src
 ****** Org Noter
 Doom installs org-noter via the init.el file. This is just for configuration.
