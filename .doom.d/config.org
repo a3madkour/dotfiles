@@ -179,8 +179,8 @@ vterm                        ; the best terminal emulation in Emacs
 #+name: doom-checkers
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
-(spell +enchant)
 ;; spell
+(spell +enchant)
 grammar                      ; tasing grammar mistake every you make
 #+end_src
 
@@ -400,6 +400,10 @@ twitter                    ; twitter client https://twitter.com/vnought
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'a3madkour/org-babel-tangle-config)))
 
 
+#+end_src
+*** Splash screen
+#+begin_src emacs-lisp
+;; (setq fancy-splash-image "~/test.png")
 #+end_src
 
 * Packages
@@ -820,6 +824,12 @@ Adding find file other window to the commands that you can execute in vterm
  ;; deft-recursive 't
  org-roam-directory org_notes
  )
+;adding minted (should be its own headline but whatevs)
+(setq org-latex-listings 'minted
+      org-latex-packages-alist '(("" "minted"))
+      org-latex-pdf-process
+      '("pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"
+        "pdflatex -shell-escape -interaction nonstopmode -output-directory %o %f"))
 #+end_src
 
 ****** Org Tempo
@@ -910,9 +920,24 @@ Adding find file other window to the commands that you can execute in vterm
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-super-agenda)
 #+end_src
+;; (after! org-agenda
+;; (org-super-agenda-mode)
+
+;; (let ((org-agenda-span 'day)
+;;       (org-super-agenda-groups
+;;        '((:name "Time grid items in all-uppercase with RosyBrown1 foreground"
+;;                 :time-grid t
+;;                 :transformer (--> it
+;;                                   (upcase it)
+;;                                   (propertize it 'face '(:foreground "RosyBrown1"))))
+;;          (:name "Priority >= C items underlined, on black background"
+;;                 :face (:background "black" :underline t)
+;;                 :not (:priority>= "C")
+;;                 :order 100))))
+;;   (org-agenda nil "a"))
+
+;; )
 #+begin_src emacs-lisp
-(after! org-agenda
-(org-super-agenda-mode))
 #+end_src
 
 ****** Org Habit
@@ -961,7 +986,7 @@ Make sure you use bibtex as part of the export process
 ***** Behaviour
 ****** Citeproc
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
-;; (package! citeproc)
+(package! citeproc)
 #+end_src
 ****** Org Books
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
