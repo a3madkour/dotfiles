@@ -150,7 +150,7 @@ file-templates               ; auto-snippets for empty files
 fold                         ; (nigh) universal code folding
 (format +onsave)             ; automated prettiness
 ;;god                        ; run Emacs commands without modifier keys
-;;lispy                      ; vim for lisp, for people who don't like vim
+lispy                      ; vim for lisp, for people who don't like vim
 multiple-cursors             ; editing in many places at once
 ;;objed                      ; text object editing for the innocent
 ;;parinfer                   ; turn lisp into python, sort of
@@ -179,8 +179,8 @@ vterm                        ; the best terminal emulation in Emacs
 #+name: doom-checkers
 #+begin_src emacs-lisp
 syntax                       ; tasing you for every semicolon you forget
-;; spell
-(spell +enchant)
+spell
+;; (spell +enchant)
 grammar                      ; tasing grammar mistake every you make
 #+end_src
 
@@ -398,12 +398,14 @@ twitter                    ; twitter client https://twitter.com/vnought
       (org-babel-tangle))))
 
 (add-hook 'org-mode-hook (lambda () (add-hook 'after-save-hook #'a3madkour/org-babel-tangle-config)))
-
-
 #+end_src
 *** Splash screen
 #+begin_src emacs-lisp
 ;; (setq fancy-splash-image "~/test.png")
+#+end_src
+*** Saveplace
+#+begin_src emacs-lisp
+(save-place-mode 1)
 #+end_src
 
 * Packages
@@ -430,7 +432,7 @@ Adding find file other window to the commands that you can execute in vterm
 (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds)
 )
 #+end_src
-*** Fun
+*** Funzies
 **** Spotify
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! smudge)
@@ -692,11 +694,52 @@ Adding find file other window to the commands that you can execute in vterm
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-clock-csv)
 #+end_src
+
 *** Utils
 **** Calendar
 **** Ripgrep
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! rg)
+#+end_src
+**** Dash docsets
+#+begin_src emacs-lisp
+(after! dash-docs
+(setq dash-docs-docsets-path "~/.docsets")
+(setq installed-langs (dash-docs-installed-docsets))
+;;figure out to convert spaces into underscores when installing the docs
+(setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "C++" "HTML" "SVG" "CSS"  "Haskell" "React"))
+(dolist (lang docset-langs)
+(when (null (member lang installed-langs))
+  (dash-docs-install-docset lang)
+))
+)
+#+end_src
+**** Aggressive Auto-indenting
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! aggressive-indent-mode)
+#+end_src
+#+begin_src emacs-lisp
+;; (global-aggressive-indent-mode 1)
+#+end_src
+**** Super save
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! super-save)
+#+end_src
+#+begin_src emacs-lisp
+(setq super-save-auto-save-when-idle t)
+(setq super-save-auto-duration 10)
+(setq super-save-triggers
+      '(evil-window-next evil-window-prev balance-windows other-window)
+)
+(super-save-mode +1)
+#+end_src
+
+**** MW-thesaurus
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! mw-thesaurus)
+#+end_src
+#+begin_src emacs-lisp
+(add-hook 'mw-thesaurus-mode-hook (lambda () (define-key evil-normal-state-local-map (kbd "q") 'mw-thesaurus--quit)))
 #+end_src
 
 ** Language Packages
@@ -724,6 +767,16 @@ Adding find file other window to the commands that you can execute in vterm
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! ein)
 #+end_src
+*** C/C++
+#+begin_src emacs-lisp
+(setq lsp-clients-clangd-args '("-j=3"
+                                "--background-index"
+                                "--clang-tidy"
+                                "--completion-style=detailed"
+                                "--header-insertion=never"
+                                "--header-insertion-decorators=0"))
+(after! lsp-clangd (set-lsp-priority! 'clangd 2))
+#+end_src
 *** GDScript
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! gdscript-mode)
@@ -737,17 +790,15 @@ Adding find file other window to the commands that you can execute in vterm
 #+end_src
 ***** Loading Org
 #+begin_src emacs-lisp
-;; (defun a3madkour/org-mode-setup ()
-;; (org-indent-mode)
-;; (org-superstar-mode 1)
-;; (variable-pitch-mode 1)
-;; )
+(defun a3madkour/org-mode-setup ()
+;; ;; (org-indent-mode)
+;; ;; (org-superstar-mode 1)
+;; ;; (variable-pitch-mode 1)
+(org-appear-mode 1)
+)
+(add-hook 'org-mode-hook (a3madkour/org-mode-setup))
 #+end_src
 
-#+begin_src emacs-lisp
-;; (use-package! org
-;; :hook (org-mode . a3madkour/org-mode-setup))
-#+end_src
 ***** Font Setup
 #+begin_src emacs-lisp
 (defun a3madkour/org-font-setup ()
@@ -785,6 +836,7 @@ Adding find file other window to the commands that you can execute in vterm
  deft-directory org_notes
  ;; deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n"
  org-cite-default-bibliography (list zot_bib)
+ org-cite-csl-styles-dir "~/Zotero/styles"
  org-cite-global-bibliography (list zot_bib)
  ;; deft-use-filename-as-title 't
  ;; deft-recursive 't
@@ -972,6 +1024,13 @@ Adding find file other window to the commands that you can execute in vterm
   )
  )
 #+end_src
+****** Org appear
+#+begin_src emacs-lisp
+(setq org-hide-emphasis-markers t) ;; A default setting that needs to be t for org-appear
+  (setq org-appear-autoemphasis t)  ;; Enable org-appear on emphasis (bold, italics, etc)
+  (setq org-appear-autolinks t) ;; Enable on links
+  (setq org-appear-autosubmarkers t) ;; Enable on subscript and superscript
+#+end_src
 ****** Org Latex
 Make sure you use bibtex as part of the export process
 #+begin_src emacs-lisp
@@ -980,7 +1039,7 @@ Make sure you use bibtex as part of the export process
 #+end_src
 ****** Load Font Setup
 #+begin_src emacs-lisp
-  (a3madkour/org-font-setup)
+  ;; (a3madkour/org-font-setup)
 )
 #+end_src
 ***** Behaviour
@@ -1024,9 +1083,13 @@ Make sure you use bibtex as part of the export process
 
            :unnarrowed t))))
 #+end_src
-****** Org Roam Bibtex
+****** Org Roam UI
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-roam-ui)
+#+end_src
+****** Org QL
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-ql)
 #+end_src
 ****** Org Noter
 Doom installs org-noter via the init.el file. This is just for configuration.
@@ -1132,18 +1195,31 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 ;;       )
 ;; )
 #+end_src
-** Langtool
+** Language stuff
 #+begin_src emacs-lisp
 (map! :leader
       (:prefix "l"
-      "b" #'langtool-check
-      "c" #'langtool-corrct-buffer
-      "m" #'langtool-show-message-at-point
-      "d" #'langtool-check-done
-      "n" #'langtool-goto-next-eror
-      "p" #'langtool-goto-previous-error
-      )
-)
+            ;mw thesaurus
+            (:prefix "w"
+            :desc "Merriam Webster Thesauraus"
+            "w" #'mw-thesaurus-lookup
+            "d" #'mw-thesaurus-lookup-dwim
+            "p" #'mw-thesaurus-lookup-at-point)
+
+            (:prefix "p"
+            :desc "Powerthesauraus"
+            "w" #'powerthesaurus-lookup-word
+            "d" #'mw-thesaurus-lookup-dwim
+            "p" #'mw-thesaurus-lookup-word-at-point)
+
+            (:prefix "l"
+            :desc "Language Tool"
+            "b" #'langtool-check
+            "c" #'langtool-corrct-buffer
+            "m" #'langtool-show-message-at-point
+            "d" #'langtool-check-done
+            "n" #'langtool-goto-next-eror
+            "p" #'langtool-goto-previous-error)))
 #+end_src
 ** Bibtex actions
 #+begin_src emacs-lisp
