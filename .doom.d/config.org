@@ -769,13 +769,6 @@ Adding find file other window to the commands that you can execute in vterm
 #+end_src
 *** C/C++
 #+begin_src emacs-lisp
-(setq lsp-clients-clangd-args '("-j=3"
-                                "--background-index"
-                                "--clang-tidy"
-                                "--completion-style=detailed"
-                                "--header-insertion=never"
-                                "--header-insertion-decorators=0"))
-(after! lsp-clangd (set-lsp-priority! 'clangd 2))
 #+end_src
 *** GDScript
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
@@ -1200,20 +1193,17 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 (map! :leader
       (:prefix "l"
             ;mw thesaurus
-            (:prefix "w"
-            :desc "Merriam Webster Thesauraus"
+            (:prefix ("w" . "Merriam Webster Thesauraus" )
             "w" #'mw-thesaurus-lookup
             "d" #'mw-thesaurus-lookup-dwim
             "p" #'mw-thesaurus-lookup-at-point)
 
-            (:prefix "p"
-            :desc "Powerthesauraus"
+            (:prefix ("p" . "Powerthesauraus")
             "w" #'powerthesaurus-lookup-word
-            "d" #'mw-thesaurus-lookup-dwim
-            "p" #'mw-thesaurus-lookup-word-at-point)
+            "d" #'powerthesaurus-lookup-dwim
+            "p" #'powerthesaurus-lookup)
 
-            (:prefix "l"
-            :desc "Language Tool"
+            (:prefix ("l" . "Language Tool")
             "b" #'langtool-check
             "c" #'langtool-corrct-buffer
             "m" #'langtool-show-message-at-point

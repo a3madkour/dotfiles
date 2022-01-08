@@ -5,6 +5,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 
@@ -14,7 +15,9 @@ alias e="emacsclient"
 
 eval $(thefuck --alias)
 export PATH="$PATH:$HOME/miniconda3/bin"
-export PATH="$PATH:$HOME/.emacs.d/bin"
+export PATH="$PATH:$HOME/emacs-configs/doom/bin"
+export PATH="$PATH:$HOME/.ghcup/bin"
+export PATH="$PATH:$HOME/.cabal/bin"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
@@ -77,3 +80,7 @@ ff() {
 say() {
     vterm_cmd message "%s" "$*"
 }
+
+#if [ -z "${DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ]; then
+# exec startx
+#fi
