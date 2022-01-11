@@ -18,6 +18,7 @@ export PATH="$PATH:$HOME/miniconda3/bin"
 export PATH="$PATH:$HOME/emacs-configs/doom/bin"
 export PATH="$PATH:$HOME/.ghcup/bin"
 export PATH="$PATH:$HOME/.cabal/bin"
+export PATH="$PATH:$HOME/.local/bin"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
