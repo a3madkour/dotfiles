@@ -318,7 +318,7 @@ sml                        ; no, the /other/ ML
 
 #+name: doom-email
 #+begin_src emacs-lisp
-(mu4e)
+(mu4e +org)
 ;;notmuch
 ;;(wanderlust +gmail)
 #+end_src
@@ -627,6 +627,7 @@ And finally, gotta make sure we take care of when we open emacs in the terminal
   (setq +doom-dashboard-ascii-banner-fn #'doom-dashboard-draw-ascii-emacs-banner-fn))
 #+end_src
 *** Saveplace
+Save my buffer positions duuude
 #+begin_src emacs-lisp
 (save-place-mode 1)
 #+end_src
@@ -639,6 +640,7 @@ The "package.el" file shouldn't be byte compiled.
 ** General Packages
 *** Shell
 **** Eshell git prompt
+Make my eshell dank, will likely write another package to make this look prettier whenever I have   time which is never. So yeah will stay like this for a while.
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! eshell-git-prompt)
 #+end_src
@@ -649,17 +651,21 @@ The "package.el" file shouldn't be byte compiled.
 )
 #+end_src
 **** Vterm
-Adding find file other window to the commands that you can execute in vterm
+Adding find file other window to the commands that you can execute in vterm, and my links clickable
 #+begin_src emacs-lisp
 (after! vterm
 (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds)
 )
+(add-hook 'vterm-mode-hook (lambda()
+(goto-address-mode 1)))
 #+end_src
 *** Funzies
 **** Spotify
+I use this all the time dude
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! smudge)
 #+end_src
+Lolz should load the keys instead of exposing my filthy raw API keys
 #+begin_src emacs-lisp
 (use-package! smudge
   :config
@@ -668,17 +674,20 @@ Adding find file other window to the commands that you can execute in vterm
 )
 #+end_src
 **** Academic Phrases
+We are particularly grateful to Dr. Nashamari for saving me the trouble of figuring how to make my academic writing sound "professional". Can't do science unless you write in the most boring tone possible because why have fun when you can conform to institutional dogma.
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! academic-phrases)
 #+end_src
 *** UI
 **** Treemacs
+DON'T NEED IT
 #+begin_src emacs-lisp
 ;; (add-hook! treemacs-mode
 ;;   (treemacs-load-theme "doom-colors")
 ;;   )
 #+end_src
 **** Command Log
+So you want to see my...keystrokes ...;)
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! command-log-mode)
 #+end_src
@@ -686,11 +695,13 @@ Adding find file other window to the commands that you can execute in vterm
 (use-package! command-log-mode)
 #+end_src
 **** Ewal
+PY to the MFING WAL MOTHERFUCKER
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! ewal)
 #+end_src
 
 *** Window Management
+For when you EXWM
 **** EXWM
 ***** Core
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
@@ -886,6 +897,7 @@ Adding find file other window to the commands that you can execute in vterm
 ;;   (start-process-shell-command "notify-send" nil "notify-send \"DUNST_COMMAND_TOGGLE\""))
 #+end_src
 *** Email
+EMACS MANGAGE MY EMAIL PLOX
 **** Mu4e
 #+begin_src emacs-lisp
 (setq mu4e-context-policy 'ask-if-none
@@ -907,17 +919,20 @@ Adding find file other window to the commands that you can execute in vterm
 #+end_src
 *** Screenwriting
 **** Fountain
+Need to make sure my script writing ability is in tip top shape.
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! fountain-mode)
 #+end_src
 *** Messaging
 *** Cooking
 **** Org-chef
+Managing my recipes and stealing them from the interwebs
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-chef)
 #+end_src
 *** Time management
 **** Org clock csv
+Export org-clock to csv
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! org-clock-csv)
 #+end_src
@@ -925,16 +940,18 @@ Adding find file other window to the commands that you can execute in vterm
 *** Utils
 **** Calendar
 **** Ripgrep
+Want ripgrep on everything
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! rg)
 #+end_src
 **** Dash docsets
+Offline docs
 #+begin_src emacs-lisp
 (after! dash-docs
 (setq dash-docs-docsets-path "~/.docsets")
 (setq installed-langs (dash-docs-installed-docsets))
 ;;figure out to convert spaces into underscores when installing the docs
-(setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "C++" "HTML" "SVG" "CSS"  "Haskell" "React"))
+(setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "Unity_3D" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "OpenGL_4" "OCaml" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell" "React" "D3JS"))
 (dolist (lang docset-langs)
 (when (null (member lang installed-langs))
   (dash-docs-install-docset lang)
@@ -942,6 +959,7 @@ Adding find file other window to the commands that you can execute in vterm
 )
 #+end_src
 **** Aggressive Auto-indenting
+When I am feeling masochistic
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! aggressive-indent-mode)
 #+end_src
@@ -949,6 +967,7 @@ Adding find file other window to the commands that you can execute in vterm
 ;; (global-aggressive-indent-mode 1)
 #+end_src
 **** Super save
+Save all the time, save when I am not typing, save when I leave the window, save when I am not paying attention. Save all the time.
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! super-save)
 #+end_src
@@ -960,8 +979,138 @@ Adding find file other window to the commands that you can execute in vterm
 )
 (super-save-mode +1)
 #+end_src
+**** Avy
+Ripped off from karthink's amazing [[https://karthinks.com/software/avy-can-do-anything/][article]] on avy
+#+begin_src emacs-lisp
+(after! avy
+(setq avy-keys '(?q ?e ?r ?y ?u ?o ?p
+                    ?a ?s ?d ?f ?g ?h ?j
+                    ?k ?l ?' ?x ?c ?v ?b
+                    ?n ?, ?/))
+(defun avy-show-dispatch-help ()
+  (let* ((len (length "avy-action-"))
+         (fw (frame-width))
+         (raw-strings (mapcar
+                   (lambda (x)
+                     (format "%2s: %-19s"
+                             (propertize
+                              (char-to-string (car x))
+                              'face 'aw-key-face)
+                             (substring (symbol-name (cdr x)) len)))
+                   avy-dispatch-alist))
+         (max-len (1+ (apply #'max (mapcar #'length raw-strings))))
+         (strings-len (length raw-strings))
+         (per-row (floor fw max-len))
+         display-strings)
+    (cl-loop for string in raw-strings
+             for N from 1 to strings-len do
+             (push (concat string " ") display-strings)
+             (when (= (mod N per-row) 0) (push "\n" display-strings)))
+    (message "%s" (apply #'concat (nreverse display-strings)))))
 
+;; Kill text
+(defun avy-action-kill-whole-line (pt)
+  (save-excursion
+    (goto-char pt)
+    (kill-whole-line))
+  (select-window
+   (cdr
+    (ring-ref avy-ring 0)))
+  t)
+
+(setf (alist-get ?k avy-dispatch-alist) 'avy-action-kill-stay
+      (alist-get ?K avy-dispatch-alist) 'avy-action-kill-whole-line)
+
+;; Copy text
+(defun avy-action-copy-whole-line (pt)
+  (save-excursion
+    (goto-char pt)
+    (cl-destructuring-bind (start . end)
+        (bounds-of-thing-at-point 'line)
+      (copy-region-as-kill start end)))
+  (select-window
+   (cdr
+    (ring-ref avy-ring 0)))
+  t)
+
+(setf (alist-get ?w avy-dispatch-alist) 'avy-action-copy
+      (alist-get ?W avy-dispatch-alist) 'avy-action-copy-whole-line)
+
+;; Yank text
+(defun avy-action-yank-whole-line (pt)
+  (avy-action-copy-whole-line pt)
+  (save-excursion (yank))
+  t)
+
+(setf (alist-get ?y avy-dispatch-alist) 'avy-action-yank
+      (alist-get ?Y avy-dispatch-alist) 'avy-action-yank-whole-line)
+
+;; Transpose/Move text
+(defun avy-action-teleport-whole-line (pt)
+  (avy-action-kill-whole-line pt)
+  (save-excursion (yank)) t)
+
+(setf (alist-get ?t avy-dispatch-alist) 'avy-action-teleport
+      (alist-get ?T avy-dispatch-alist) 'avy-action-teleport-whole-line)
+
+;; Mark text
+(defun avy-action-mark-to-char (pt)
+  (activate-mark)
+  (goto-char pt))
+
+(setf (alist-get ?  avy-dispatch-alist) 'avy-action-mark-to-char)
+
+;; Flyspell words
+(defun avy-action-flyspell (pt)
+  (save-excursion
+    (goto-char pt)
+    (when (require 'flyspell nil t)
+      (flyspell-auto-correct-word)))
+  (select-window
+   (cdr (ring-ref avy-ring 0)))
+  t)
+
+;; Bind to semicolon (flyspell uses C-;)
+(setf (alist-get ?\; avy-dispatch-alist) 'avy-action-flyspell)
+;; Avy + Isearch
+(define-key isearch-mode-map (kbd "M-j") 'avy-isearch)
+
+;; Isearch in other windows
+(defun isearch-forward-other-window (prefix)
+  "Function to isearch-forward in other-window."
+  (interactive "P")
+  (unless (one-window-p)
+    (save-excursion
+      (let ((next (if prefix -1 1)))
+        (other-window next)
+        (isearch-forward)
+        (other-window (- next))))))
+
+(defun isearch-backward-other-window (prefix)
+  "Function to isearch-backward in other-window."
+  (interactive "P")
+  (unless (one-window-p)
+    (save-excursion
+      (let ((next (if prefix 1 -1)))
+        (other-window next)
+        (isearch-backward)
+        (other-window (- next))))))
+
+
+(defun avy-action-embark (pt)
+    (unwind-protect
+        (save-excursion
+          (goto-char pt)
+          (embark-act))
+      (select-window
+       (cdr (ring-ref avy-ring 0))))
+    t)
+
+(setf (alist-get ?. avy-dispatch-alist) 'avy-action-embark)
+)
+#+end_src
 **** MW-thesaurus
+Webster's dictionary defines thesaurus as....
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! mw-thesaurus)
 #+end_src
@@ -972,11 +1121,13 @@ Adding find file other window to the commands that you can execute in vterm
 ** Language Packages
 *** Python
 **** Debugger
+Setting debug to debug with py
 #+begin_src emacs-lisp
 (add-hook 'python-mode-hook (lambda ()
                             (setq dap-python-debugger 'debugpy)))
 #+end_src
 **** Sphinx
+Gotta get my sphinx on
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! sphinx-doc)
 #+end_src
@@ -991,18 +1142,31 @@ Adding find file other window to the commands that you can execute in vterm
  )
 #+end_src
 **** IPython Notebook
+Not sure y u no work but I don't have time right now
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! ein)
 #+end_src
 *** C/C++
+Why is this not in the default keybindings?
 #+begin_src emacs-lisp
+(map! :map (c-mode-map c++-mode-map)
+:localleader
+:desc "Go to header file" "h" #'ff-find-other-file
+)
+(setq lsp-clients-clangd-args '("-j=3"
+                                "--background-index"
+                                "--clang-tidy"
+                                "--completion-style=detailed"
+                                "--header-insertion=never"
+                                "--header-insertion-decorators=0"))
+(after! lsp-clangd (set-lsp-priority! 'clangd 2))
 #+end_src
 *** GDScript
+Game engine supreme
 #+begin_src emacs-lisp :tangle "packages.el" :comments no
 (package! gdscript-mode)
 #+end_src
 *** Org Mode
-**** System Config
 #+begin_src emacs-lisp
 ;; If you use `org' and don't want your org files in the default location below,
 ;; change `org-directory'. It must be set before org loads!
@@ -1257,6 +1421,14 @@ Make sure you use bibtex as part of the export process
 (setq org-latex-pdf-process
       '("latexmk -shell-escape -bibtex -pdf %f"))
 #+end_src
+****** Org transclusion
+#+begin_src emacs-lisp :tangle "packages.el" :comments no
+(package! org-transclusion)
+#+end_src
+
+#+begin_src emacs-lisp
+
+#+end_src
 ****** Load Font Setup
 #+begin_src emacs-lisp
   ;; (a3madkour/org-font-setup)
@@ -1405,16 +1577,6 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
        "C" #'centered-window-mode)
 )
 #+end_src
-** Agenda
-#+begin_src emacs-lisp
-;; (map! :leader
-;;       (:prefix "d"
-;;       :desc "Habits" "h" (lambda () (interactive) (find-file "~/org/habits.org"))
-;;       :desc "Tasks" "t" (lambda () (interactive) (find-file "~/org/tasks.org"))
-;;       "c" #'cfw:open-org-calendar
-;;       )
-;; )
-#+end_src
 ** Language stuff
 #+begin_src emacs-lisp
 (map! :leader
@@ -1463,6 +1625,7 @@ Doom installs org-pdftools via the init.el file. This is just for configuration.
 (global-set-key [remap dabbrev-expand] 'hippie-expand)
 #+end_src
 * Registers/Bookmarks
+Setting the registers and bookmarks for important org files.
 #+begin_src emacs-lisp
 (set-register ?h '(file . "~/org/habits.org"))
 (set-register ?t '(file . "~/org/tasks.org"))

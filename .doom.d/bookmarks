@@ -1,4 +1,4 @@
-;;;; Emacs Bookmark Format Version 1 ;;;; -*- coding: utf-8-emacs -*-
+;;;; Emacs Bookmark Format Version 1;;;; -*- coding: utf-8-emacs; mode: lisp-data -*-
 ;;; This format is meant to be slightly human-readable;
 ;;; nevertheless, you probably don't want to edit it.
 ;;; -*- End Of Bookmark File Format Version Stamp -*-
@@ -13,7 +13,7 @@
  (rear-context-string . "t it is so obvio")
  (position . 1))
 ("Habits"
- (filename . "/Stuff/a3madkour/org/habits.org")
+ (filename . "~/org/habits.org")
  (front-context-string . "HEDULED: <2021-1")
  (rear-context-string . "an 30 mins\n   SC")
  (position . 1))
@@ -24,7 +24,7 @@
  (position . 1))
 ("org-capture-last-stored"
  (filename . "~/org/ideas.org")
- (front-context-string . "** Zombie's that")
- (rear-context-string . "he profile page\n")
- (position . 30563))
+ (front-context-string . "** Regex generat")
+ (rear-context-string . "ing fake voices\n")
+ (position . 32269))
 )

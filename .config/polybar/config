@@ -58,7 +58,7 @@ font-2 = siji:pixelsize=10;1
 
 modules-left = xmonad
 modules-center = mpd
-modules-right = spotify previous playpause next xbacklight pulseaudio xkeyboard memory cpu wlan battery battery1 temperature date powermenu
+modules-right = xbacklight pulseaudio xkeyboard memory cpu wlan battery battery1 temperature date powermenu
 
 tray-position = right
 tray-padding = 2
@@ -447,45 +447,6 @@ type = custom/script
 exec = xmonad-dbus
 tail = true
 interval = 1
-
-[module/previous]
-type = custom/ipc
-format-font = 2
-; Default
-hook-0 = echo ""
-; When spotify active
-hook-1 = echo "Previous"
-click-left = "spotifyctl -q previous"
-
-
-[module/next]
-type = custom/ipc
-format-font = 2
-; Default
-hook-0 = echo ""
-; When spotify active
-hook-1 = echo "Next"
-click-left = "spotifyctl -q next"
-
-
-[module/playpause]
-type = custom/ipc
-format-font = 2
-; Default
-hook-0 = echo ""
-; Playing
-hook-1 = echo "Pause"
-; Paused
-hook-2 = echo "Play"
-click-left = "spotifyctl -q playpause"
-
-
-[module/spotify]
-type = custom/ipc
-; Default
-hook-0 = echo ""
-; Playing/paused show song name and artist
-hook-1 = spotifyctl -q status --format '%artist%: %title%'
 
 [settings]
 screenchange-reload = true

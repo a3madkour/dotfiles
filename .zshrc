@@ -8,6 +8,7 @@ fi
 
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
+# source ~/Workspace/emsdk/emsdk_env.sh > /dev/null 2> /dev/null
 
 alias xppen="/usr/lib/pentablet/pentablet"
 alias enf="emacsclient -c"
