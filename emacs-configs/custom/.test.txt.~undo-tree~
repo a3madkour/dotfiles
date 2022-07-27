@@ -1,0 +1,11 @@
+(undo-tree-save-format-version . 1)
+"4b8979718e7d2ddf261cab72b618bf304b19bda1"
+[nil nil nil nil (25306 59188 471643 167000) 0 nil]
+([nil nil ((1 . 2) (t . -1) 1) nil (25306 59188 471642 252000) 0 nil])
+([nil nil ((2 . 10)) nil (25306 59188 471641 388000) 0 nil])
+([nil nil ((10 . 19)) nil (25306 59188 471640 788000) 0 nil])
+([nil nil (("d" . 18)) nil (25306 59188 471639 368000) 0 nil])
+([nil current ((18 . 19)) nil (25306 59195 934707 690000) 0 nil])
+([nil nil (("iasdfas dsadasas
+" . 2) (undo-tree-id0 . -15) (undo-tree-id1 . -15) (undo-tree-id2 . 17) (t 25306 59188 486448 564000)) ((2 . 19)) (25306 59195 934525 896000) 0 nil])
+nil
