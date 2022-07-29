@@ -84,6 +84,7 @@
 
   ;; When opening a file (like double click) on Mac, use an existing frame
   (setq ns-pop-up-frames nil)
+  (setq vc-follow-symlinks nil)
 
   ;; But do not resize windows pixelwise, this can cause crashes in some cases
   ;; where we resize windows too quickly.
@@ -1136,7 +1137,7 @@
 #+end_src
 * Org roam
 #+begin_src emacs-lisp
-		(use-package org-roam)
+  (use-package org-roam)
 #+end_src
 * Org noter
 #+begin_src emacs-lisp
@@ -1148,15 +1149,51 @@
 #+end_src
 * Citar
 #+begin_src emacs-lisp
+	(defun citar-org-format-note-madkour (key entry)
+	"Format a note from KEY and ENTRY."
+	(let* ((template (citar--get-template 'note))
+		   (note-meta (when template
+						(citar-format--entry template entry)))
+		   (template-path (citar--get-template 'note-file))
+		   (note-path (when template-path
+						(citar-format--entry template-path entry)))
+		   (filepath (expand-file-name
+					  (concat key ".org")
+					  (car citar-notes-paths)))
+		   (buffer (find-file filepath)))
+	  (with-current-buffer buffer
+		;; This just overrides other template insertion.
+		(erase-buffer)
+		(message "We are here brother!")
+		(citar-org-roam-make-preamble key)
+		(insert "#+title: ")
+		(when template (insert note-meta))
+		(insert "\n* Notes\n:PROPERTIES:\n:NOTER_DOCUMENT: ")
+		(when template-path (insert note-path))
+		(insert "\n:END:\n")
+		(insert "\n\n|\n\n#+print_bibliography:")
+		(search-backward "|")
+		(delete-char 1)
+		(when (fboundp 'evil-insert)
+		  (evil-insert 1)))))
+
+
   (use-package citar
 	:no-require
 	:custom
+	(citar-templates
+	  '((main . "${author editor:30}     ${date year issued:4}     ${title:48}")
+		(suffix . "          ${=key= id:15}    ${=type=:12}    ${tags keywords:*}")
+		(preview . "${author editor} (${year issued date}) ${title}, ${journal journaltitle publisher container-title collection-title}.\n")
+		(note . "Notes on ${author editor}, ${title}")
+		(note-file . "${file}")))
 	(org-cite-global-bibliography (list zot-bib))
 	(org-cite-insert-processor 'citar)
 	(org-cite-follow-processor 'citar)
+	(citar-note-format-function 'citar-org-format-note-madkour)
 	(org-cite-activate-processor 'citar)
 	(citar-bibliography org-cite-global-bibliography)
-    (citar-notes-paths (list org-notes))
+	(citar-notes-paths (list org-notes))
 	;; optional: org-cite-insert is also bound to C-c C-x C-@
 	:bind
 	(:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
@@ -1166,10 +1203,31 @@
 	  :no-require
 	  :config (citar-embark-mode))
   (setq citar-at-point-function 'embark-act)
+
 #+end_src
 * Citproc
 #+begin_src emacs-lisp
 (use-package citeproc)
+#+end_src
+* Themes
+#+begin_src emacs-lisp
+(use-package doom-themes
+  :ensure t
+  :config
+  ;; Global settings (defaults)
+  (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
+        doom-themes-enable-italic t) ; if nil, italics is universally disabled
+  (load-theme 'doom-molokai t)
+
+  ;; Enable flashing mode-line on errors
+  (doom-themes-visual-bell-config)
+  ;; Enable custom neotree theme (all-the-icons must be installed!)
+  (doom-themes-neotree-config)
+  ;; or for treemacs users
+  ;; (setq doom-themes-treemacs-theme "doom-molokai") ; use "doom-colors" for less minimal icon theme
+  (doom-themes-treemacs-config)
+  ;; Corrects (and improves) org-mode's native fontification.
+  (doom-themes-org-config))
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
