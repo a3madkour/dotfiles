@@ -69,7 +69,14 @@
 #+begin_src emacs-lisp
   ;; When emacs asks for "yes" or "no", let "y" or "n" suffice
   (setq use-short-answers t)
-
+	(setq
+   org-notes "~/org/notes"
+   zot-bib  "~/org/notes/library.bib"
+   org-cite-default-bibliography (list zot-bib)
+   org-cite-csl-styles-dir "~/Zotero/styles"
+   org-cite-global-bibliography (list zot-bib)
+   org-roam-directory org-notes
+   )
   ;; Confirm to quit
   (setq confirm-kill-emacs 'yes-or-no-p)
 
@@ -113,111 +120,108 @@
 
 * Evil
 #+begin_src emacs-lisp
-	(use-package evil
-	  :init
-	  ;; (setq evil-want-keybinding t)
-	  ;; (setq evil-want-fine-undo t)
-	  ;; (setq evil-want-keybinding nil)
-	  ;; (setq evil-want-Y-yank-to-eol t)
-	  (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
-	  (setq evil-want-keybinding nil)
+			(use-package evil
+			  :init
+			  ;; (setq evil-want-keybinding t)
+			  ;; (setq evil-want-fine-undo t)
+			  ;; (setq evil-want-keybinding nil)
+			  ;; (setq evil-want-Y-yank-to-eol t)
+			  (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
+			  (setq evil-want-keybinding nil)
+			  :config
+
+			  (evil-set-initial-state 'dashboard-mode 'motion)
+			  (evil-set-initial-state 'debugger-mode 'motion)
+			  (evil-set-initial-state 'pdf-view-mode 'motion)
+			  (evil-set-initial-state 'bufler-list-mode 'emacs)
+			  (evil-set-initial-state 'inferior-python-mode 'emacs)
+			  (evil-set-initial-state 'term-mode 'emacs)
+
+			  ;; ----- Keybindings
+			  ;; I tried using evil-define-key for these. Didn't work.
+			  ;; (define-key evil-motion-state-map "/" 'swiper)
+			  (define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
+			  (define-key evil-window-map "\C-w" 'kill-this-buffer)
+			  (define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
+
+			  (evil-mode 1))
+
+
+	  (use-package evil-goggles
+  :ensure t
+  :config
+  (evil-goggles-mode)
+  )
+			;;other evil packages
+			  (use-package evil-nerd-commenter
+			  :after evil
+			  )
+			  (use-package evil-surround
+			  :after evil
+			  :defer 2
+			  :config
+			  (global-evil-surround-mode 1))
+
+			  (use-package evil-collection
+			  :after evil
+			  :ensure t
+			  :config
+			  (evil-collection-init))
+
+			  (use-package evil-easymotion
 	  :config
-
-	  (evil-set-initial-state 'dashboard-mode 'motion)
-	  (evil-set-initial-state 'debugger-mode 'motion)
-	  (evil-set-initial-state 'pdf-view-mode 'motion)
-	  (evil-set-initial-state 'bufler-list-mode 'emacs)
-	  (evil-set-initial-state 'inferior-python-mode 'emacs)
-	  (evil-set-initial-state 'term-mode 'emacs)
-
-	  ;; ----- Keybindings
-	  ;; I tried using evil-define-key for these. Didn't work.
-	  ;; (define-key evil-motion-state-map "/" 'swiper)
-	  (define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
-	  (define-key evil-window-map "\C-w" 'kill-this-buffer)
-	  (define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
-
-	  ;; ----- Setting cursor colors
-	  (setq evil-emacs-state-cursor    '("#649bce" box))
-	  (setq evil-normal-state-cursor   '("#ebcb8b" box))
-	  (setq evil-operator-state-cursor '("#ebcb8b" hollow))
-	  (setq evil-visual-state-cursor   '("#677691" box))
-	  (setq evil-insert-state-cursor   '("#eb998b" (bar . 2)))
-	  (setq evil-replace-state-cursor  '("#eb998b" hbar))
-	  (setq evil-motion-state-cursor   '("#ad8beb" box))
+	  (setq avy-background t)
 
 
-
-	  (evil-mode 1))
-
-
-	;;other evil packages
-	  (use-package evil-nerd-commenter
-	  :after evil
-	  :config
 	  )
+			  (use-package evil-args)
+			  (use-package evil-visualstar)
+			  (use-package evil-quick-diff
+			  :straight (evil-quick-diff
+			  :type git
+			  :host github
+			  :repo "rgrinberg/evil-quick-diff"
+			  )
+			  :init
+			  (setq evil-quick-diff-key (kbd "zx"))
+			  (evil-quick-diff-install))
+			  ;;(use-package evil-quick-diff
+			  ;;:init
+			  ;;(setq evil-quick-diff-key (kbd "zx"))
+			  ;;(evil-quick-diff-install))
+			  (use-package exato :ensure t)
+			  (use-package evil-vimish-fold)
+			  (use-package evil-escape)
+			  (use-package evil-numbers)
+			  (use-package evil-exchange)
+			  (use-package evil-lion
+				  :ensure t
+				  :config
+				  (evil-lion-mode))
+			  (use-package evil-indent-plus)
+			  (use-package evil-embrace)
+			  (use-package evil-snipe
+				  :diminish evil-snipe-mode
+				  :diminish evil-snipe-local-mode
+				  :after evil
+				  :config
+				  (evil-snipe-mode +1))
+			  (use-package evil-org
+				  :diminish evil-org-mode
+				  :after org
+				  :config
+			  (add-hook 'org-mode-hook 'evil-org-mode)
+			  (add-hook 'evil-org-mode-hook
+						  (lambda () (evil-org-set-key-theme))))
 
-	  (use-package evil-surround
-	  :after evil
-	  :defer 2
-	  :config
-	  (global-evil-surround-mode 1))
+			  (require 'evil-org-agenda)
+			  (evil-org-agenda-set-keys)
 
-	  (use-package evil-collection
-	  :after evil
-	  :ensure t
-	  :config
-	  (evil-collection-init))
+			  (setq org-modules '(org-habit))
 
-	  (use-package evil-easymotion)
-	  (use-package evil-args)
-	  (use-package evil-visualstar)
-	  (use-package evil-quick-diff
-	  :straight (evil-quick-diff
-	  :type git
-	  :host github
-	  :repo "rgrinberg/evil-quick-diff"
-	  )
-	  :init
-	  (setq evil-quick-diff-key (kbd "zx"))
-	  (evil-quick-diff-install))
-	  ;;(use-package evil-quick-diff
-	  ;;:init
-	  ;;(setq evil-quick-diff-key (kbd "zx"))
-	  ;;(evil-quick-diff-install))
-	  (use-package exato :ensure t)
-	  (use-package evil-vimish-fold)
-	  (use-package evil-escape)
-	  (use-package evil-numbers)
-	  (use-package evil-exchange)
-	  (use-package evil-lion
-		  :ensure t
-		  :config
-		  (evil-lion-mode))
-	  (use-package evil-indent-plus)
-	  (use-package evil-embrace)
-	  (use-package evil-snipe
-		  :diminish evil-snipe-mode
-		  :diminish evil-snipe-local-mode
-		  :after evil
-		  :config
-		  (evil-snipe-mode +1))
-	  (use-package evil-org
-		  :diminish evil-org-mode
-		  :after org
-		  :config
-	  (add-hook 'org-mode-hook 'evil-org-mode)
-	  (add-hook 'evil-org-mode-hook
-				  (lambda () (evil-org-set-key-theme))))
-
-	  (require 'evil-org-agenda)
-	  (evil-org-agenda-set-keys)
-
-	  (setq org-modules '(org-habit))
-
-	  (eval-after-load 'org
-	  '(org-load-modules-maybe t))
-  (use-package evil-anzu :defer t)
+			  (eval-after-load 'org
+			  '(org-load-modules-maybe t))
+		  (use-package evil-anzu :defer t)
 #+end_src
 * Vterm
 #+begin_src emacs-lisp
@@ -360,9 +364,9 @@
         doom-modeline-enable-word-count t
         doom-modeline-buffer-encoding nil
         doom-modeline-icon t ;; Enable/disable all icons
-        doom-modeline-modal-icon nil ;; Icon for Evil mode
+        doom-modeline-modal-icon t ;; Icon for Evil mode
         doom-modeline-major-mode-icon t
-        doom-modeline-major-mode-color-icon nil
+        doom-modeline-major-mode-color-icon t
         doom-modeline-bar-width 3))
 #+end_src
 * Vetico
@@ -643,24 +647,6 @@
 #+begin_src emacs-lisp
 (use-package projectile)
 #+end_src
-* Modus-Themes
-#+begin_src emacs-lisp
-;;; For packaged versions which must use `require':
-(use-package modus-themes
-  :ensure
-  :init
-  ;; Add all your customizations prior to loading the themes
-  (setq modus-themes-italic-constructs t
-        modus-themes-bold-constructs nil
-        modus-themes-region '(bg-only no-extend))
-
-  ;; Load the theme files before enabling a theme
-  (modus-themes-load-themes)
-  :config
-  ;; Load the theme of your choice:
-  (modus-themes-load-vivendi) ;; OR (modus-themes-load-vivendi)
-  :bind ("<f5>" . modus-themes-toggle))
-#+end_src
 * Flyspell
 #+begin_src emacs-lisp
  
@@ -753,34 +739,51 @@
 #+end_src
 * Deft
 #+begin_src emacs-lisp
-  (defun a3madkour/deft-kill ()
-	(kill-buffer "*Deft*"))
-  (defun a3madkour/deft-evil-fix ()
-	(evil-insert-state)
-	(centered-cursor-mode))
-(use-package deft
-  :config
-  (setq deft-directory (concat a3madkour/dropbox "notes/")
-        deft-extensions '("org" "txt")
-        deft-recursive t
-        deft-file-limit 40
-        deft-use-filename-as-title t)
+	(defun a3madkour/deft-kill ()
+	  (kill-buffer "*Deft*"))
+	(defun a3madkour/deft-evil-fix ()
+	  (evil-insert-state)
+	  (centered-cursor-mode))
+  (use-package deft
+	:config
+	 (defun cf/deft-parse-title (file contents)
+      "Parse the given FILE and CONTENTS and determine the title.
+    If `deft-use-filename-as-title' is nil, the title is taken to
+    be the first non-empty line of the FILE.  Else the base name of the FILE is
+    used as title."
+      (let ((begin (string-match "^#\\+[tT][iI][tT][lL][eE]: .*$" contents)))
+        (if begin
+            (string-trim (substring contents begin (match-end 0)) "#\\+[tT][iI][tT][lL][eE]: *" "[\n\t ]+")
+          (deft-base-filename file))))
+    (advice-add 'deft-parse-title :override #'cf/deft-parse-title)
+    (setq deft-strip-summary-regexp
+          (concat "\\("
+                  "[\n\t]" ;; blank
+                  "\\|^#\\+[[:alpha:]_]+:.*$" ;; org-mode metadata
+                  "\\|^:PROPERTIES:\n\\(.+\n\\)+:END:\n" ;; org-roam ID
+                  "\\|\\[\\[\\(.*\\]\\)" ;; any link 
+                  "\\)"))
+	(setq deft-directory org-notes
+		  deft-extensions '("org" "txt")
+		  deft-recursive t
+		  deft-file-limit 40
+		  deft-use-filename-as-title t)
 
-  (add-hook 'deft-open-file-hook 'a3madkour/deft-kill) ;; Once a file is opened, kill Deft
-  (add-hook 'deft-mode-hook 'a3madkour/deft-evil-fix) ;; Goes into insert mode automaticlly in Deft
+	(add-hook 'deft-open-file-hook 'a3madkour/deft-kill) ;; Once a file is opened, kill Deft
+	(add-hook 'deft-mode-hook 'a3madkour/deft-evil-fix) ;; Goes into insert mode automaticlly in Deft
 
-  ;; Removes :PROPERTIES: from descriptions
-  (setq deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n")
-  :general
+	;; Removes :PROPERTIES: from descriptions
+	;; (setq deft-strip-summary-regexp ":PROPERTIES:\n\\(.+\n\\)+:END:\n")
+	:general
 
-  (general-define-key :states 'normal :keymaps 'deft-mode-map
-                      ;; 'q' kills Deft in normal mode
-                      "q" 'kill-this-buffer)
+	(general-define-key :states 'normal :keymaps 'deft-mode-map
+						;; 'q' kills Deft in normal mode
+						"q" 'kill-this-buffer)
 
-  (general-define-key :states 'insert :keymaps 'deft-mode-map
-                      "C-j" 'next-line
-                      "C-k" 'previous-line)
-  )
+	(general-define-key :states 'insert :keymaps 'deft-mode-map
+						"C-j" 'next-line
+						"C-k" 'previous-line)
+	)
 
   
 #+end_src
@@ -1038,9 +1041,15 @@
 (use-package eglot)
 (use-package dap-mode)
 #+end_src
-* Persp-mode
+* Perspective
 #+begin_src emacs-lisp
-(use-package persp-mode)
+(use-package perspective
+  :bind
+  ("C-x C-b" . persp-list-buffers)         ; or use a nicer switcher, see below
+  :custom
+  (persp-mode-prefix-key (kbd "C-c M-p"))  ; pick your own prefix key here
+  :init
+  (persp-mode))
 #+end_src
 * Language Packages
 ** Rust
@@ -1103,15 +1112,7 @@
 	  (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
 	  (add-to-list 'org-structure-template-alist '("json" . "src json"))
 	(use-package org-super-agenda)
-	(setq
-   org-notes "~/org/notes"
-   zot-bib  "~/org/notes/library.bib"
-   deft-directory org-notes
-   org-cite-default-bibliography (list zot-bib)
-   org-cite-csl-styles-dir "~/Zotero/styles"
-   org-cite-global-bibliography (list zot-bib)
-   org-roam-directory org-notes
-   )
+
   (defun a3madkour/org-font-setup ()
   ;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
   (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
@@ -1141,7 +1142,11 @@
 #+end_src
 * Org noter
 #+begin_src emacs-lisp
-(use-package org-noter)
+	(use-package org-noter
+  :config
+  (setq org-noter-always-create-frame nil)
+  (setq org-noter-kill-frame-at-session-end nil)
+  )
 #+end_src
 * Ob-Async
 #+begin_src emacs-lisp
@@ -1231,290 +1236,313 @@
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
-  (general-define-key
-   :states '(normal motion visual)
-   :keymaps 'override
-   :prefix "SPC"
+	(general-define-key
+	 :states '(normal motion visual)
+	 :keymaps 'override
+	 :prefix "SPC"
 
-   ;; Top level functions
-   "/" '(consult-ripgrep :which-key "ripgrep")
-   ";" '(deft :which-key "deft")
-   ":" '(project-find-file :which-key "p-find file")
-   "." '(find-file :which-key "find file")
-   "," '(consult-recent-file :which-key "recent files")
-   ;; "TAB" '(switch-to-prev-buffer :which-key "previous buffer")
-  "SPC" '(execute-extended-command :which-key "M-x")
-   "q" '(save-buffers-kill-terminal :which-key "quit emacs")
-   "r" '(jump-to-register :which-key "registers")
-   "c" 'org-capture
+	 ;; Top level functions
+	 "/" '(consult-ripgrep :which-key "ripgrep")
+	 ";" '(deft :which-key "deft")
+	 ":" '(project-find-file :which-key "p-find file")
+	 "." '(find-file :which-key "find file")
+	 "," '(consult-recent-file :which-key "recent files")
+	 ;; "TAB" '(switch-to-prev-buffer :which-key "previous buffer")
+	 "q" '(save-buffers-kill-terminal :which-key "quit emacs")
+	 "r" '(jump-to-register :which-key "registers")
+	 "c" 'org-capture
+	 "a" 'embark-act
 
-  ;; Buffers
-  "b" '(nil :which-key "buffer")
-  "bb" '(consult-buffer :which-key "switch buffers")
-  "bd" '(evil-delete-buffer :which-key "delete buffer")
-  "bi" '(ibuffer  :which-key "ibuffer")
-  "br" '(revert-buffer :which-key "revert buffer")
+	;; Buffers
+	"b" '(nil :which-key "buffer")
+	"bb" '(consult-buffer :which-key "switch buffers")
+	"bd" '(evil-delete-buffer :which-key "delete buffer")
+	"bi" '(ibuffer  :which-key "ibuffer")
+	"br" '(revert-buffer :which-key "revert buffer")
 
-  ;; Files
-  "f" '(nil :which-key "files")
-  "fb" '(consult-bookmark :which-key "bookmarks")
-  "ff" '(find-file :which-key "find file")
-  ;; "fn" '(spacemacs/new-empty-buffer :which-key "new file")
-  "fr" '(consult-recent-file :which-key "recent files")
-  "fR" '(rename-file :which-key "rename file")
-  "fs" '(save-buffer :which-key "save buffer")
-  "fS" '(evil-write-all :which-key "save all buffers")
+	;; Files
+	"f" '(nil :which-key "files")
+	"fb" '(consult-bookmark :which-key "bookmarks")
+	"ff" '(find-file :which-key "find file")
+	;; "fn" '(spacemacs/new-empty-buffer :which-key "new file")
+	"fr" '(consult-recent-file :which-key "recent files")
+	"fR" '(rename-file :which-key "rename file")
+	"fs" '(save-buffer :which-key "save buffer")
+	"fS" '(evil-write-all :which-key "save all buffers")
 
-  ;; Help/emacs
-  "h" '(nil :which-key "help/emacs")
+	;; Help/emacs
+	"h" '(nil :which-key "help/emacs")
 
-  "hv" '(describe-variable :which-key "des. variable")
-  "hb" '(describe-bindings :which-key "des. bindings")
-  "hM" '(describe-mode :which-key "des. mode")
-  "hf" '(describe-function :which-key "des. func")
-  "hF" '(describe-face :which-key "des. face")
-  "hk" '(describe-key :which-key "des. key")
+	"hv" '(describe-variable :which-key "des. variable")
+	"hb" '(describe-bindings :which-key "des. bindings")
+	"hM" '(describe-mode :which-key "des. mode")
+	"hf" '(describe-function :which-key "des. func")
+	"hF" '(describe-face :which-key "des. face")
+	"hk" '(describe-key :which-key "des. key")
 
-  "hed" '((lambda () (interactive) (jump-to-register 67)) :which-key "edit dotfile")
+	"hed" '((lambda () (interactive) (jump-to-register 67)) :which-key "edit dotfile")
 
-  "hm" '(nil :which-key "switch mode")
-  "hme" '(emacs-lisp-mode :which-key "elisp mode")
-  "hmo" '(org-mode :which-key "org mode")
-  "hmt" '(text-mode :which-key "text mode")
+	"hm" '(nil :which-key "switch mode")
+	"hme" '(emacs-lisp-mode :which-key "elisp mode")
+	"hmo" '(org-mode :which-key "org mode")
+	"hmt" '(text-mode :which-key "text mode")
 
-  ;; Git
-  "gg" '(magit-status :which-key "magit status")
+	;; Git
+	"gg" '(magit-status :which-key "magit status")
 
-  ;; Open
-  "ot" '(vterm-other-window :which-key "Open vterm in another window")
-  "oT" '(vterm :which-key "Open vterm in the same window")
+	;; Open
+	"ot" '(vterm-other-window :which-key "Open vterm in another window")
+	"oT" '(vterm :which-key "Open vterm in the same window")
 
-  ;; Toggles
-  "t" '(nil :which-key "toggles")
-  "tt" '(toggle-truncate-lines :which-key "truncate lines")
-  "tv" '(visual-line-mode :which-key "visual line mode")
-  "tn" '(display-line-numbers-mode :which-key "display line numbers")
-  "ta" '(mixed-pitch-mode :which-key "variable pitch mode")
-  "tc" '(visual-fill-column-mode :which-key "visual fill column mode")
-  "ty" '(load-theme :which-key "load theme")
-  "tR" '(read-only-mode :which-key "read only mode")
-  "tI" '(toggle-input-method :which-key "toggle input method")
-  "tr" '(display-fill-column-indicator-mode :which-key "fill column indicator")
-  "tm" '(hide-mode-line-mode :which-key "hide modeline mode")
+	;; Toggles
+	"t" '(nil :which-key "toggles")
+	"tt" '(toggle-truncate-lines :which-key "truncate lines")
+	"tv" '(visual-line-mode :which-key "visual line mode")
+	"tn" '(display-line-numbers-mode :which-key "display line numbers")
+	"ta" '(mixed-pitch-mode :which-key "variable pitch mode")
+	"tc" '(visual-fill-column-mode :which-key "visual fill column mode")
+	"ty" '(load-theme :which-key "load theme")
+	"tR" '(read-only-mode :which-key "read only mode")
+	"tI" '(toggle-input-method :which-key "toggle input method")
+	"tr" '(display-fill-column-indicator-mode :which-key "fill column indicator")
+	"tm" '(hide-mode-line-mode :which-key "hide modeline mode")
 
-  ;;Search
-  "sb" '(consult-line :which-key "search buffer")
-  ;; Windows
-  "w" '(nil :which-key "window")
-  ;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
-  "wN" '(make-frame :which-key "make frame")
-  "wd" '(evil-window-delete :which-key "delete window")
-  "ws" '(split-window-vertically :which-key "split below")
-  "wv" '(split-window-horizontally :which-key "split right")
-  "wl" '(evil-window-right :which-key "evil-window-right")
-  "wh" '(evil-window-left :which-key "evil-window-left")
-  "wj" '(evil-window-down :which-key "evil-window-down")
-  "wk" '(evil-window-up :which-key "evil-window-up")
-  "wz" '(text-scale-adjust :which-key "text zoom")
+	;;Search
+	"sb" '(consult-line :which-key "search buffer")
+	;; Windows
+	"w" '(nil :which-key "window")
+	;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
+	"wN" '(make-frame :which-key "make frame")
+	"wd" '(evil-window-delete :which-key "delete window")
+	"ws" '(split-window-vertically :which-key "split below")
+	"wv" '(split-window-horizontally :which-key "split right")
+	"wl" '(evil-window-right :which-key "evil-window-right")
+	"wh" '(evil-window-left :which-key "evil-window-left")
+	"wj" '(evil-window-down :which-key "evil-window-down")
+	"wk" '(evil-window-up :which-key "evil-window-up")
+	"wz" '(text-scale-adjust :which-key "text zoom")
+
+	;; Projectile
+	"pr" '(projectile-recentf :which-key "projectile-recentf")
+	"p&" '(projectile-run-async-shell-command-in-root :which-key "projectile-run-async-shell-command-in-root")
+	"p!" '(projectile-run-shell-command-in-root :which-key "projectile-run-shell-command-in-root")
+	"pd" '(projectile-remove-known-project :which-key "projectile-remove-known-project")
+	"pb" '(projectile-switch-to-buffer :which-key "projectile-switch-to-buffer")
+	"pa" '(projectile-add-known-project :which-key "projectile-add-known-project")
+	"ps" '(projectile-save-project-buffers :which-key "projectile-save-project-buffers")
+	"pg" '(projectile-configure-project :which-key "projectile-configure-project")
+	"pi" '(projectile-invalidate-cache :which-key "projectile-invalidate-cache")
+	"po" '(projectile-find-other-file :which-key "projectile-find-other-file")
+	"pe" '(projectile-edit-dir-locals :which-key "projectile-edit-dir-locals")
+	"pc" '(projectile-compile-project :which-key "projectile-compile-project")
+	"pp" '(projectile-switch-project :which-key "projectile-switch-project")
+	"pT" '(projectile-test-project :which-key "projectile-test-project")
+	"pR" '(projectile-run-project :which-key "projectile-run-project")
+	"pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
+	"SPC" '(projectile-find-file :which-key "projectile-find-file")
+  
+	) ;; End SPC prefix block
+
+	;; All-mode keymaps
+	(general-def
+	  :keymaps 'override
+
+	  ;; Emacs --------
+	  ;; "M-x" 'M-x
+	  "ß" 'evil-window-next ;; option-s
+	  "Í" 'other-frame ;; option-shift-s
+	  "C-S-B" 'consult-switch-buffer
+	  "∫" 'consult-switch-buffer ;; option-b
+
+	  ;; Remapping normal help features to use Consult version
+	  "C-h v" 'describe-variable
+	  "C-h o" 'describe-symbol
+	  "C-h f" 'describe-function
+	  "C-h F" 'describe-face
+
+	  ;; Editing ------
+	  "M-v" 'simpleclip-paste
+	  "M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
+	  "M-c" 'simpleclip-copy
+	  "M-u" 'capitalize-dwim ;; Default is upcase-dwim
+	  "M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
+	  ;;"M-z" 'undo-fu-only-undo				
+	  ;;"M-S" 'undo-fu-only-redo
+
+	  ;; Utility ------
+	  "C-c c" 'org-capture
+	  "C-;" 'embark-act
+	  "C-c a" 'org-agenda
+	  "C-s" 'consult-line ;; Large files will use grep (faster)
+	  "s-\"" 'ispell-word ;; that's super-shift-'
+	  ;; "M-+" 'jib/calc-speaking-time
+	  "C-'" 'avy-goto-char-2
+
+	  "C-x C-b" 'bufler-list
+
+	  ;; super-number functions
+	  "s-1" 'mw-thesaurus-lookup-dwim
+	  "s-!" 'mw-thesaurus-lookup
+	  "s-2" 'ispell-buffer
+	  "s-3" 'revert-buffer
+	  ;; "s-4" '(lambda () (interactive) (consult-file-jump nil jib/dropbox))
+	  ;; "s-5" '(lambda () (interactive) (consult-rg nil jib/dropbox))
+	  "s-6" 'org-capture
+	  )
+
+	(general-def
+	 :keymaps 'emacs
+	  "C-w C-q" 'kill-this-buffer
+	 )
 
 
-  ;;g commandsc-comment-operator :which-key "comment operator")
-  ) ;; End SPC prefix block
+	;; Non-insert mode keymaps
+	(general-def
+	  :states '(normal visual motion)
+	  "u" 'undo
+	  "j" 'evil-next-visual-line ;; I prefer visual line navigation
+	  "k" 'evil-previous-visual-line ;; ""
+	  "|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
+	  "C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
+	 "gc" '(evilnc-comment-operator :which-key "commentator")
+	  )
+	(general-def
+  :prefix "gs"
+	  :states '(normal visual motion)
+	"s" '(evil-avy-goto-char-2 :which-key "avy char 2")
+	"/" '(evil-avy-goto-char-timer :which-key "avy timer")
+	"SPC" '(evil-avy-goto-char-timer :which-key "avy timer")
+	  )
 
-  ;; All-mode keymaps
+
+	;; Insert keymaps
+	;; Many of these are emulating standard Emacs bindings in Evil insert mode, such as C-a, or C-e.
+	(general-def
+	  :states '(insert)
+	  "C-a" 'evil-beginning-of-visual-line
+	  "C-e" 'evil-end-of-visual-line
+	  "C-S-a" 'evil-beginning-of-line
+	  "C-S-e" 'evil-end-of-line
+	  "C-n" 'evil-next-visual-line
+	  "C-p" 'evil-previous-visual-line
+	  )
+
+
   (general-def
-	:keymaps 'override
+	:states 'normal
+	:keymaps 'org-mode-map
+	"t" 'org-todo
+	;; "<return>" 'org-open-at-point-global
+	"K" 'org-shiftup
 
-	;; Emacs --------
-	;; "M-x" 'M-x
-	"ß" 'evil-window-next ;; option-s
-	"Í" 'other-frame ;; option-shift-s
-	"C-S-B" 'consult-switch-buffer
-	"∫" 'consult-switch-buffer ;; option-b
-
-	;; Remapping normal help features to use Consult version
-	"C-h v" 'describe-variable
-	"C-h o" 'describe-symbol
-	"C-h f" 'describe-function
-	"C-h F" 'describe-face
-
-	;; Editing ------
-	"M-v" 'simpleclip-paste
-	"M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
-	"M-c" 'simpleclip-copy
-	"M-u" 'capitalize-dwim ;; Default is upcase-dwim
-	"M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
-	;;"M-z" 'undo-fu-only-undo				
-	;;"M-S" 'undo-fu-only-redo
-
-	;; Utility ------
-	"C-c c" 'org-capture
-	"C-c a" 'org-agenda
-	"C-s" 'consult-line ;; Large files will use grep (faster)
-	"s-\"" 'ispell-word ;; that's super-shift-'
-	;; "M-+" 'jib/calc-speaking-time
-	"C-'" 'avy-goto-char-2
-
-	"C-x C-b" 'bufler-list
-
-	;; super-number functions
-	"s-1" 'mw-thesaurus-lookup-dwim
-	"s-!" 'mw-thesaurus-lookup
-	"s-2" 'ispell-buffer
-	"s-3" 'revert-buffer
-	;; "s-4" '(lambda () (interactive) (consult-file-jump nil jib/dropbox))
-	;; "s-5" '(lambda () (interactive) (consult-rg nil jib/dropbox))
-	"s-6" 'org-capture
+	"J" 'org-shiftdown
+   "TAB" 'org-cycle
 	)
 
   (general-def
-   :keymaps 'emacs
-	"C-w C-q" 'kill-this-buffer
+	:states 'insert
+	:keymaps 'org-mode-map
+	"C-o" 'evil-org-open-above)
+
+  (general-def
+	:states '(normal insert emacs)
+	:keymaps 'org-mode-map
+	"M-[" 'org-metaleft
+	"M-]" 'org-metaright
+	"C-M-=" 'ap/org-count-words
+	"s-r" 'org-refile
+	"M-k" 'org-insert-link
+	)
+
+  ;; Org-src - when editing an org source block
+  (general-def
+	:prefix ","
+	:states 'normal
+	:keymaps 'org-src-mode-map
+	"b" '(nil :which-key "org src")
+	"bc" 'org-edit-src-abort
+	"bb" 'org-edit-src-exit
+	)
+
+  (general-define-key
+   :prefix ","
+   :states 'motion
+   :keymaps '(org-mode-map) ;; Available in org mode, org agenda
+   "" nil
+   "A" '(org-archive-subtree-default :which-key "org-archive")
+   "a" '(org-agenda :which-key "org agenda")
+   "6" '(org-sort :which-key "sort")
+   "c" '(org-capture :which-key "org-capture")
+   "s" '(org-schedule :which-key "schedule")
+   ;; "S" '(jib/org-schedule-tomorrow :which-key "schedule")
+   "d" '(org-deadline :which-key "deadline")
+   "g" '(org-goto :which-key "goto heading")
+   "t" '(org-tag :which-key "set tags")
+   "p" '(org-set-property :which-key "set property")
+   "e" '(org-export-dispatch :which-key "export org")
+   "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
+   "H" '(org-html-convert-region-to-html :which-key "convert region to html")
+
+   "1" '(org-toggle-link-display :which-key "toggle link display")
+   "2" '(org-toggle-inline-images :which-key "toggle images")
+
+   ;; org-babel
+   "b" '(nil :which-key "babel")
+   "bt" '(org-babel-tangle :which-key "org-babel-tangle")
+   "bb" '(org-edit-special :which-key "org-edit-special")
+   "bc" '(org-edit-src-abort :which-key "org-edit-src-abort")
+   "bk" '(org-babel-remove-result-one-or-many :which-key "org-babel-remove-result-one-or-many")
+
+   "x" '(nil :which-key "text")
+   ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
+   ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
+   ;; "xc" (spacemacs|org-emphasize spacemacs|org-code ?~)
+   ;; "xi" (spacemacs|org-emphasize spacemacs|org-italic ?/)
+   ;; "xs" (spacemacs|org-emphasize spacemacs|org-strike-through ?+)
+   ;; "xu" (spacemacs|org-emphasize spacemacs|org-underline ?_)
+   ;; "xv" (spacemacs|org-emphasize spacemacs|org-verbose ?~) ;; I realized that ~~ is the same and better than == (Github won't do ==)
+
+   ;; insert
+   "i" '(nil :which-key "insert")
+
+   "it" '(nil :which-key "tables")
+   "itt" '(org-table-create :which-key "create table")
+   "itl" '(org-table-insert-hline :which-key "table hline")
+
+   "il" '(org-insert-link :which-key "org-insert-link")
+
+   "is" '(nil :which-key "insert stamp")
+   "iss" '((lambda () (interactive) (call-interactively (org-time-stamp-inactive))) :which-key "org-time-stamp-inactive")
+   "isS" '((lambda () (interactive) (call-interactively (org-time-stamp nil))) :which-key "org-time-stamp")
+
+   ;; clocking
+   "c" '(nil :which-key "clocking")
+   "ci" '(org-clock-in :which-key "clock in")
+   "co" '(org-clock-out :which-key "clock out")
+   "cj" '(org-clock-goto :which-key "jump to clock")
    )
 
 
-  ;; Non-insert mode keymaps
-  (general-def
-	:states '(normal visual motion)
-	"u" 'undo
-	"j" 'evil-next-visual-line ;; I prefer visual line navigation
-	"k" 'evil-previous-visual-line ;; ""
-	"|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
-	"C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
-   "gc" '(evilnc-comment-operator :which-key "commentator")
-	)
+  ;; Org-agenda
+  (general-define-key
+   :prefix ","
+   :states 'motion
+   :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
+   "" nil
+   "a" '(org-agenda :which-key "org agenda")
+   "c" '(org-capture :which-key "org-capture")
+   "s" '(org-agenda-schedule :which-key "schedule")
+   "d" '(org-agenda-deadline :which-key "deadline")
+   "t" '(org-agenda-set-tags :which-key "set tags")
+   ;; clocking
+   "c" '(nil :which-key "clocking")
+   "ci" '(org-agenda-clock-in :which-key "clock in")
+   "co" '(org-agenda-clock-out :which-key "clock out")
+   "cj" '(org-clock-goto :which-key "jump to clock")
+   )
 
-  ;; Insert keymaps
-  ;; Many of these are emulating standard Emacs bindings in Evil insert mode, such as C-a, or C-e.
-  (general-def
-	:states '(insert)
-	"C-a" 'evil-beginning-of-visual-line
-	"C-e" 'evil-end-of-visual-line
-	"C-S-a" 'evil-beginning-of-line
-	"C-S-e" 'evil-end-of-line
-	"C-n" 'evil-next-visual-line
-	"C-p" 'evil-previous-visual-line
-	)
-
-  
-(general-def
-  :states 'normal
-  :keymaps 'org-mode-map
-  "t" 'org-todo
-  ;; "<return>" 'org-open-at-point-global
-  "K" 'org-shiftup
-
-  "J" 'org-shiftdown
- "TAB" 'org-cycle
-  )
-
-(general-def
-  :states 'insert
-  :keymaps 'org-mode-map
-  "C-o" 'evil-org-open-above)
-
-(general-def
-  :states '(normal insert emacs)
-  :keymaps 'org-mode-map
-  "M-[" 'org-metaleft
-  "M-]" 'org-metaright
-  "C-M-=" 'ap/org-count-words
-  "s-r" 'org-refile
-  "M-k" 'org-insert-link
-  )
-
-;; Org-src - when editing an org source block
-(general-def
-  :prefix ","
-  :states 'normal
-  :keymaps 'org-src-mode-map
-  "b" '(nil :which-key "org src")
-  "bc" 'org-edit-src-abort
-  "bb" 'org-edit-src-exit
-  )
-
-(general-define-key
- :prefix ","
- :states 'motion
- :keymaps '(org-mode-map) ;; Available in org mode, org agenda
- "" nil
- "A" '(org-archive-subtree-default :which-key "org-archive")
- "a" '(org-agenda :which-key "org agenda")
- "6" '(org-sort :which-key "sort")
- "c" '(org-capture :which-key "org-capture")
- "s" '(org-schedule :which-key "schedule")
- ;; "S" '(jib/org-schedule-tomorrow :which-key "schedule")
- "d" '(org-deadline :which-key "deadline")
- "g" '(counsel-org-goto :which-key "goto heading")
- "t" '(counsel-org-tag :which-key "set tags")
- "p" '(org-set-property :which-key "set property")
- ;; "r" '(jib/org-refile-this-file :which-key "refile in file")
- "e" '(org-export-dispatch :which-key "export org")
- "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
- ;; "v" '(jib/org-set-startup-visibility :which-key "startup visibility")
- "H" '(org-html-convert-region-to-html :which-key "convert region to html")
-
- "1" '(org-toggle-link-display :which-key "toggle link display")
- "2" '(org-toggle-inline-images :which-key "toggle images")
-
- ;; org-babel
- "b" '(nil :which-key "babel")
- "bt" '(org-babel-tangle :which-key "org-babel-tangle")
- "bb" '(org-edit-special :which-key "org-edit-special")
- "bc" '(org-edit-src-abort :which-key "org-edit-src-abort")
- "bk" '(org-babel-remove-result-one-or-many :which-key "org-babel-remove-result-one-or-many")
-
- "x" '(nil :which-key "text")
- ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
- ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
- ;; "xc" (spacemacs|org-emphasize spacemacs|org-code ?~)
- ;; "xi" (spacemacs|org-emphasize spacemacs|org-italic ?/)
- ;; "xs" (spacemacs|org-emphasize spacemacs|org-strike-through ?+)
- ;; "xu" (spacemacs|org-emphasize spacemacs|org-underline ?_)
- ;; "xv" (spacemacs|org-emphasize spacemacs|org-verbose ?~) ;; I realized that ~~ is the same and better than == (Github won't do ==)
-
- ;; insert
- "i" '(nil :which-key "insert")
-
- "it" '(nil :which-key "tables")
- "itt" '(org-table-create :which-key "create table")
- "itl" '(org-table-insert-hline :which-key "table hline")
-
- "il" '(org-insert-link :which-key "org-insert-link")
- "iL" '(counsel-org-link :which-key "counsel-org-link")
-
- "is" '(nil :which-key "insert stamp")
- "iss" '((lambda () (interactive) (call-interactively (org-time-stamp-inactive))) :which-key "org-time-stamp-inactive")
- "isS" '((lambda () (interactive) (call-interactively (org-time-stamp nil))) :which-key "org-time-stamp")
-
- ;; clocking
- "c" '(nil :which-key "clocking")
- "ci" '(org-clock-in :which-key "clock in")
- "co" '(org-clock-out :which-key "clock out")
- "cj" '(org-clock-goto :which-key "jump to clock")
- )
-
-
-;; Org-agenda
-(general-define-key
- :prefix ","
- :states 'motion
- :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
- "" nil
- "a" '(org-agenda :which-key "org agenda")
- "c" '(org-capture :which-key "org-capture")
- "s" '(org-agenda-schedule :which-key "schedule")
- "d" '(org-agenda-deadline :which-key "deadline")
- "t" '(org-agenda-set-tags :which-key "set tags")
- ;; clocking
- "c" '(nil :which-key "clocking")
- "ci" '(org-agenda-clock-in :which-key "clock in")
- "co" '(org-agenda-clock-out :which-key "clock out")
- "cj" '(org-clock-goto :which-key "jump to clock")
- )
-
-(evil-define-key 'motion org-agenda-mode-map
-  (kbd "f") 'org-agenda-later
-  (kbd "b") 'org-agenda-earlier)
+  (evil-define-key 'motion org-agenda-mode-map
+	(kbd "f") 'org-agenda-later
+	(kbd "b") 'org-agenda-earlier)
 
 #+end_src

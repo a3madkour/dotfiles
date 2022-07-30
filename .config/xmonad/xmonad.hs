@@ -245,7 +245,7 @@ myEditor :: String
 myEditor = "emacs" -- Sets emacs as myeditor
 
 myBrowser :: String
-myBrowser = "brave" -- Sets qutebrowser as mybrowser
+myBrowser = "firefox" -- Sets qutebrowser as mybrowser
 
 myTerminal = "alacritty" -- Sets default terminal
 
