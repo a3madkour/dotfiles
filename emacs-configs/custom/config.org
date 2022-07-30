@@ -1247,7 +1247,7 @@
 	 ":" '(project-find-file :which-key "p-find file")
 	 "." '(find-file :which-key "find file")
 	 "," '(consult-recent-file :which-key "recent files")
-	 ;; "TAB" '(switch-to-prev-buffer :which-key "previous buffer")
+	 "TAB" '(perspective-map :which-key "perspective map")
 	 "q" '(save-buffers-kill-terminal :which-key "quit emacs")
 	 "r" '(jump-to-register :which-key "registers")
 	 "c" 'org-capture
