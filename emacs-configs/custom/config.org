@@ -275,6 +275,12 @@
 #+begin_src emacs-lisp
   (use-package general)
 #+end_src
+
+* All the icons
+#+begin_src emacs-lisp
+(use-package all-the-icons
+  :if (display-graphic-p))
+#+end_src
 * Hydra
 #+begin_src emacs-lisp
 (use-package hydra
@@ -1056,7 +1062,6 @@
 #+begin_src emacs-lisp
 (use-package rustic)
 (setq rustic-lsp-server 'rls)
-(setq rustic-analyzer-command '("~/.cargo/bin/rust-analyzer"))
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
