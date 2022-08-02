@@ -91,8 +91,12 @@
 
   ;; When opening a file (like double click) on Mac, use an existing frame
   (setq ns-pop-up-frames nil)
+
+  ;;supposed to not ask me about git
   (setq vc-follow-symlinks nil)
 
+  ;;make agenda current window
+  (setq org-agenda-window-setup 'current-window)
   ;; But do not resize windows pixelwise, this can cause crashes in some cases
   ;; where we resize windows too quickly.
   (setq window-resize-pixelwise nil)
@@ -120,108 +124,107 @@
 
 * Evil
 #+begin_src emacs-lisp
-			(use-package evil
-			  :init
-			  ;; (setq evil-want-keybinding t)
-			  ;; (setq evil-want-fine-undo t)
-			  ;; (setq evil-want-keybinding nil)
-			  ;; (setq evil-want-Y-yank-to-eol t)
-			  (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
-			  (setq evil-want-keybinding nil)
-			  :config
+			  (use-package evil
+				:init
+				;; (setq evil-want-keybinding t)
+				;; (setq evil-want-fine-undo t)
+				;; (setq evil-want-keybinding nil)
+				;; (setq evil-want-Y-yank-to-eol t)
+				(setq evil-want-integration t) ;; This is optional since it's already set to t by default.
+				(setq evil-want-keybinding nil)
+				:config
 
-			  (evil-set-initial-state 'dashboard-mode 'motion)
-			  (evil-set-initial-state 'debugger-mode 'motion)
-			  (evil-set-initial-state 'pdf-view-mode 'motion)
-			  (evil-set-initial-state 'bufler-list-mode 'emacs)
-			  (evil-set-initial-state 'inferior-python-mode 'emacs)
-			  (evil-set-initial-state 'term-mode 'emacs)
+				(evil-set-initial-state 'dashboard-mode 'motion)
+				(evil-set-initial-state 'debugger-mode 'motion)
+				(evil-set-initial-state 'pdf-view-mode 'motion)
+				(evil-set-initial-state 'bufler-list-mode 'emacs)
+				(evil-set-initial-state 'inferior-python-mode 'emacs)
+				(evil-set-initial-state 'term-mode 'emacs)
 
-			  ;; ----- Keybindings
-			  ;; I tried using evil-define-key for these. Didn't work.
-			  ;; (define-key evil-motion-state-map "/" 'swiper)
-			  (define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
-			  (define-key evil-window-map "\C-w" 'kill-this-buffer)
-			  (define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
+				;; ----- Keybindings
+				;; I tried using evil-define-key for these. Didn't work.
+				;; (define-key evil-motion-state-map "/" 'swiper)
+				(define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
+				(define-key evil-window-map "\C-w" 'kill-this-buffer)
+				(define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
 
-			  (evil-mode 1))
-
-
-	  (use-package evil-goggles
-  :ensure t
-  :config
-  (evil-goggles-mode)
-  )
-			;;other evil packages
-			  (use-package evil-nerd-commenter
-			  :after evil
-			  )
-			  (use-package evil-surround
-			  :after evil
-			  :defer 2
-			  :config
-			  (global-evil-surround-mode 1))
-
-			  (use-package evil-collection
-			  :after evil
-			  :ensure t
-			  :config
-			  (evil-collection-init))
-
-			  (use-package evil-easymotion
-	  :config
-	  (setq avy-background t)
+				(evil-mode 1))
 
 
-	  )
-			  (use-package evil-args)
-			  (use-package evil-visualstar)
-			  (use-package evil-quick-diff
-			  :straight (evil-quick-diff
-			  :type git
-			  :host github
-			  :repo "rgrinberg/evil-quick-diff"
-			  )
-			  :init
-			  (setq evil-quick-diff-key (kbd "zx"))
-			  (evil-quick-diff-install))
-			  ;;(use-package evil-quick-diff
-			  ;;:init
-			  ;;(setq evil-quick-diff-key (kbd "zx"))
-			  ;;(evil-quick-diff-install))
-			  (use-package exato :ensure t)
-			  (use-package evil-vimish-fold)
-			  (use-package evil-escape)
-			  (use-package evil-numbers)
-			  (use-package evil-exchange)
-			  (use-package evil-lion
-				  :ensure t
-				  :config
-				  (evil-lion-mode))
-			  (use-package evil-indent-plus)
-			  (use-package evil-embrace)
-			  (use-package evil-snipe
-				  :diminish evil-snipe-mode
-				  :diminish evil-snipe-local-mode
-				  :after evil
-				  :config
-				  (evil-snipe-mode +1))
-			  (use-package evil-org
-				  :diminish evil-org-mode
-				  :after org
-				  :config
-			  (add-hook 'org-mode-hook 'evil-org-mode)
-			  (add-hook 'evil-org-mode-hook
-						  (lambda () (evil-org-set-key-theme))))
+		(use-package evil-goggles
+	:ensure t
+	:config
+	(evil-goggles-mode)
+	)
+			  ;;other evil packages
+				(use-package evil-nerd-commenter
+				:after evil
+				)
+				(use-package evil-surround
+				:after evil
+				:defer 2
+				:config
+				(global-evil-surround-mode 1))
 
-			  (require 'evil-org-agenda)
-			  (evil-org-agenda-set-keys)
+				(use-package evil-collection
+				:after evil
+				:ensure t
+				:config
+				(evil-collection-init))
 
-			  (setq org-modules '(org-habit))
+				(use-package evil-easymotion
+		:config
+		(setq avy-background t)
 
-			  (eval-after-load 'org
-			  '(org-load-modules-maybe t))
-		  (use-package evil-anzu :defer t)
+
+		)
+				(use-package evil-args)
+				(use-package evil-visualstar)
+				(use-package evil-quick-diff
+				:straight (evil-quick-diff
+				:type git
+				:host github
+				:repo "rgrinberg/evil-quick-diff"
+				)
+				:init
+				(setq evil-quick-diff-key (kbd "zx"))
+				(evil-quick-diff-install))
+				;;(use-package evil-quick-diff
+				;;:init
+				;;(setq evil-quick-diff-key (kbd "zx"))
+				;;(evil-quick-diff-install))
+				(use-package exato :ensure t)
+				(use-package evil-vimish-fold)
+				(use-package evil-escape)
+				(use-package evil-numbers)
+				(use-package evil-exchange)
+				(use-package evil-lion
+					:ensure t
+					:config
+					(evil-lion-mode))
+				(use-package evil-indent-plus)
+				(use-package evil-embrace)
+				(use-package evil-snipe
+					:diminish evil-snipe-mode
+					:diminish evil-snipe-local-mode
+					:after evil
+					:config
+					(evil-snipe-mode +1))
+				(use-package evil-org
+					:diminish evil-org-mode
+					:after org
+					:config
+				(add-hook 'org-mode-hook 'evil-org-mode)
+				(add-hook 'evil-org-mode-hook
+							(lambda () (evil-org-set-key-theme))))
+
+				(require 'evil-org-agenda)
+  (setq org-modules '(org-habit))
+  (setq org-habit-graph-column 80)
+				(evil-org-agenda-set-keys)
+				(eval-after-load 'org
+				'(org-load-modules-maybe t))
+			(use-package evil-anzu :defer t)
 #+end_src
 * Vterm
 #+begin_src emacs-lisp
@@ -1102,22 +1105,17 @@
 #+begin_src emacs-lisp
   (use-package elisp-def)
 #+end_src
+* Org-super-agenda
+#+begin_src emacs-lisp
+	(use-package org-super-agenda
+  :after org
+  :config
+  (setq org-super-agenda-header-map nil)
+  (setq org-super-agenda-header-prefix " ◦ ")
+  (org-super-agenda-mode))
+#+end_src
 * Org-Mode
 #+begin_src emacs-lisp
-	(use-package org-ql
-	  :general
-	  (general-define-key :keymaps 'org-ql-view-map
-						  "q" 'kill-buffer-and-window))
-	  (require 'org-tempo)
-	  (add-to-list 'org-structure-template-alist '("sh" . "src sh"))
-	  (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
-	  (add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
-	  (add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
-	  (add-to-list 'org-structure-template-alist '("py" . "src python"))
-	  (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
-	  (add-to-list 'org-structure-template-alist '("json" . "src json"))
-	(use-package org-super-agenda)
-
   (defun a3madkour/org-font-setup ()
   ;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
   (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
@@ -1136,10 +1134,27 @@
   )
   (use-package org
 	:hook (org-mode . a3madkour/org-font-setup)
+	:hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
 	:hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
 	:diminish org-indent-mode
 	:diminish visual-line-mode
+  :config
+  	  (require 'org-tempo)
+	  (add-to-list 'org-structure-template-alist '("sh" . "src sh"))
+	  (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+	  (add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
+	  (add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
+	  (add-to-list 'org-structure-template-alist '("py" . "src python"))
+	  (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
+	  (add-to-list 'org-structure-template-alist '("json" . "src json"))
 	)
+#+end_src
+* Org-ql
+#+begin_src emacs-lisp
+(use-package org-ql
+	  :general
+	  (general-define-key :keymaps 'org-ql-view-map
+						  "q" 'kill-buffer-and-window))
 #+end_src
 * Org roam
 #+begin_src emacs-lisp
@@ -1298,6 +1313,7 @@
 	;; Open
 	"ot" '(vterm-other-window :which-key "Open vterm in another window")
 	"oT" '(vterm :which-key "Open vterm in the same window")
+	"oa" '(org-agenda :which-key "org-agenda")
 
 	;; Toggles
 	"t" '(nil :which-key "toggles")
