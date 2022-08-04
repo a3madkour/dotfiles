@@ -91,6 +91,8 @@
 
   ;; When opening a file (like double click) on Mac, use an existing frame
   (setq ns-pop-up-frames nil)
+  
+  (setq isearch-wrap-pause nil)
 
   ;;supposed to not ask me about git
   (setq vc-follow-symlinks nil)
@@ -229,7 +231,7 @@
 
   (require 'evil-org-agenda)
   (setq org-modules '(org-habit))
-  (setq org-habit-graph-column 80)
+  (setq org-habit-graph-column 110)
   (evil-org-agenda-set-keys)
   (eval-after-load 'org
 	'(org-load-modules-maybe t))
@@ -1364,6 +1366,7 @@
    "wz" '(text-scale-adjust :which-key "text zoom")
 
    ;; Projectile
+   "p" '(nil :which-key "projectile")
    "pr" '(projectile-recentf :which-key "projectile-recentf")
    "p&" '(projectile-run-async-shell-command-in-root :which-key "projectile-run-async-shell-command-in-root")
    "p!" '(projectile-run-shell-command-in-root :which-key "projectile-run-shell-command-in-root")
@@ -1381,6 +1384,12 @@
    "pR" '(projectile-run-project :which-key "projectile-run-project")
    "pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
    "SPC" '(projectile-find-file :which-key "projectile-find-file")
+
+  ;;citar
+   "z" '(nil :which-key "citation")
+   "zo" '(citar-open :which-key "citar-open")
+   "zi" '(org-cite-insert :which-key "org-cite-insert")
+   "zd" '(citar-dwim :which-key "citar-dwim")
 
    ) ;; End SPC prefix block
 
