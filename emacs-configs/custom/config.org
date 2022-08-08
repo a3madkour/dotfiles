@@ -91,7 +91,7 @@
 
   ;; When opening a file (like double click) on Mac, use an existing frame
   (setq ns-pop-up-frames nil)
-  
+
   (setq isearch-wrap-pause nil)
 
   ;;supposed to not ask me about git
@@ -807,62 +807,6 @@
 
 
 #+end_src
-* Latex
-#+begin_src emacs-lisp
-  (use-package auctex 
-	:ensure nil
-	:defer t
-	:init
-	(setq TeX-engine 'xetex ;; Use XeTeX
-		  latex-run-command "xetex")
-
-	(setq TeX-parse-self t ; parse on load
-		  TeX-auto-save t  ; parse on save
-		  ;; Use directories in a hidden away folder for AUCTeX files.
-		  TeX-auto-local (concat user-emacs-directory "auctex/auto/")
-		  TeX-style-local (concat user-emacs-directory "auctex/style/")
-
-		  TeX-source-correlate-mode t
-		  TeX-source-correlate-method 'synctex
-
-		  TeX-show-compilation nil
-
-		  ;; Don't start the Emacs server when correlating sources.
-		  TeX-source-correlate-start-server nil
-
-		  ;; Automatically insert braces after sub/superscript in `LaTeX-math-mode'.
-		  TeX-electric-sub-and-superscript t
-		  ;; Just save, don't ask before each compilation.
-		  TeX-save-query nil)
-
-	;; To use pdfview with auctex:
-	(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
-		  TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
-		  TeX-source-correlate-start-server t)
-	:general
-	(general-define-key
-	 :prefix ","
-	 :states 'normal
-	 :keymaps 'LaTeX-mode-map
-	 "" nil
-	 "a" '(TeX-command-run-all :which-key "TeX run all")
-	 "c" '(TeX-command-master :which-key "TeX-command-master")
-	 "c" '(TeX-command-master :which-key "TeX-command-master")
-	 "e" '(LaTeX-environment :which-key "Insert environment")
-	 "s" '(LaTeX-section :which-key "Insert section")
-	 "m" '(TeX-insert-macro :which-key "Insert macro")
-	 )
-
-	)
-
-  (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer) ;; Standard way
-
-  (use-package company-auctex
-	:after auctex
-	:init
-	(add-to-list 'company-backends 'company-auctex)
-	(company-auctex-init))
-#+end_src
 * PDF-Tools
 #+begin_src emacs-lisp
   (use-package pdf-tools
@@ -1116,6 +1060,75 @@
 #+begin_src emacs-lisp
   (use-package elisp-def)
 #+end_src
+** Latex
+#+begin_src emacs-lisp
+  (use-package auctex 
+	:ensure nil
+	:defer t
+	:init
+	(setq TeX-engine 'xetex ;; Use XeTeX
+		  latex-run-command "xetex")
+
+	(setq TeX-parse-self t ; parse on load
+		  TeX-auto-save t  ; parse on save
+		  ;; Use directories in a hidden away folder for AUCTeX files.
+		  TeX-auto-local (concat user-emacs-directory "auctex/auto/")
+		  TeX-style-local (concat user-emacs-directory "auctex/style/")
+
+		  TeX-source-correlate-mode t
+		  TeX-source-correlate-method 'synctex
+
+		  TeX-show-compilation nil
+
+		  ;; Don't start the Emacs server when correlating sources.
+		  TeX-source-correlate-start-server nil
+
+		  ;; Automatically insert braces after sub/superscript in `LaTeX-math-mode'.
+		  TeX-electric-sub-and-superscript t
+		  ;; Just save, don't ask before each compilation.
+		  TeX-save-query nil)
+
+	;; To use pdfview with auctex:
+	(setq TeX-view-program-selection '((output-pdf "PDF Tools"))
+		  TeX-view-program-list '(("PDF Tools" TeX-pdf-tools-sync-view))
+		  TeX-source-correlate-start-server t)
+	:general
+	(general-define-key
+	 :prefix ","
+	 :states 'normal
+	 :keymaps 'LaTeX-mode-map
+	 "" nil
+	 "a" '(TeX-command-run-all :which-key "TeX run all")
+	 "c" '(TeX-command-master :which-key "TeX-command-master")
+	 "c" '(TeX-command-master :which-key "TeX-command-master")
+	 "e" '(LaTeX-environment :which-key "Insert environment")
+	 "s" '(LaTeX-section :which-key "Insert section")
+	 "m" '(TeX-insert-macro :which-key "Insert macro")
+	 )
+
+	)
+
+  (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer) ;; Standard way
+
+  (use-package company-auctex
+	:after auctex
+	:init
+	(add-to-list 'company-backends 'company-auctex)
+	(company-auctex-init))
+
+  (use-package latex-preview-pane)
+  (use-package evil-tex
+	:config
+	(add-hook 'LaTeX-mode-hook #'evil-tex-mode))
+
+  (use-package cdlatex)
+  (use-package company-auctex)
+  (use-package company-reftex)
+  (use-package company-math)
+  (use-package adaptive-wrap
+	:hook (LaTeX-mode . adaptive-wrap-prefix-mode)
+	:init (setq-default adaptive-wrap-extra-indent 0))
+#+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
   (use-package org-super-agenda
@@ -1183,12 +1196,16 @@
 #+end_src
 * Org-pomodoro
 #+begin_src emacs-lisp
-(use-package org-pomodoro)
+  (use-package org-pomodoro)
 #+end_src
 * Org PDFtools
 #+begin_src emacs-lisp
-(use-package org-pdftools
- :hook (org-load . org-pdftools-setup-link ))
+  (use-package org-pdftools
+	:hook (org-load . org-pdftools-setup-link ))
+#+end_src
+* Ox-pandoc
+#+begin_src emacs-lisp
+  (use-package ox-pandoc)
 #+end_src
 * Ob-Async
 #+begin_src emacs-lisp
@@ -1385,7 +1402,7 @@
    "pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
    "SPC" '(projectile-find-file :which-key "projectile-find-file")
 
-  ;;citar
+   ;;citar
    "z" '(nil :which-key "citation")
    "zo" '(citar-open :which-key "citar-open")
    "zi" '(org-cite-insert :which-key "org-cite-insert")
