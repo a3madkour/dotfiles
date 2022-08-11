@@ -80,6 +80,7 @@
   ;; Confirm to quit
   (setq confirm-kill-emacs 'yes-or-no-p)
 
+   (add-hook 'text-mode-hook 'visual-line-mode)
   ;; Major mode of new buffers
   (setq initial-major-mode 'org-mode)
 
