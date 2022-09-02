@@ -1088,8 +1088,10 @@ This excludes the protocol and querystring."
 	:config
 	(pdf-loader-install)
 	(push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
-	(setq-default pdf-view-display-size 'fit-height)
-	;; (setq pdf-view-continuous nil) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
+   (setq pdf-view-use-scaling t
+        pdf-view-use-imagemagick nil)
+	;; (setq-default pdf-view-display-size 'fit-height)
+	;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
 	(setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
 	:general
 	(general-define-key :states 'motion :keymaps 'pdf-view-mode-map
