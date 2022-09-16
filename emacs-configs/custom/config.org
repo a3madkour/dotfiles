@@ -69,6 +69,7 @@
 #+begin_src emacs-lisp
   ;; When emacs asks for "yes" or "no", let "y" or "n" suffice
   (setq use-short-answers t)
+  (setq ns-pop-up-frames nil)
   (setq
    org-notes "~/org/notes"
    zot-bib  "~/org/notes/library.bib"
@@ -1298,11 +1299,7 @@ Adapted from doom emacs textobjects.el
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
-  (use-package gdscript-mode
-	:straight (gdscript-mode
-			   :type git
-			   :host github
-			   :repo "godotengine/emacs-gdscript-mode"))
+  (use-package gdscript-mode)
 #+end_src
 ** Haskell
 #+begin_src emacs-lisp
@@ -1330,6 +1327,14 @@ Adapted from doom emacs textobjects.el
 		   (lambda () (require 'ccls) (lsp))))
   (use-package disaster)
   (use-package modern-cpp-font-lock)
+#+end_src
+** C#
+#+begin_src emacs-lisp
+  (use-package csharp-mode)
+  (use-package csproj-mode)
+  ;; (use-package sln-mode)
+;;Unity stuff'
+  (use-package shader-mode)
 #+end_src
 ** Emacs lisp
 #+begin_src emacs-lisp
