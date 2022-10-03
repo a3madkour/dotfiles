@@ -85,6 +85,8 @@
   ;; Major mode of new buffers
   (setq initial-major-mode 'org-mode)
 
+  ;;set default font size
+  (set-face-attribute 'default nil :height 130)
   ;; WINDOW -----------
 
   ;; Don't resize the frames in steps; it looks weird, especially in tiling window
@@ -1408,6 +1410,18 @@ Adapted from doom emacs textobjects.el
   (use-package adaptive-wrap
 	:hook (LaTeX-mode . adaptive-wrap-prefix-mode)
 	:init (setq-default adaptive-wrap-extra-indent 0))
+#+end_src
+** Web
+#+begin_src emacs-lisp
+  (use-package emmet-mode)
+  (use-package haml-mode)
+  (use-package company-web)
+  (use-package css-mode)
+  (use-package less-css-mode)
+  (use-package sass-mode)
+  (use-package sws-mode)
+  (use-package rainbow-mode)
+  (use-package web-mode)
 #+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
