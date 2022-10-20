@@ -1281,7 +1281,23 @@ Adapted from doom emacs textobjects.el
   (use-package lsp-ui :commands lsp-ui-mode)
   (use-package consult-lsp)
   (use-package eglot)
-  (use-package dap-mode)
+  (use-package dap-mode
+	:after lsp-mode
+	:commands dap-debug
+	:hook ((python-mode . dap-ui-mode) (python-mode . dap-mode))
+	:config
+	(require 'dap-python)
+	(require 'dap-gdb-lldb)
+	(setq dap-python-debugger 'debugpy)
+	(add-hook 'dap-stopped-hook
+			  (lambda (arg) (call-interactively #'dap-hydra)))
+	(dap-register-debug-template "Rust::GDB Run Configuration"
+								 (list :type "gdb"
+									   :request "launch"
+									   :name "GDB::Run"
+									   :gdbpath "rust-gdb"
+									   :target nil
+									   :cwd nil)))
 #+end_src
 * Perspective
 #+begin_src emacs-lisp
@@ -1315,6 +1331,7 @@ Adapted from doom emacs textobjects.el
   (use-package pyimport)
   (use-package python-pytest)
   (use-package conda)
+  (use-package anaconda-mode)
   (use-package lsp-pyright
 	:ensure t
 	:hook (python-mode . (lambda ()
