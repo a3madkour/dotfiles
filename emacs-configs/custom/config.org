@@ -1338,6 +1338,10 @@ Adapted from doom emacs textobjects.el
 						   (require 'lsp-pyright)
 						   (lsp))))  ; or lsp-deferred
 #+end_src
+** Prolog
+#+begin_src emacs-lisp
+(add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
+#+end_src
 ** C/C++
 #+begin_src emacs-lisp
   (use-package demangle-mode)
@@ -1740,6 +1744,39 @@ Adapted from doom emacs textobjects.el
    "wk" '(evil-window-up :which-key "evil-window-up")
    "wz" '(text-scale-adjust :which-key "text zoom")
 
+   ;;org-roam
+   "m" '(nil :which-key "org-roam")
+   "mD" #'org-roam-demote-entire-buffer
+   "mf" #'org-roam-node-find
+   "mF" #'org-roam-ref-find
+   "mg" #'org-roam-graph
+   "mi" #'org-roam-node-insert
+   "mI" #'org-id-get-create
+   "mm" #'org-roam-buffer-toggle
+   "mM" #'org-roam-buffer-display-dedicated
+   "mn" #'org-roam-capture
+   "mr" #'org-roam-refile
+   "mR" #'org-roam-link-replace-all
+   "md" '(nil :which-key "by date")
+   :desc "Goto previous note" "mdb" #'org-roam-dailies-goto-previous-note
+   :desc "Goto date"          "mdd" #'org-roam-dailies-goto-date
+   :desc "Capture date"       "mdD" #'org-roam-dailies-capture-date
+   :desc "Goto next note"     "mdf" #'org-roam-dailies-goto-next-note
+   :desc "Goto tomorrow"      "mdm" #'org-roam-dailies-goto-tomorrow
+   :desc "Capture tomorrow"   "mdM" #'org-roam-dailies-capture-tomorrow
+   :desc "Capture today"      "mdn" #'org-roam-dailies-capture-today
+   :desc "Goto today"         "mdt" #'org-roam-dailies-goto-today
+   :desc "Capture today"      "mdT" #'org-roam-dailies-capture-today
+   :desc "Goto yesterday"     "mdy" #'org-roam-dailies-goto-yesterday
+   :desc "Capture yesterday"  "mdY" #'org-roam-dailies-capture-yesterday
+   :desc "Find directory"     "md-" #'org-roam-dailies-find-directory
+   "md" '(nil :which-key "node properties")
+   "moa" #'org-roam-alias-add
+   "moA" #'org-roam-alias-remove
+   "mot" #'org-roam-tag-add
+   "moT" #'org-roam-tag-remove
+   "mor" #'org-roam-ref-add
+   "moR" #'org-roam-ref-remove
    ;; Projectile
    "p" '(nil :which-key "projectile")
    "pr" '(projectile-recentf :which-key "projectile-recentf")
