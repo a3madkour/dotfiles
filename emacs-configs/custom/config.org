@@ -1869,8 +1869,6 @@ Adapted from doom emacs textobjects.el
   (general-def
 	:states '(normal visual motion)
 	"u" 'undo
-	"j" 'evil-next-visual-line ;; I prefer visual line navigation
-	"k" 'evil-previous-visual-line ;; ""
 	"|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
 	"C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
 	"gc" '(evilnc-comment-operator :which-key "commentator")
