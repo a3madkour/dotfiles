@@ -25,7 +25,7 @@
   (setq frame-inhibit-implied-resize t) ;; Supposed to hasten startup
 #+end_src
 * Straight
-#+name: test.el
+#+name: config.el
 #+begin_src emacs-lisp
   (defvar bootstrap-version)
   (let ((bootstrap-file
@@ -1091,8 +1091,8 @@ Adapted from doom emacs textobjects.el
 	:config
 	(pdf-loader-install)
 	(push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
-   (setq pdf-view-use-scaling t
-        pdf-view-use-imagemagick nil)
+	(setq pdf-view-use-scaling t
+		  pdf-view-use-imagemagick nil)
 	;; (setq-default pdf-view-display-size 'fit-height)
 	;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
 	(setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
@@ -1270,15 +1270,38 @@ Adapted from doom emacs textobjects.el
   (use-package lsp-mode
 	:init
 	;; set prefix for lsp-command-keymap (few alternatives - "C-l", "C-c l")
-	(setq lsp-keymap-prefix "C-c l")
+	;; (setq lsp-keymap-prefix "C-c l")
 	:hook (;; replace XXX-mode with concrete major-mode(e. g. python-mode)
-		   (XXX-mode . lsp)
+		   (javascript-mode . lsp)
+		   (rustic-mode . lsp)
+		   (python-mode . lsp)
 		   ;; if you want which-key integration
+		   (lsp-mode . lsp-ui-mode)
 		   (lsp-mode . lsp-enable-which-key-integration))
-	:commands lsp)
+	:commands lsp
+	:custom
+	;; what to use when checking on-save. "check" is default, I prefer clippy
+	(lsp-rust-analyzer-cargo-watch-command "clippy")
+	(lsp-eldoc-render-all t)
+	(lsp-idle-delay 0.6)
+	;; enable / disable the hints as you prefer:
+	(lsp-rust-analyzer-server-display-inlay-hints t)
+	(lsp-rust-analyzer-display-lifetime-elision-hints-enable "skip_trivial")
+	(lsp-rust-analyzer-display-chaining-hints t)
+	(lsp-rust-analyzer-display-lifetime-elision-hints-use-parameter-names nil)
+	(lsp-rust-analyzer-display-closure-return-type-hints t)
+	;; (lsp-rust-analyzer-display-parameter-hints nil)
+	;; (lsp-rust-analyzer-display-reborrow-hints nil)
+	)
 
-  ;; optionally
-  (use-package lsp-ui :commands lsp-ui-mode)
+  (use-package lsp-ui
+	:ensure
+	:commands lsp-ui-mode
+	:custom
+	(lsp-ui-peek-always-show t)
+	(lsp-ui-sideline-show-hover t)
+	(lsp-ui-doc-enable nil))
+
   (use-package consult-lsp)
   (use-package eglot)
   (use-package dap-mode
@@ -1312,8 +1335,10 @@ Adapted from doom emacs textobjects.el
 * Language Packages
 ** Rust
 #+begin_src emacs-lisp
-  (use-package rustic)
-  (setq rustic-lsp-server 'rls)
+  (use-package rustic
+	:config
+	(setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
+	)
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
@@ -1340,7 +1365,7 @@ Adapted from doom emacs textobjects.el
 #+end_src
 ** Prolog
 #+begin_src emacs-lisp
-(add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
+  (add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
 #+end_src
 ** C/C++
 #+begin_src emacs-lisp
@@ -1356,7 +1381,7 @@ Adapted from doom emacs textobjects.el
   (use-package csharp-mode)
   (use-package csproj-mode)
   ;; (use-package sln-mode)
-;;Unity stuff'
+  ;;Unity stuff'
   (use-package shader-mode)
 #+end_src
 ** Emacs lisp
@@ -1434,15 +1459,32 @@ Adapted from doom emacs textobjects.el
 #+end_src
 ** Web
 #+begin_src emacs-lisp
-  (use-package emmet-mode)
+  (use-package emmet-mode
+	:config
+	(add-to-list 'auto-mode-alist '("\\.html?\\'" . emmet-mode))
+	(add-to-list 'auto-mode-alist '("\\.phtml\\'" . emmet-mode))
+	(add-to-list 'auto-mode-alist '("\\.css\\'" . emmet-mode)))
+  
   (use-package haml-mode)
   (use-package company-web)
+  (use-package impatient-mode)
   (use-package css-mode)
   (use-package less-css-mode)
   (use-package sass-mode)
   (use-package sws-mode)
   (use-package rainbow-mode)
-  (use-package web-mode)
+  (use-package web-mode
+	:config
+	(add-to-list 'auto-mode-alist '("\\.phtml\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.tpl\\.php\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.[agj]sp\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.as[cp]x\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.erb\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.mustache\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.djhtml\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.html?\\'" . web-mode))
+	(setq web-mode-enable-auto-pairing t)
+	)
 #+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
@@ -1456,6 +1498,9 @@ Adapted from doom emacs textobjects.el
 	(org-super-agenda-mode))
 #+end_src
 * Org-Mode
+:PROPERTIES:
+:Effort:   1
+:END:
 #+begin_src emacs-lisp
   (defun a3madkour/org-font-setup ()
 	;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
@@ -1488,22 +1533,80 @@ Adapted from doom emacs textobjects.el
 	(add-to-list 'org-structure-template-alist '("py" . "src python"))
 	(add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
 	(add-to-list 'org-structure-template-alist '("json" . "src json"))
+	;;figure out how to get to the category and see if it is a habit beeing added or a task
+	(defun a3madkour/org-set-effort ()
+	  (org-set-effort)
+	  ())
+
+	(defun a3madkour/add-new-org-datetree-headline (selected_date)
+	  (save-excursion
+		(setq parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
+		(setq new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string)))
+		(org-datetree-find-date-create new-date)
+		(setq new-headline (nth 4 (org-heading-components)))))
+
+	(defun a3madkour/refile-to (file headline selected-date)
+	  "Move current headline to specified location"
+	  (let ((pos (save-excursion
+				   (find-file file)
+				   (setq new_pos (org-find-exact-headline-in-buffer headline))
+				   (org-schedule nil selected-date)
+				   new_pos
+
+				   )))
+		(org-refile nil nil (list headline file nil pos)))
+	  )
+
+	(defun a3madkour/refile-and-schedule ()
+	  (interactive)
+	  (setq selected-date (org-read-date))
+	  (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date))
+	 
 	(setq org-capture-templates
-		  '(("t" "Todo" entry (file+datetree "~/org/tasks.org")
-			 "* TODO %?\n")
-			("u" "Unscheduled task" entry (file+headline "~/org/tasks.org" "Unscheduled tasks")
-			 "* TODO %?\n")
-			("c" "Cookbook" entry (file "~/org/cookbook.org")
-			 "%(org-chef-get-recipe-from-url)"
-			 :empty-lines 1)
-			("z" "Manual Cookbook" entry (file "~/org/cookbook.org")
-			 "* %^{Recipe title: }\n  :PROPERTIES:\n  :source-url:\n  :servings:\n  :prep-time:\n  :cook-time:\n  :ready-in:\n  :END:\n** Ingredients\n   %?\n** Directions\n\n")
-			("b" "Manual Book" entry (file "~/org/reading-list.org")
+		  '(("c" "CS")
+			("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort) \n")
+			("ch" "Habit" entry (file "~/org/CS/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+
+			("a" "Academic")
+			("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+
+			("ah" "Habit" entry (file "~/org/Academic/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+
+			("r" "Artistic")
+			("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("rh" "Habit" entry (file "~/org/Artistic/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+
+			("h" "Health")
+			("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("hh" "Habit" entry (file "~/org/Health/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+
+			("i" "Intellectual")
+			("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n")
+			("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+
+			("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
 			 "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
-			("r" "Research Journal" entry (file+datetree "~/org/research-journal.org")
-			 "* %T \n %?")
-			("m" "Meeting" entry (file"~/org/meetings.org")
-			 "* %t \n %?")
+
 			("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
 			 "* %?\n")
 			("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
@@ -1514,9 +1617,8 @@ Adapted from doom emacs textobjects.el
 			 "* %?\n")
 			("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
 			 "* %?\n")
-			("h" "Habit" entry (file+function "~/org/habits.org" org-get-habit-type)
-			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
-			))
+			)
+		  )
 	)
 #+end_src
 * Org-ql
@@ -1872,6 +1974,7 @@ Adapted from doom emacs textobjects.el
 	"|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
 	"C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
 	"gc" '(evilnc-comment-operator :which-key "commentator")
+	"gD" '(xref-find-references :which-key "find references")
 	)
   (general-def
 	:prefix "["
@@ -1967,7 +2070,6 @@ Adapted from doom emacs textobjects.el
    "6" '(org-sort :which-key "sort")
    "c" '(org-capture :which-key "org-capture")
    "s" '(org-schedule :which-key "schedule")
-   ;; "S" '(jib/org-schedule-tomorrow :which-key "schedule")
    "d" '(org-deadline :which-key "deadline")
    "g" '(org-goto :which-key "goto heading")
    "t" '(org-tag :which-key "set tags")
@@ -1975,6 +2077,7 @@ Adapted from doom emacs textobjects.el
    "e" '(org-export-dispatch :which-key "export org")
    "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
    "H" '(org-html-convert-region-to-html :which-key "convert region to html")
+   "r" 'a3madkour/refile-and-schedule 
 
    "1" '(org-toggle-link-display :which-key "toggle link display")
    "2" '(org-toggle-inline-images :which-key "toggle images")
@@ -1985,15 +2088,6 @@ Adapted from doom emacs textobjects.el
    "bb" '(org-edit-special :which-key "org-edit-special")
    "bc" '(org-edit-src-abort :which-key "org-edit-src-abort")
    "bk" '(org-babel-remove-result-one-or-many :which-key "org-babel-remove-result-one-or-many")
-
-   "x" '(nil :which-key "text")
-   ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
-   ;; "xb" (spacemacs|org-emphasize spacemacs|org-bold ?*)
-   ;; "xc" (spacemacs|org-emphasize spacemacs|org-code ?~)
-   ;; "xi" (spacemacs|org-emphasize spacemacs|org-italic ?/)
-   ;; "xs" (spacemacs|org-emphasize spacemacs|org-strike-through ?+)
-   ;; "xu" (spacemacs|org-emphasize spacemacs|org-underline ?_)
-   ;; "xv" (spacemacs|org-emphasize spacemacs|org-verbose ?~) ;; I realized that ~~ is the same and better than == (Github won't do ==)
 
    ;; insert
    "i" '(nil :which-key "insert")
