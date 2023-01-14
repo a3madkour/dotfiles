@@ -76,8 +76,15 @@
    org-cite-default-bibliography (list zot-bib)
    org-cite-csl-styles-dir "~/Zotero/styles"
    org-cite-global-bibliography (list zot-bib)
+   org-roam-dailies-directory "~/org/ResearchJournal"
    org-roam-directory org-notes
    )
+  ;;dailies template
+  (setq org-roam-dailies-capture-templates
+		'(("d" "default" entry
+		   "* %?"
+		   :target (file+head "%<%Y-%m-%d>.org"
+							  "#+title: %<%Y-%m-%d>\n"))))
   ;; Confirm to quit
   (setq confirm-kill-emacs 'yes-or-no-p)
 
@@ -635,6 +642,7 @@ Adapted from doom emacs textobjects.el
 	(yas-global-mode 1)) ;; or M-x yas-reload-all if you've started YASnippet already.
   (require 'warnings)
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
+  (use-package yasnippet-snippets)
 #+end_src
 * Mixed-pitch 
 #+begin_src emacs-lisp
@@ -1470,6 +1478,7 @@ Adapted from doom emacs textobjects.el
   (use-package company-web)
   (use-package impatient-mode)
   (use-package css-mode)
+  (use-package com-css-sort)
   (use-package less-css-mode)
   (use-package sass-mode)
   (use-package sws-mode)
@@ -1498,125 +1507,220 @@ Adapted from doom emacs textobjects.el
 	(org-agenda-list)
 	(org-super-agenda-mode))
 #+end_src
+* Mu4e
+#+begin_src emacs-lisp
+  (use-package mu4e-alert)
+  (require 'mu4e)
+  (setq mu4e-context-policy 'ask-if-none
+		mu4e-compose-context-policy 'always-ask)
+  (let ((context (make-mu4e-context
+				  :name "Personal"
+				  :enter-func
+				  (lambda () (mu4e-message "Switched to Personal"))
+				  :leave-func
+				  (lambda () (progn (setq +mu4e-personal-addresses nil)
+									(mu4e-clear-caches)))
+				  :match-func
+				  (lambda (msg)
+					(when msg
+					  (string-prefix-p (format "/Personal" )
+									   (mu4e-message-field msg :maildir) t)))
+				  :vars
+				  '((mu4e-sent-folder       . "/gmail/[Gmail]/Sent Mail")
+					(mu4e-drafts-folder     . "/gmail/[Gmail]/Drafts")
+					(mu4e-trash-folder      . "/gmail/[Gmail]/Trash")
+					(mu4e-refile-folder     . "/gmail/[Gmail]/All Mail")
+					(user-mail-address     . "a3madkour@gmail.com")
+					(user-full-name     . "Abdelrahman Madkour")
+					(smtpmail-smtp-user     . "a3madkour@gmail.com"))
+				  )))
+	(add-to-list 'mu4e-contexts context))
+  ;;(add-to-list 'mu4e-user-mail-address-list "a3madkour@gmail.com"))
+
+
+  (let ((context (make-mu4e-context
+				  :name "Work"
+				  :enter-func
+				  (lambda () (mu4e-message "Switched to Work"))
+				  :leave-func
+				  (lambda () (progn (setq +mu4e-personal-addresses nil)
+									(mu4e-clear-caches)))
+				  :match-func
+				  (lambda (msg)
+					(when msg
+					  (string-prefix-p (format "/Work" )
+									   (mu4e-message-field msg :maildir) t)))
+				  :vars
+				  '((mu4e-sent-folder       . "/work/Sent")
+					(mu4e-drafts-folder     . "/work/Drafts")
+					(mu4e-trash-folder      . "/work/Trash")
+					(mu4e-refile-folder     . "/work/Archive")
+					(user-mail-address     . "madkour.a@northeastern.edu")
+					(user-full-name     . "Abdelrahman Madkour")
+					(smtpmail-smtp-user     . "madkour.a@northeastern.edu"))
+				  )))
+	(add-to-list 'mu4e-contexts context))
+  ;;(add-to-list 'mu4e-user-mail-address-list "a3madkour@gmail.com"))
+
+  ;; ;; refresh mbsync every 10 minutes
+  (setq mu4e-update-interval (* 10 60))
+  (setq mu4e-get-mail-command "mbsync -a")
+  (setq mu4e-maildir "~/.mail")
+  ;; use pass to store passwords
+  ;; file auth looks for is ~/.password-store/<smtp.host.tld>:<port>/<name>
+  (auth-source-pass-enable)
+  (setq auth-sources '(password-store))
+  (setq auth-source-debug t)
+  (setq auth-source-do-cache nil)
+  ;; no reply to self
+  (setq mu4e-compose-dont-reply-to-self t)
+  (setq mu4e-compose-keep-self-cc nil)
+  ;; moving messages renames files to avoid errors
+  (setq mu4e-change-filenames-when-moving t)
+  ;; Configure the function to use for sending mail
+  (setq message-send-mail-function 'smtpmail-send-it)
+  (setq smtpmail-stream-type 'starttls)
+  (setq smtpmail-default-smtp-server "smtp.gmail.com")
+  (setq smtpmail-smtp-server "smtp.gmail.com")
+  (setq smtpmail-smtp-service 587)
+  (setq smtpmail-debug-info t)
+  ;; Display options
+  (setq mu4e-view-show-images t)
+  (setq mu4e-view-show-addresses 't)
+  ;; Composing mail
+  (setq mu4e-compose-dont-reply-to-self t)
+  ;; don't keep message buffers around
+  (setq message-kill-buffer-on-exit t)
+  ;; Don't ask for a 'context' upon opening mu4e
+  (setq mu4e-context-policy 'pick-first)
+  ;; Don't ask to quit... why is this the default?
+  (setq mu4e-confirm-quit nil)
+#+end_src
 * Org-Mode
 #+begin_src emacs-lisp
-	(defun a3madkour/org-font-setup ()
-	  ;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
-	  (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
-	  ;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
-	  ;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
-	  (set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
-	  (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
-	  (set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
+  (defun a3madkour/org-font-setup ()
+	;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
+	(set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
+	;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
+	;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
+	(set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
+	(set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
+	(set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
 
-	  ;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
-	  ;; (dolist (face '(org-list-dt org-tag org-todo org-table org-checkbox org-priority org-date org-verbatim org-special-keyword))
-	  ;;   (set-face-attribute `,face nil :inherit 'fixed-pitch))
+	;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
+	;; (dolist (face '(org-list-dt org-tag org-todo org-table org-checkbox org-priority org-date org-verbatim org-special-keyword))
+	;;   (set-face-attribute `,face nil :inherit 'fixed-pitch))
 
-	  ;; (dolist (face '(org-code org-verbatim org-meta-line))
-	  ;;   (set-face-attribute `,face nil :inherit 'shadow :inherit 'fixed-pitch))
-	  )
-	(use-package org
-	  :hook (org-mode . a3madkour/org-font-setup)
-	  :hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
-	  :hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
-	  :diminish org-indent-mode
-	  :diminish visual-line-mode
-	  :config
-	  (require 'org-tempo)
-	  (add-to-list 'org-structure-template-alist '("sh" . "src sh"))
-	  (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
-	  (add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
-	  (add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
-	  (add-to-list 'org-structure-template-alist '("py" . "src python"))
-	  (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
-	  (add-to-list 'org-structure-template-alist '("json" . "src json"))
-	  ;;figure out how to get to the category and see if it is a habit beeing added or a task
-	  (defun a3madkour/org-set-effort ()
-		(org-set-effort)
-		())
+	;; (dolist (face '(org-code org-verbatim org-meta-line))
+	;;   (set-face-attribute `,face nil :inherit 'shadow :inherit 'fixed-pitch))
+	)
+  (use-package org
+	:hook (org-mode . a3madkour/org-font-setup)
+	:hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
+	:hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
+	:diminish org-indent-mode
+	:diminish visual-line-mode
+	:config
+	(require 'org-tempo)
+	(add-to-list 'org-structure-template-alist '("sh" . "src sh"))
+	(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+	(add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
+	(add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
+	(add-to-list 'org-structure-template-alist '("py" . "src python"))
+	(add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
+	(add-to-list 'org-structure-template-alist '("json" . "src json"))
+	;;figure out how to get to the category and see if it is a habit beeing added or a task
+	(defun a3madkour/org-set-effort ()
+	  (org-set-effort)
+	  ())
 
-	  (defun a3madkour/add-new-org-datetree-headline (selected_date)
-		(save-excursion
-		  (let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
-				(new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
-			(org-datetree-find-date-create new-date)
-			(nth 4 (org-heading-components)))))
+	(defun a3madkour/add-scheduled-todo ()
+	  (interactive)
+	  (let ((selected-date (org-read-date)))
+		(org-insert-todo-heading-respect-content nil)
+		(call-interactively 'org-set-effort)
+		(org-schedule nil selected-date)))
 
-	  (defun a3madkour/refile-to (file headline selected-date)
-		"Move current headline to specified location"
-		(let ((pos (save-excursion
-					 (find-file file)
-					 (let ((new_pos (org-find-exact-headline-in-buffer headline)))
-					   (org-schedule nil selected-date)
-					   new_pos)
-					 )))
-		  (org-refile nil nil (list headline file nil pos)))
-		)
+	(defun a3madkour/add-new-org-datetree-headline (selected_date)
+	  (save-excursion
+		(let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
+			   (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
+		  (org-datetree-find-date-create new-date)
+		  (nth 4 (org-heading-components)))))
 
-	  (defun a3madkour/refile-and-schedule ()
-		(interactive)
-		(let ((selected-date (org-read-date)))
-		  (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
+	(defun a3madkour/refile-to (file headline selected-date)
+	  "Move current headline to specified location"
+	  (let ((pos (save-excursion
+				   (find-file file)
+				   (let ((new_pos (org-find-exact-headline-in-buffer headline)))
+					 (org-schedule nil selected-date)
+					 new_pos)
+				   )))
+		(org-refile nil nil (list headline file nil pos))))
 
-	  (setq org-capture-templates
-			'(("c" "CS")
-			  ("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("ch" "Habit" entry (file "~/org/CS/habits.org")
-			   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+	(defun a3madkour/refile-and-schedule ()
+	  (interactive)
+	  (let ((selected-date (org-read-date)))
+		(a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
 
-			  ("a" "Academic")
-			  ("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+	(setq org-capture-templates
+		  '(("c" "CS")
+			("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("ch" "Habit" entry (file "~/org/CS/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-			  ("ah" "Habit" entry (file "~/org/Academic/habits.org")
-			   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+			("a" "Academic")
+			("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
 
-			  ("r" "Artistic")
-			  ("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("rh" "Habit" entry (file "~/org/Artistic/habits.org")
-			   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+			("ah" "Habit" entry (file "~/org/Academic/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-			  ("h" "Health")
-			  ("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("hh" "Habit" entry (file "~/org/Health/habits.org")
-			   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+			("r" "Artistic")
+			("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("rh" "Habit" entry (file "~/org/Artistic/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-			  ("i" "Intellectual")
-			  ("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
-			   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-			  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
-			   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+			("h" "Health")
+			("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("hh" "Habit" entry (file "~/org/Health/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-			  ("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
-			   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
+			("i" "Intellectual")
+			("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
+			 "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+			("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
+			 "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-			  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
-			   "* %?\n")
-			  ("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
-			   "* %?\n")
-			  ("a" "App idea" entry (file+headline "~/org/ideas.org" "App")
-			   "* %?\n")
-			  ("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
-			   "* %?\n")
-			  ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
-			   "* %?\n")
-			  )
+			("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
+			 "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
+
+			("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
+			 "* %?\n")
+			("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
+			 "* %?\n")
+			("a" "App idea" entry (file+headline "~/org/ideas.org" "App")
+			 "* %?\n")
+			("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
+			 "* %?\n")
+			("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
+			 "* %?\n")
 			)
-	  )
+		  )
+	)
 #+end_src
 * Org-ql
 #+begin_src emacs-lisp
@@ -1651,6 +1755,10 @@ Adapted from doom emacs textobjects.el
 * Org-pomodoro
 #+begin_src emacs-lisp
   (use-package org-pomodoro)
+#+end_src
+* Org-transclusion
+#+begin_src emacs-lisp
+(use-package org-transclusion)
 #+end_src
 * Org-book
 #+begin_src emacs-lisp
@@ -1764,9 +1872,7 @@ Adapted from doom emacs textobjects.el
 	(interactive)
 	(let ((dir-name (read-directory-name "Select Project Directory")))
 	  (magit-init dir-name)
-	  (make-empty-file (concat dir-name "todo.org"))
-	  )
-	)
+	  (make-empty-file (concat dir-name "todo.org"))))
 #+end_src
 
 * Keybindings
@@ -1784,7 +1890,7 @@ Adapted from doom emacs textobjects.el
    "," '(consult-recent-file :which-key "recent files")
    "TAB" '(perspective-map :which-key "perspective map")
    "q" '(save-buffers-kill-terminal :which-key "quit emacs")
-   "r" '(jump-to-register :which-key "registers")
+   "j" '(jump-to-register :which-key "registers")
    "c" 'org-capture
    "a" 'embark-act
 
@@ -1823,6 +1929,7 @@ Adapted from doom emacs textobjects.el
    "hmt" '(text-mode :which-key "text mode")
 
    ;; Git
+   "g" '(nil :which-key "magit")
    "gg" '(magit-status :which-key "magit status")
 
    ;; Open
@@ -1859,38 +1966,38 @@ Adapted from doom emacs textobjects.el
    "wz" '(text-scale-adjust :which-key "text zoom")
 
    ;;org-roam
-   "m" '(nil :which-key "org-roam")
-   "mD" #'org-roam-demote-entire-buffer
-   "mf" #'org-roam-node-find
-   "mF" #'org-roam-ref-find
-   "mg" #'org-roam-graph
-   "mi" #'org-roam-node-insert
-   "mI" #'org-id-get-create
-   "mm" #'org-roam-buffer-toggle
-   "mM" #'org-roam-buffer-display-dedicated
-   "mn" #'org-roam-capture
-   "mr" #'org-roam-refile
-   "mR" #'org-roam-link-replace-all
-   "md" '(nil :which-key "by date")
-   :desc "Goto previous note" "mdb" #'org-roam-dailies-goto-previous-note
-   :desc "Goto date"          "mdd" #'org-roam-dailies-goto-date
-   :desc "Capture date"       "mdD" #'org-roam-dailies-capture-date
-   :desc "Goto next note"     "mdf" #'org-roam-dailies-goto-next-note
-   :desc "Goto tomorrow"      "mdm" #'org-roam-dailies-goto-tomorrow
-   :desc "Capture tomorrow"   "mdM" #'org-roam-dailies-capture-tomorrow
-   :desc "Capture today"      "mdn" #'org-roam-dailies-capture-today
-   :desc "Goto today"         "mdt" #'org-roam-dailies-goto-today
-   :desc "Capture today"      "mdT" #'org-roam-dailies-capture-today
-   :desc "Goto yesterday"     "mdy" #'org-roam-dailies-goto-yesterday
-   :desc "Capture yesterday"  "mdY" #'org-roam-dailies-capture-yesterday
-   :desc "Find directory"     "md-" #'org-roam-dailies-find-directory
-   "md" '(nil :which-key "node properties")
-   "moa" #'org-roam-alias-add
-   "moA" #'org-roam-alias-remove
-   "mot" #'org-roam-tag-add
-   "moT" #'org-roam-tag-remove
-   "mor" #'org-roam-ref-add
-   "moR" #'org-roam-ref-remove
+   "r" '(nil :which-key "org-roam")
+   "rD" #'org-roam-demote-entire-buffer
+   "rf" #'org-roam-node-find
+   "rF" #'org-roam-ref-find
+   "rg" #'org-roam-graph
+   "ri" #'org-roam-node-insert
+   "rI" #'org-id-get-create
+   "rm" #'org-roam-buffer-toggle
+   "rM" #'org-roam-buffer-display-dedicated
+   "rn" #'org-roam-capture
+   "rr" #'org-roam-refile
+   "rR" #'org-roam-link-replace-all
+   "rd" '(nil :which-key "by date")
+   "rdb" '(org-roam-dailies-goto-previous-note :which-key "Goto previous note")
+   "rdd" '(org-roam-dailies-goto-date :which-key "Goto date")
+   "rdD" '(org-roam-dailies-capture-date :which-key "Capture date")
+   "rdf" '(org-roam-dailies-goto-next-note :which-key "Goto next note")
+   "rdm" '(org-roam-dailies-goto-tomorrow :which-key "Goto tomorrow")
+   "rdM" '(org-roam-dailies-capture-tomorrow :which-key "Capture tomorrow")
+   "rdn" '(org-roam-dailies-capture-today :which-key "Capture today")
+   "rdt" '(org-roam-dailies-goto-today :which-key "Goto today")
+   "rdT" '(org-roam-dailies-capture-today :which-key "Capture today")
+   "rdy" '(org-roam-dailies-goto-yesterday :which-key "Goto yesterday")
+   "rdY" '(org-roam-dailies-capture-yesterday :which-key "Capture yesterday")
+   "rd-" '(org-roam-dailies-find-directory :which-key "Find directory")
+   "ro" '(nil :which-key "node properties")
+   "roa" #'org-roam-alias-add
+   "roA" #'org-roam-alias-remove
+   "rot" #'org-roam-tag-add
+   "roT" #'org-roam-tag-remove
+   "ror" #'org-roam-ref-add
+   "roR" #'org-roam-ref-remove
    ;; Projectile
    "p" '(nil :which-key "projectile")
    "pr" '(projectile-recentf :which-key "projectile-recentf")
@@ -1963,6 +2070,7 @@ Adapted from doom emacs textobjects.el
 	"C-'" 'avy-goto-char-2
 
 	"C-x C-b" 'bufler-list
+	"C-M-x" 'ispell-complete-word
 
 	;; super-number functions
 	"s-1" 'mw-thesaurus-lookup-dwim
@@ -2085,7 +2193,7 @@ Adapted from doom emacs textobjects.el
    "s" '(org-schedule :which-key "schedule")
    "d" '(org-deadline :which-key "deadline")
    "g" '(org-goto :which-key "goto heading")
-   "t" '(org-tag :which-key "set tags")
+   "t" '(a3madkour/add-scheduled-todo :which-key "add scheduled todo")
    "p" '(org-set-property :which-key "set property")
    "e" '(org-export-dispatch :which-key "export org")
    "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
@@ -2140,6 +2248,12 @@ Adapted from doom emacs textobjects.el
    "ci" '(org-agenda-clock-in :which-key "clock in")
    "co" '(org-agenda-clock-out :which-key "clock out")
    "cj" '(org-clock-goto :which-key "jump to clock")
+   )
+  ;; Org-agenda
+  (general-define-key
+   :states 'motion
+   :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
+   "cp" '(org-pomodoro :which-key "Start or stop pomodoro")
    )
 
   (evil-define-key 'motion org-agenda-mode-map

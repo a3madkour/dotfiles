@@ -19,6 +19,7 @@ export PATH="$PATH:$HOME/miniconda3/bin"
 export PATH="$PATH:$HOME/emacs-configs/doom/bin"
 export PATH="$PATH:$HOME/.ghcup/bin"
 export PATH="$PATH:$HOME/.cabal/bin"
+export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/gem/ruby/3.0.0/bin/"
 

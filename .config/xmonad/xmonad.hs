@@ -277,6 +277,7 @@ myStartupHook = do
   spawnOnce "nm-applet &"
   spawnOnce "setxkbmap -option caps:escape"
   spawnOnce "davmail"
+  spawnOnce "zulip"
   spawnOnce "xsetroot -cursor_name left_ptr"
   spawnOnce "autorandr --change"
   spawnOnce "conky -c $HOME/.config/conky/doomone-xmonad.conkyrc"
