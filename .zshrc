@@ -22,6 +22,7 @@ export PATH="$PATH:$HOME/.cabal/bin"
 export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/gem/ruby/3.0.0/bin/"
+export EDITOR="emacsclient"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.

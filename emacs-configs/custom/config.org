@@ -642,7 +642,7 @@ Adapted from doom emacs textobjects.el
 	(yas-global-mode 1)) ;; or M-x yas-reload-all if you've started YASnippet already.
   (require 'warnings)
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
-  (use-package yasnippet-snippets)
+  ;; (use-package yasnippet-snippets)
 #+end_src
 * Mixed-pitch 
 #+begin_src emacs-lisp
@@ -1874,6 +1874,23 @@ Adapted from doom emacs textobjects.el
 	  (magit-init dir-name)
 	  (make-empty-file (concat dir-name "todo.org"))))
 #+end_src
+** Adapted from doom
+#+begin_src emacs-lisp
+	;;;###autoload
+	(defun +default/insert-file-path (arg)
+	  "Insert the file name (absolute path if prefix ARG).
+	If `buffer-file-name' isn't set, uses `default-directory'."
+	  (interactive "P")
+	  (let ((path (or buffer-file-name default-directory)))
+		(insert
+		 (if arg
+			 (abbreviate-file-name path)
+		   (file-name-nondirectory path)))))
+	;;;###autoload
+(defun +default/insert-all-path (arg)
+  (interactive "P")
+    (+default/insert-file-path 1))
+#+end_src
 
 * Keybindings
 #+begin_src emacs-lisp
@@ -2032,6 +2049,15 @@ Adapted from doom emacs textobjects.el
    "nj" '(nil :which-key "journal")
    "njj" '(org-journal-new-entry :which-key "new journal entru")
    "njJ" '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
+
+
+  ;;insert 
+   "i" '(nil :which-key "insert")
+   "if" '(+default/insert-file-path :which-key "Current file name")
+   "iF" '(+default/insert-all-path :which-key "Current file name")
+   "ir" '(consult-register :which-key "Register")
+   "is" '(yas-insert-snippet :which-key "Snippet")
+   "iu" '(insert-char :which-key "Unicode")
    ) ;; End SPC prefix block
 
   ;; All-mode keymaps
