@@ -642,7 +642,7 @@ Adapted from doom emacs textobjects.el
 	(yas-global-mode 1)) ;; or M-x yas-reload-all if you've started YASnippet already.
   (require 'warnings)
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
-  ;; (use-package yasnippet-snippets)
+  (use-package yasnippet-snippets)
 #+end_src
 * Mixed-pitch 
 #+begin_src emacs-lisp
