@@ -2058,6 +2058,23 @@ Adapted from doom emacs textobjects.el
    "ir" '(consult-register :which-key "Register")
    "is" '(yas-insert-snippet :which-key "Snippet")
    "iu" '(insert-char :which-key "Unicode")
+
+  ;;code/lsp
+   "c" '(nil :which-key "code")
+   "ca" '(lsp-execute-code-action :which-key "LSP Code action")
+   "cr" '(lsp-rename :which-key "LSP Rename")
+   "cc" 'compile
+   "cC" 'recompile
+   ;; "cd" '(+lookup/definition)
+   ;; "cD" '(+lookup/references)
+   "ce" 'eval-buffer
+   "cf" '(lsp-format-buffer :which-key "LSP format buffer")
+   ;; "ci" '(+lookup/implementations)
+   "cj" 'consult-lsp-symbols
+   ;; "ck" '(+lookup/documentation)
+   "co" '(lsp-organize-imports :which-key "LSP organize imports")
+   ;; "ct" '(+lookup/type-definition)
+   "cw" 'delete-trailing-whitespace
    ) ;; End SPC prefix block
 
   ;; All-mode keymaps
