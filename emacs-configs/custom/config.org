@@ -73,6 +73,8 @@ Need this until ELPA updates more regularly
 * General configuration
 #+begin_src emacs-lisp
   ;; When emacs asks for "yes" or "no", let "y" or "n" suffice
+  ;;stop bothering me about reload things from disk and just do it
+  (setq revert-without-query '("pdf"))
   (setq use-short-answers t)
   (setq ns-pop-up-frames nil)
   (setq
@@ -1608,11 +1610,12 @@ Adapted from doom emacs textobjects.el
 #+end_src
 * Org-Mode
 #+begin_src emacs-lisp
-  (defun a3madkour/clear-latex-tempfile ()
+  (defun a3madkour/clear-latex-temp-files ()
 	(shell-command "rm -rf *.tex *.prv preview.fmt"))
+
   (defun a3madkour/export-to-latex-on-save (filename)
 	(when (string= (buffer-name) filename)
-	  (org-latex-export-to-pdf)
+	  (org-open-file (org-latex-export-to-pdf))
 	  (a3madkour/clear-latex-temp-files)))
 
 
