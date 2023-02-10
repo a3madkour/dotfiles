@@ -1394,6 +1394,11 @@ Adapted from doom emacs textobjects.el
   (use-package shader-mode)
 #+end_src
 ** Emacs lisp
+*** Elisp def
+#+begin_src emacs-lisp
+  (use-package elisp-def)
+#+end_src
+*** Emacs autofmt
 #+begin_src emacs-lisp
   (use-package elisp-def)
 #+end_src
@@ -1598,6 +1603,14 @@ Adapted from doom emacs textobjects.el
 #+end_src
 * Org-Mode
 #+begin_src emacs-lisp
+  (defun a3madkour/clear-latex-tempfile ()
+	(shell-command "rm -rf *.tex *.prv preview.fmt"))
+  (defun a3madkour/export-to-latex-on-save (filename)
+	(when (string= (buffer-name) filename)
+	  (org-latex-export-to-pdf)
+	  (a3madkour/clear-latex-temp-files)))
+
+
   (defun a3madkour/org-font-setup ()
 	;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
 	(set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
