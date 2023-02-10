@@ -43,6 +43,11 @@
   (straight-use-package 'use-package)
   (setq straight-use-package-by-default t)
 #+end_src
+* Compat
+Need this until ELPA updates more regularly
+#+begin_src emacs-lisp
+(straight-use-package '(compat :host github :repo "emacs-compat/compat"))
+#+end_src
 * GCMH
 #+begin_src emacs-lisp
   (use-package gcmh
