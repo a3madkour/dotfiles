@@ -1407,7 +1407,7 @@ Adapted from doom emacs textobjects.el
 #+end_src
 *** Emacs autofmt
 #+begin_src emacs-lisp
-  (use-package elisp-def)
+  (use-package elisp-autofmt)
 #+end_src
 ** Latex
 #+begin_src emacs-lisp
