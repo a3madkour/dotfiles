@@ -608,7 +608,7 @@ Adapted from doom emacs textobjects.el
 		  company-frontends
 		  '(company-pseudo-tooltip-frontend  ; always show candidates in overlay tooltip
 			company-echo-metadata-frontend)  ; show selected candidate docs in echo area
-		  company-backends '(company-capf company-files company-keywords)
+		  ;; company-backends '(company-capf company-files company-keywords)
 		  company-auto-complete nil
 		  company-auto-complete-chars nil
 		  company-dabbrev-other-buffers nil
