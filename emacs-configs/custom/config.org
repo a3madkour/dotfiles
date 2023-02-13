@@ -608,7 +608,6 @@ Adapted from doom emacs textobjects.el
 		  company-frontends
 		  '(company-pseudo-tooltip-frontend  ; always show candidates in overlay tooltip
 			company-echo-metadata-frontend)  ; show selected candidate docs in echo area
-		  ;; company-backends '(company-capf company-files company-keywords)
 		  company-auto-complete nil
 		  company-auto-complete-chars nil
 		  company-dabbrev-other-buffers nil
@@ -617,6 +616,7 @@ Adapted from doom emacs textobjects.el
 
 	:config
 	(setq company-idle-delay 0.35)
+	(add-to-list 'company-backends 'company-math-symbols-unicode)
 	:custom-face
 	(company-tooltip ((t (:family "Roboto Mono")))))
 #+end_src
@@ -1102,7 +1102,7 @@ Adapted from doom emacs textobjects.el
   (use-package pdf-tools
 	:defer t
 	:mode  ("\\.pdf\\'" . pdf-view-mode)
-	:hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1)))
+	:hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
 	:config
 	(pdf-loader-install)
 	(push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
@@ -1470,7 +1470,9 @@ Adapted from doom emacs textobjects.el
 	:config
 	(add-hook 'LaTeX-mode-hook #'evil-tex-mode))
 
-  (use-package cdlatex)
+  (use-package cdlatex
+	:hook (org-mode . org-cdlatex-mode))
+  
   (use-package company-auctex)
   (use-package company-reftex)
   (use-package company-math)
@@ -1615,6 +1617,12 @@ Adapted from doom emacs textobjects.el
 	(shell-command "rm -rf *.tex *.prv preview.fmt"))
 
   (defun a3madkour/export-to-latex-on-save (filename)
+	(when (string= (buffer-name) filename)
+	  ;; (org-open-file (org-latex-export-to-pdf))
+	  (org-latex-export-to-pdf)
+	  (a3madkour/clear-latex-temp-files)))
+
+  (defun a3madkour/export-to-latex-on-save-and-open (filename)
 	(when (string= (buffer-name) filename)
 	  (org-open-file (org-latex-export-to-pdf))
 	  (a3madkour/clear-latex-temp-files)))
