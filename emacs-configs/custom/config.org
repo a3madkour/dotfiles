@@ -1815,6 +1815,7 @@ Adapted from doom emacs textobjects.el
 		   (template-path (citar--get-template 'note-file))
 		   (note-path (when template-path
 						(citar-format--entry template-path entry)))
+		   (note-tags (cdr (citar-get-field-with-value '("keywords") key)))
 		   (filepath (expand-file-name
 					  (concat key ".org")
 					  (car citar-notes-paths)))
@@ -1826,6 +1827,8 @@ Adapted from doom emacs textobjects.el
 		(citar-org-roam-make-preamble key)
 		(insert "#+title: ")
 		(when template (insert note-meta))
+		(insert "\n#+filetags::")
+		(insert note-tags)
 		(insert "\n* Notes\n:PROPERTIES:\n:NOTER_DOCUMENT: ")
 		(when template-path (insert note-path))
 		(insert "\n:END:\n")
