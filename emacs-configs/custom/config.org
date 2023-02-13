@@ -542,6 +542,12 @@ Adapted from doom emacs textobjects.el
   (global-undo-tree-mode)
   (evil-set-undo-system 'undo-tree)
 #+end_src
+* Tree-sitter
+#+begin_src emacs-lisp
+  (use-package tree-sitter)
+  (use-package tree-sitter-langs)
+  (use-package treesit-auto)
+#+end_src
 * Recent
 #+begin_src emacs-lisp
   (use-package recentf
