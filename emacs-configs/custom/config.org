@@ -202,10 +202,68 @@ Need this until ELPA updates more regularly
 
   (use-package evil-easymotion
 	:config
-	(setq avy-background t)
+	(setq avy-background t))
 
+  ;;until combobulate gets on melpa
+  (use-package evil-textobj-tree-sitter
+	:config
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "f" (evil-textobj-tree-sitter-get-textobj "function.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "f" (evil-textobj-tree-sitter-get-textobj "function.inner"))
 
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "a" (evil-textobj-tree-sitter-get-textobj "attribute.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "a" (evil-textobj-tree-sitter-get-textobj "attribute.inner"))
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "k" (evil-textobj-tree-sitter-get-textobj "block.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "k" (evil-textobj-tree-sitter-get-textobj "block.inner"))
+
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "v" (evil-textobj-tree-sitter-get-textobj "call.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "v" (evil-textobj-tree-sitter-get-textobj "call.inner"))
+
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "d" (evil-textobj-tree-sitter-get-textobj "class.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "d" (evil-textobj-tree-sitter-get-textobj "class.inner"))
+
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "i" (evil-textobj-tree-sitter-get-textobj "conditional.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "i" (evil-textobj-tree-sitter-get-textobj "conditional.inner"))
+
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "j" (evil-textobj-tree-sitter-get-textobj "loop.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "j" (evil-textobj-tree-sitter-get-textobj "loop.inner"))
+
+	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
+	(define-key evil-outer-text-objects-map "p" (evil-textobj-tree-sitter-get-textobj "parameter.outer"))
+	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
+	(define-key evil-inner-text-objects-map "p" (evil-textobj-tree-sitter-get-textobj "parameter.inner"))
+
+	;; Goto start of next function
+	(define-key evil-normal-state-map (kbd "]f") (lambda ()
+												   (interactive)
+												   (evil-textobj-tree-sitter-goto-textobj "function.outer")))
+	;; Goto start of previous function
+	(define-key evil-normal-state-map (kbd "[f") (lambda ()
+												   (interactive)
+												   (evil-textobj-tree-sitter-goto-textobj "function.outer" t)))
+	;; Goto end of next function
+	(define-key evil-normal-state-map (kbd "]F") (lambda ()
+												   (interactive)
+												   (evil-textobj-tree-sitter-goto-textobj "function.inner" nil t)))
+	;; Goto end of previous function
+	(define-key evil-normal-state-map (kbd "[F") (lambda ()
+												   (interactive)
+												   (evil-textobj-tree-sitter-goto-textobj "function.inner" t t)))
 	)
+  
   (use-package evil-args)
   (use-package evil-visualstar)
   (use-package evil-quick-diff
@@ -286,27 +344,6 @@ Adapted from doom-emacs unimpared.el
 	"Jump to the end of the COUNT-th method/function before point."
 	(interactive "p")
 	(end-of-defun (- count)))
-
-  ;;;###autoload
-  (defun +evil/next-preproc-directive (count)
-	"Jump to the COUNT-th preprocessor directive after point.
-
-  By default, this only recognizes C preproc directives. To change this see
-  `+evil-preprocessor-regexp'."
-	(interactive "p")
-	;; TODO More generalized search, to support directives in other languages?
-	(if (re-search-forward +evil-preprocessor-regexp nil t count)
-		(goto-char (match-beginning 0))
-	  (user-error "No preprocessor directives %s point"
-				  (if (> count 0) "after" "before"))))
-
-  ;;;###autoload
-  (defun +evil/previous-preproc-directive (count)
-	"Jump to the COUNT-th preprocessor directive before point.
-
-  See `+evil/next-preproc-directive' for details."
-	(interactive "p")
-	(+evil/next-preproc-directive (- count)))
 
   ;;;###autoload
   (defun +evil/next-comment (count)
@@ -546,7 +583,7 @@ Adapted from doom emacs textobjects.el
 #+begin_src emacs-lisp
   (use-package tree-sitter)
   (use-package tree-sitter-langs)
-  (use-package treesit-auto)
+  ;; (use-package treesit-auto)
 #+end_src
 * Recent
 #+begin_src emacs-lisp
@@ -1294,9 +1331,10 @@ Adapted from doom emacs textobjects.el
 	;; set prefix for lsp-command-keymap (few alternatives - "C-l", "C-c l")
 	;; (setq lsp-keymap-prefix "C-c l")
 	:hook (;; replace XXX-mode with concrete major-mode(e. g. python-mode)
-		   (javascript-mode . lsp)
+		   (web-mode . lsp)
 		   (rustic-mode . lsp)
 		   (python-mode . lsp)
+		   (emmet-mode . lsp)
 		   ;; if you want which-key integration
 		   (lsp-mode . lsp-ui-mode)
 		   (lsp-mode . lsp-enable-which-key-integration))
@@ -1496,7 +1534,7 @@ Adapted from doom emacs textobjects.el
 
   (use-package haml-mode)
   (use-package company-web)
-  (use-package impatient-mode)
+  (use-package skewer-mode)
   (use-package css-mode)
   (use-package com-css-sort)
   (use-package less-css-mode)
@@ -1514,8 +1552,25 @@ Adapted from doom emacs textobjects.el
 	(add-to-list 'auto-mode-alist '("\\.mustache\\'" . web-mode))
 	(add-to-list 'auto-mode-alist '("\\.djhtml\\'" . web-mode))
 	(add-to-list 'auto-mode-alist '("\\.html?\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.ts?\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.js?\\'" . web-mode))
+	(add-to-list 'auto-mode-alist '("\\.vue?\\'" . web-mode))
 	(setq web-mode-enable-auto-pairing t)
 	)
+#+end_src
+** Javascript and its ilk
+#+begin_src emacs-lisp
+  (use-package npm-mode)
+  (use-package typescript-mode)
+  (use-package rjsx-mode)
+  (use-package js2-refactor
+	:hook ((js2-mode rjsx-mode) . js2-refactor-mode))
+  (use-package tide
+	:ensure t
+	:after (typescript-mode company flycheck)
+	:hook ((typescript-mode . tide-setup)
+		   (typescript-mode . tide-hl-identifier-mode)
+		   (before-save . tide-format-before-save)))
 #+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
@@ -1528,6 +1583,8 @@ Adapted from doom emacs textobjects.el
 	(org-agenda-list)
 	(org-super-agenda-mode))
 #+end_src
+* Lookup
+Ported from doom emacs lookup module
 * Mu4e
 #+begin_src emacs-lisp
   (use-package mu4e-alert)
@@ -1671,6 +1728,13 @@ Adapted from doom emacs textobjects.el
 	  ())
 
 	(defun a3madkour/add-scheduled-todo ()
+	  (interactive)
+	  (let ((selected-date (org-read-date)))
+		(org-insert-todo-heading-respect-content nil)
+		(call-interactively 'org-set-effort)
+		(org-schedule nil selected-date)))
+
+	(defun a3madkour/add-scheduled-headline-todo ()
 	  (interactive)
 	  (let ((selected-date (org-read-date)))
 		(org-insert-todo-heading-respect-content nil)
@@ -1838,7 +1902,6 @@ Adapted from doom emacs textobjects.el
 	  (with-current-buffer buffer
 		;; This just overrides other template insertion.
 		(erase-buffer)
-		(message "We are here brother!")
 		(citar-org-roam-make-preamble key)
 		(insert "#+title: ")
 		(when template (insert note-meta))
@@ -2079,6 +2142,7 @@ Adapted from doom emacs textobjects.el
    "z" '(nil :which-key "citation")
    "zo" '(citar-open :which-key "citar-open")
    "zi" '(org-cite-insert :which-key "org-cite-insert")
+   "ze" '(citar-insert-edit :which-key "Edit citation")
    "zd" '(citar-dwim :which-key "citar-dwim")
 
    ;;notes stuff 'n'
@@ -2169,7 +2233,6 @@ Adapted from doom emacs textobjects.el
 	"C-w C-q" 'kill-this-buffer
 	)
 
-
   ;; Non-insert mode keymaps
   (general-def
 	:states '(normal visual motion)
@@ -2182,8 +2245,6 @@ Adapted from doom emacs textobjects.el
   (general-def
 	:prefix "["
 	:states '(normal visual motion)
-	"#" '(+evil/previous-preproc-directive :which-key "previous preproc")
-	"a" '(+evil/previous-preproc-directive :which-key "previous preproc")
 	"c" '(+evil/previous-comment :which-key "previous comment")
 	"e" '(previous-error :which-key "previous error")
 	"F" '(+evil/previous-frame :which-key "previous frame")
@@ -2195,8 +2256,6 @@ Adapted from doom emacs textobjects.el
   (general-def
 	:prefix "]"
 	:states '(normal visual motion)
-	"#" '(+evil/next-preproc-directive :which-key "next preproc")
-	"a" '(+evil/next-preproc-directive :which-key "next preproc")
 	"c" '(+evil/next-comment :which-key "next comment")
 	"e" '(next-error :which-key "next error")
 	"F" '(+evil/next-frame :which-key "next frame")
@@ -2276,6 +2335,7 @@ Adapted from doom emacs textobjects.el
    "d" '(org-deadline :which-key "deadline")
    "g" '(org-goto :which-key "goto heading")
    "t" '(a3madkour/add-scheduled-todo :which-key "add scheduled todo")
+   "T" '(a3madkour/add-scheduled-headline-todo :which-key "add new datetree deadline todo")
    "p" '(org-set-property :which-key "set property")
    "e" '(org-export-dispatch :which-key "export org")
    "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
