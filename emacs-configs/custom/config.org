@@ -1042,6 +1042,13 @@ Adapted from doom emacs textobjects.el
   (use-package magit :defer t)
   (use-package magit-todos :defer t)
 #+end_src
+* Diff-hl
+Highlight the diffs of the past commit in a file
+#+begin_src emacs-lisp
+  (use-package diff-hl
+	:config
+	(global-diff-hl-mode))
+#+end_src
 * Unfill
 #+begin_src emacs-lisp
   (use-package unfill :defer t)
@@ -1413,6 +1420,7 @@ Adapted from doom emacs textobjects.el
 ** Python
 #+begin_src emacs-lisp
 
+  (use-package python-mode)
   (use-package py-isort)
   (use-package pyimport)
   (use-package python-pytest)
