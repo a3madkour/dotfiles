@@ -1328,6 +1328,10 @@ Highlight the diffs of the past commit in a file
 	  (when (null (member lang installed-langs))
 		(dash-docs-install-docset lang))))
 #+end_src
+* Define word
+#+begin_src emacs-lisp
+(use-package define-word)
+#+end_src
 * Format all
 #+begin_src emacs-lisp
   (use-package format-all)
@@ -1399,6 +1403,10 @@ Highlight the diffs of the past commit in a file
 	(persp-mode-prefix-key (kbd "C-c M-p"))  ; pick your own prefix key here
 	:init
 	(persp-mode))
+#+end_src
+* Powerthesaurus
+#+begin_src emacs-lisp
+(use-package powerthesaurus)
 #+end_src
 * Language Packages
 ** Rust
@@ -1543,7 +1551,7 @@ Highlight the diffs of the past commit in a file
 
   (use-package haml-mode)
   (use-package company-web)
-  (use-package skewer-mode)
+  (use-package impatient-mode)
   (use-package css-mode)
   (use-package com-css-sort)
   (use-package less-css-mode)
