@@ -138,6 +138,10 @@ Need this until ELPA updates more regularly
   (size-indication-mode 1)
   (frame-parameter nil 'left)
 
+
+  ;;flyspell stuff
+  (add-hook 'text-mode-hook 'flyspell-mode)
+  (add-hook 'prog-mode-hook 'flyspell-prog-mode)
   ;;bookmarks
   (setq bookmark-default-file "~/emacs-configs/custom/bookmarks")
   (bookmark-load bookmark-default-file t)
@@ -1003,10 +1007,9 @@ Adapted from doom emacs textobjects.el
 #+end_src
 * Flyspell
 #+begin_src emacs-lisp
-  
+
   ;; "Enable Flyspell mode, which highlights all misspelled words. "
   (use-package flyspell
-	:defer t
 	:config
 
 	(add-to-list 'ispell-skip-region-alist '("~" "~"))
@@ -1015,10 +1018,6 @@ Adapted from doom emacs textobjects.el
 	(add-to-list 'ispell-skip-region-alist '("^#\\+BEGIN_EXPORT" . "^#\\+END_EXPORT"))
 	(add-to-list 'ispell-skip-region-alist '("^#\\+BEGIN_EXPORT" . "^#\\+END_EXPORT"))
 	(add-to-list 'ispell-skip-region-alist '(":\\(PROPERTIES\\|LOGBOOK\\):" . ":END:"))
-
-	(dolist (mode '(org-mode-hook
-					mu4e-compose-mode-hook))
-	  (add-hook mode (lambda () (flyspell-mode 1))))
 
 	(setq ispell-extra-args '("--sug-mode=ultra"))
 
