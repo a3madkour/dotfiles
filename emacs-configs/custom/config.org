@@ -43,11 +43,6 @@
   (straight-use-package 'use-package)
   (setq straight-use-package-by-default t)
 #+end_src
-* Compat
-Need this until ELPA updates more regularly
-#+begin_src emacs-lisp
-(straight-use-package '(compat :host github :repo "emacs-compat/compat"))
-#+end_src
 * GCMH
 #+begin_src emacs-lisp
   (use-package gcmh
@@ -829,6 +824,8 @@ Adapted from doom emacs textobjects.el
 		   ("M-s m" . consult-multi-occur)
 		   ("M-s k" . consult-keep-lines)
 		   ("M-s u" . consult-focus-lines)
+  
+
 		   ;; Isearch integration
 		   ("M-s e" . consult-isearch-history)
 		   :map isearch-mode-map
@@ -873,14 +870,14 @@ Adapted from doom emacs textobjects.el
 	;; (setq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
 	;; For some commands and buffer sources it is useful to configure the
 	;; :preview-key on a per-command basis using the `consult-customize' macro.
-	(consult-customize
-	 consult-theme
-	 :preview-key '(:debounce 0.2 any)
-	 consult-ripgrep consult-git-grep consult-grep
-	 consult-bookmark consult-recent-file consult-xref
-	 consult--source-bookmark consult--source-recent-file
-	 consult--source-project-recent-file
-	 :preview-key (kbd "M-."))
+	;; (consult-customize
+	;;  consult-theme
+	;;  :preview-key '(:debounce 0.2 any)
+	;;  consult-ripgrep consult-git-grep consult-grep
+	;;  consult-bookmark consult-recent-file consult-xref
+	;;  consult--source-bookmark consult--source-recent-file
+	;;  ponsult--source-project-recent-file
+	;;  :preview-key (kbd "M-."))
 
 	;; Optionally configure the narrowing key.
 	;; Both < and C-+ work reasonably well.
@@ -1055,6 +1052,12 @@ Highlight the diffs of the past commit in a file
 * Burly
 #+begin_src emacs-lisp
   (use-package burly :defer t)
+#+end_src
+* Jinx
+#+begin_src emacs-lisp
+(use-package jinx
+  :hook (emacs-startup . global-jinx-mode)
+  :bind ([remap ispell-word] . jinx-correct))
 #+end_src
 * Ace-window
 #+begin_src emacs-lisp
@@ -1941,12 +1944,15 @@ Ported from doom emacs lookup module
    :keymaps 'override
    :prefix "SPC"
 
+
    ;; Top level functions
-   "/" '(consult-ripgrep :which-key "ripgrep")
-   ";" '(deft :which-key "deft")
-   ":" '(project-find-file :which-key "p-find file")
-   "." '(find-file :which-key "find file")
-   "," '(consult-recent-file :which-key "recent files")
+
+  ;;consult has to have its own bind because fuck you
+   "/" 'consult-ripgrep 
+   ";" 'deft 
+   ":" 'project-find-file 
+   "." 'find-file 
+   "," 'consult-recent-file 
    "TAB" '(perspective-map :which-key "perspective map")
    "q" '(save-buffers-kill-terminal :which-key "quit emacs")
    "j" '(jump-to-register :which-key "registers")
