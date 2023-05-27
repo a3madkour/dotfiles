@@ -1410,6 +1410,14 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
 (use-package powerthesaurus)
 #+end_src
+* Language Tool
+#+begin_src emacs-lisp
+  (use-package langtool
+  :config
+  (setq langtool-default-language "en-US")
+  (setq langtool-bin "languagetool")
+  )
+#+end_src
 * Language Packages
 ** Rust
 #+begin_src emacs-lisp
@@ -1429,7 +1437,7 @@ Highlight the diffs of the past commit in a file
 #+end_src
 ** Python
 #+begin_src emacs-lisp
-
+  (use-package ein)
   (use-package python-mode)
   (use-package py-isort)
   (use-package pyimport)
@@ -1698,7 +1706,7 @@ Ported from doom emacs lookup module
 								(format-time-string "%Y-%m-%d")) path))
 
 	;;agenda dir
-	(setq org-agenda-files '("~/org"))
+	(setq org-agenda-files '("~/org/CS" "~/org/Academic" "~/org/Artistic" "~/org/Health" "~/org/Intellectual"))
 
 	(setq org-capture-templates
 		  '(("c" "CS")
