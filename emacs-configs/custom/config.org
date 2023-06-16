@@ -1543,13 +1543,18 @@ Highlight the diffs of the past commit in a file
 
   (use-package cdlatex
 	:hook (org-mode . org-cdlatex-mode))
-  
+
   (use-package company-auctex)
   (use-package company-reftex)
   (use-package company-math)
   (use-package adaptive-wrap
 	:hook (LaTeX-mode . adaptive-wrap-prefix-mode)
 	:init (setq-default adaptive-wrap-extra-indent 0))
+  (use-package auctex-latexmk
+	:config
+	(setq auctex-latexmk-inherit-TeX-PDF-mode t)
+	(auctex-latexmk-setup)
+	)
 #+end_src
 ** Web
 #+begin_src emacs-lisp
