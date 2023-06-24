@@ -1383,6 +1383,7 @@ Highlight the diffs of the past commit in a file
 	:commands dap-debug
 	:hook ((python-mode . dap-ui-mode) (python-mode . dap-mode))
 	:config
+	(dap-auto-configure-mode)
 	(require 'dap-python)
 	(require 'dap-gdb-lldb)
 	(setq dap-python-debugger 'debugpy)
@@ -1501,7 +1502,7 @@ Highlight the diffs of the past commit in a file
 		  TeX-show-compilation nil
 
 		  ;; Don't start the Emacs server when correlating sources.
-		  TeX-source-correlate-start-server nil
+		  ;; TeX-source-correlate-start-server nil
 
 		  ;; Automatically insert braces after sub/superscript in `LaTeX-math-mode'.
 		  TeX-electric-sub-and-superscript t
@@ -1834,6 +1835,12 @@ Ported from doom emacs lookup module
   (use-package org-pdftools
 	:hook (org-load . org-pdftools-setup-link ))
 #+end_src
+* Org appear
+#+begin_src emacs-lisp
+  (use-package org-appear
+	:hook
+	(org-mode . org-appear-mode))
+#+end_src
 * Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
@@ -1910,6 +1917,10 @@ Ported from doom emacs lookup module
   (setq citar-at-point-function 'embark-act)
 
 #+end_src
+* String inflection
+#+begin_src emacs-lisp
+	(use-package string-inflection)
+#+end_src
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
@@ -1970,7 +1981,7 @@ Ported from doom emacs lookup module
 
    ;; Top level functions
 
-  ;;consult has to have its own bind because fuck you
+   ;;consult has to have its own bind because fuck you
    "/" 'consult-ripgrep 
    ";" 'deft 
    ":" 'project-find-file 
@@ -2123,7 +2134,7 @@ Ported from doom emacs lookup module
    "njJ" '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
 
 
-  ;;insert 
+   ;;insert 
    "i" '(nil :which-key "insert")
    "if" '(+default/insert-file-path :which-key "Current file name")
    "iF" '(+default/insert-all-path :which-key "Current file name")
@@ -2131,7 +2142,7 @@ Ported from doom emacs lookup module
    "is" '(yas-insert-snippet :which-key "Snippet")
    "iu" '(insert-char :which-key "Unicode")
 
-  ;;code/lsp
+   ;;code/lsp
    "c" '(nil :which-key "code")
    "ca" '(lsp-execute-code-action :which-key "LSP Code action")
    "cr" '(lsp-rename :which-key "LSP Rename")
@@ -2178,6 +2189,7 @@ Ported from doom emacs lookup module
 	;; Utility ------
 	"C-c c" 'org-capture
 	"C-;" 'embark-act
+	"C-c C-u" 'string-inflection-all-cycle
 	"C-c a" 'org-agenda
 	"C-s" 'consult-line ;; Large files will use grep (faster)
 	"s-\"" 'ispell-word ;; that's super-shift-'
