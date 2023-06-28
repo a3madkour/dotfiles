@@ -73,14 +73,15 @@
   (setq use-short-answers t)
   (setq ns-pop-up-frames nil)
   (setq
-   org-roam-notes "~/org/roam-notes"
-   org-ref-notes "~/org/ref-notes"
-   zot-bib  "~/org/ref-notes/library.bib"
+   org-roam-notes "~/org/notes/roam-notes"
+   org-ref-notes "~/org/notes/ref-notes"
+   org-roam-dir "~/org/notes"
+   zot-bib  "~/org/notes/ref-notes/library.bib"
    org-cite-default-bibliography (list zot-bib)
    org-cite-csl-styles-dir "~/Zotero/styles"
    org-cite-global-bibliography (list zot-bib)
    org-roam-dailies-directory "~/org/ResearchJournal"
-   org-roam-directory org-roam-notes
+   org-roam-directory org-roam-dir
    )
   ;;dailies template
   (setq org-roam-dailies-capture-templates
@@ -1498,8 +1499,8 @@ Highlight the diffs of the past commit in a file
 						"=" 'pdf-view-enlarge
 						"-" 'pdf-view-shrink
 
-						"q" 'quit-window
-						"Q" 'kill-this-buffer
+						"Q" 'quit-window
+						"q" 'kill-this-buffer
 						"g" 'revert-buffer
 						)
 	)
@@ -1692,6 +1693,7 @@ Highlight the diffs of the past commit in a file
 	:commands dap-debug
 	:hook ((python-mode . dap-ui-mode) (python-mode . dap-mode))
 	:config
+	(dap-auto-configure-mode)
 	(require 'dap-python)
 	(require 'dap-gdb-lldb)
 	(setq dap-python-debugger 'debugpy)
@@ -1816,7 +1818,7 @@ Run agda-mode setup first
 		  TeX-show-compilation nil
 
 		  ;; Don't start the Emacs server when correlating sources.
-		  TeX-source-correlate-start-server nil
+		  ;; TeX-source-correlate-start-server nil
 
 		  ;; Automatically insert braces after sub/superscript in `LaTeX-math-mode'.
 		  TeX-electric-sub-and-superscript t
@@ -2149,6 +2151,12 @@ Ported from doom emacs lookup module
   (use-package org-pdftools
 	:hook (org-load . org-pdftools-setup-link ))
 #+end_src
+* Org appear
+#+begin_src emacs-lisp
+  (use-package org-appear
+	:hook
+	(org-mode . org-appear-mode))
+#+end_src
 * Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
@@ -2225,6 +2233,10 @@ Ported from doom emacs lookup module
   (setq citar-at-point-function 'embark-act)
 
 #+end_src
+* String inflection
+#+begin_src emacs-lisp
+	(use-package string-inflection)
+#+end_src
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
@@ -2285,7 +2297,7 @@ Ported from doom emacs lookup module
 
    ;; Top level functions
 
-  ;;consult has to have its own bind because fuck you
+   ;;consult has to have its own bind because fuck you
    "/" 'consult-ripgrep 
    ";" 'deft 
    ":" 'project-find-file 
@@ -2300,7 +2312,7 @@ Ported from doom emacs lookup module
    ;; Buffers
    "b" '(nil :which-key "buffer")
    "bb" '(consult-buffer :which-key "switch buffers")
-   "bd" '(evil-delete-buffer :which-key "delete buffer")
+   "bd" '(kill-this-buffer :which-key "delete buffer")
    "bi" '(ibuffer  :which-key "ibuffer")
    "br" '(revert-buffer :which-key "revert buffer")
 
@@ -2438,7 +2450,7 @@ Ported from doom emacs lookup module
    "njJ" '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
 
 
-  ;;insert 
+   ;;insert 
    "i" '(nil :which-key "insert")
    "if" '(+default/insert-file-path :which-key "Current file name")
    "iF" '(+default/insert-all-path :which-key "Current file name")
@@ -2446,7 +2458,7 @@ Ported from doom emacs lookup module
    "is" '(yas-insert-snippet :which-key "Snippet")
    "iu" '(insert-char :which-key "Unicode")
 
-  ;;code/lsp
+   ;;code/lsp
    "c" '(nil :which-key "code")
    "ca" '(lsp-execute-code-action :which-key "LSP Code action")
    "cr" '(lsp-rename :which-key "LSP Rename")
@@ -2493,6 +2505,7 @@ Ported from doom emacs lookup module
 	;; Utility ------
 	"C-c c" 'org-capture
 	"C-;" 'embark-act
+	"C-c C-u" 'string-inflection-all-cycle
 	"C-c a" 'org-agenda
 	"C-s" 'consult-line ;; Large files will use grep (faster)
 	"s-\"" 'ispell-word ;; that's super-shift-'
