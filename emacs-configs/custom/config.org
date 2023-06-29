@@ -2155,11 +2155,74 @@ Ported from doom emacs lookup module
 #+begin_src emacs-lisp
   (use-package org-appear
 	:hook
-	(org-mode . org-appear-mode))
+	(org-mode . org-appear-mode)
+	:config
+	(setq org-appear-autolinks t)
+	)
+#+end_src
+* Org modern
+#+begin_src emacs-lisp
+  (use-package org-modern
+	:hook
+	(org-mode . org-modern-mode)
+	(org-agenda-finalize org-modern-agenda)
+	:config
+	(setq
+	 ;; Edit settings
+	 org-auto-align-tags nil
+	 org-tags-column 0
+	 org-catch-invisible-edits 'show-and-error
+	 org-special-ctrl-a/e t
+	 org-insert-heading-respect-content t
+
+	 ;; Org styling, hide markup etc.
+	 org-hide-emphasis-markers t
+	 org-pretty-entities t
+	 org-ellipsis "…"
+
+	 ;; Agenda styling
+	 org-agenda-tags-column 0
+	 org-agenda-block-separator ?─
+	 org-agenda-time-grid
+	 '((daily today require-timed)
+	   (800 1000 1200 1400 1600 1800 2000)
+	   " ┄┄┄┄┄ " "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+	 org-agenda-current-time-string
+	 "⭠ now ─────────────────────────────────────────────────")
+
+	(global-org-modern-mode)
+	)
+#+end_src
+* Org music
+#+begin_src emacs-lisp
+  ;; Org-Music Mode
+  (use-package org-music
+	:straight (:type git :host github :repo "debanjum/org-music")
+	:init (progn
+			(setq
+			 org-music-file "~/org/Music.org"
+			 org-music-media-directory "~/Music/OrgMusic/"
+			 org-music-operating-system "linux")))
 #+end_src
 * Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
+#+end_src
+* Org-pandoc-import
+#+begin_src emacs-lisp
+(use-package org-pandoc-import
+  :straight (:host github
+             :repo "tecosaur/org-pandoc-import"
+             :files ("*.el" "filters" "preprocessors")))
+#+end_src
+* Org-transclusion
+#+begin_src emacs-lisp
+(use-package org-transclusion)
+#+end_src
+* Org-glossary
+#+begin_src emacs-lisp
+(use-package org-glossary
+  :straight (:host github :repo "tecosaur/org-glossary"))
 #+end_src
 * Ox-pandoc
 #+begin_src emacs-lisp
@@ -2168,6 +2231,10 @@ Ported from doom emacs lookup module
 * Org-clock-csv
 #+begin_src emacs-lisp
   (use-package org-clock-csv)
+#+end_src
+* Lexic
+#+begin_src emacs-lisp
+(use-package lexic)
 #+end_src
 * Ob-Async
 #+begin_src emacs-lisp
@@ -2237,6 +2304,24 @@ Ported from doom emacs lookup module
 #+begin_src emacs-lisp
 	(use-package string-inflection)
 #+end_src
+* Keycast
+#+begin_src emacs-lisp
+  (defun +toggle-keycast()
+	(interactive)
+	(if (member '("" keycast-mode-line " ") global-mode-string)
+		(progn (setq global-mode-string (delete '("" keycast-mode-line " ") global-mode-string))
+			   (remove-hook 'pre-command-hook 'keycast--update)
+			   (message "Keycast OFF"))
+	  (add-to-list 'global-mode-string '("" keycast-mode-line " "))
+	  (add-hook 'pre-command-hook 'keycast--update t)
+	  (message "Keycast ON")))
+  (use-package keycast
+	:bind ("C-c t k" . +toggle-keycast))
+#+end_src
+* Elfeed
+#+begin_src emacs-lisp
+(use-package elfeed)
+#+end_src
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
@@ -2293,7 +2378,6 @@ Ported from doom emacs lookup module
    :states '(normal motion visual)
    :keymaps 'override
    :prefix "SPC"
-
 
    ;; Top level functions
 
@@ -2364,6 +2448,7 @@ Ported from doom emacs lookup module
    "tI" '(toggle-input-method :which-key "toggle input method")
    "tr" '(display-fill-column-indicator-mode :which-key "fill column indicator")
    "tm" '(hide-mode-line-mode :which-key "hide modeline mode")
+   "tk" '(+toggle-keycast :which-key "toggle keycast")
 
    ;;Search
    "sb" '(consult-line :which-key "search buffer")
