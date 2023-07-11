@@ -134,6 +134,8 @@
   (size-indication-mode 1)
   (frame-parameter nil 'left)
 
+  ;;flymake stuff
+  (add-hook 'prog-mode-hook 'flymake-mode)
 
   ;;flyspell stuff
   (add-hook 'text-mode-hook 'flyspell-mode)
@@ -1650,62 +1652,62 @@ Highlight the diffs of the past commit in a file
 #+end_src
 * Lsp
 #+begin_src emacs-lisp
-  (use-package lsp-mode
-	:init
-	;; set prefix for lsp-command-keymap (few alternatives - "C-l", "C-c l")
-	;; (setq lsp-keymap-prefix "C-c l")
-	:hook (;; replace XXX-mode with concrete major-mode(e. g. python-mode)
-		   (web-mode . lsp)
-		   (rustic-mode . lsp)
-		   (python-mode . lsp)
-		   (emmet-mode . lsp)
-		   ;; if you want which-key integration
-		   (lsp-mode . lsp-ui-mode)
-		   (lsp-mode . lsp-enable-which-key-integration))
-	:commands lsp
-	:custom
-	;; what to use when checking on-save. "check" is default, I prefer clippy
-	(lsp-rust-analyzer-cargo-watch-command "clippy")
-	(lsp-eldoc-render-all t)
-	(lsp-idle-delay 0.6)
-	;; enable / disable the hints as you prefer:
-	(lsp-rust-analyzer-server-display-inlay-hints t)
-	(lsp-rust-analyzer-display-lifetime-elision-hints-enable "skip_trivial")
-	(lsp-rust-analyzer-display-chaining-hints t)
-	(lsp-rust-analyzer-display-lifetime-elision-hints-use-parameter-names nil)
-	(lsp-rust-analyzer-display-closure-return-type-hints t)
-	;; (lsp-rust-analyzer-display-parameter-hints nil)
-	;; (lsp-rust-analyzer-display-reborrow-hints nil)
-	)
+  ;; (use-package lsp-mode
+  ;; 	:init
+  ;; 	;; set prefix for lsp-command-keymap (few alternatives - "C-l", "C-c l")
+  ;; 	;; (setq lsp-keymap-prefix "C-c l")
+  ;; 	:hook (;; replace XXX-mode with concrete major-mode(e. g. python-mode)
+  ;; 		   (web-mode . lsp)
+  ;; 		   (rustic-mode . lsp)
+  ;; 		   (python-mode . lsp)
+  ;; 		   (emmet-mode . lsp)
+  ;; 		   ;; if you want which-key integration
+  ;; 		   (lsp-mode . lsp-ui-mode)
+  ;; 		   (lsp-mode . lsp-enable-which-key-integration))
+  ;; 	:commands lsp
+  ;; 	:custom
+  ;; 	;; what to use when checking on-save. "check" is default, I prefer clippy
+  ;; 	(lsp-rust-analyzer-cargo-watch-command "clippy")
+  ;; 	(lsp-eldoc-render-all t)
+  ;; 	(lsp-idle-delay 0.6)
+  ;; 	;; enable / disable the hints as you prefer:
+  ;; 	(lsp-rust-analyzer-server-display-inlay-hints t)
+  ;; 	(lsp-rust-analyzer-display-lifetime-elision-hints-enable "skip_trivial")
+  ;; 	(lsp-rust-analyzer-display-chaining-hints t)
+  ;; 	(lsp-rust-analyzer-display-lifetime-elision-hints-use-parameter-names nil)
+  ;; 	(lsp-rust-analyzer-display-closure-return-type-hints t)
+  ;; 	;; (lsp-rust-analyzer-display-parameter-hints nil)
+  ;; 	;; (lsp-rust-analyzer-display-reborrow-hints nil)
+  ;; 	)
 
-  (use-package lsp-ui
-	:ensure
-	:commands lsp-ui-mode
-	:custom
-	(lsp-ui-peek-always-show t)
-	(lsp-ui-sideline-show-hover t)
-	(lsp-ui-doc-enable nil))
+  ;; (use-package lsp-ui
+  ;; 	:ensure
+  ;; 	:commands lsp-ui-mode
+  ;; 	:custom
+  ;; 	(lsp-ui-peek-always-show t)
+  ;; 	(lsp-ui-sideline-show-hover t)
+  ;; 	(lsp-ui-doc-enable nil))
 
-  (use-package consult-lsp)
-  (use-package eglot)
-  (use-package dap-mode
-	:after lsp-mode
-	:commands dap-debug
-	:hook ((python-mode . dap-ui-mode) (python-mode . dap-mode))
-	:config
-	(dap-auto-configure-mode)
-	(require 'dap-python)
-	(require 'dap-gdb-lldb)
-	(setq dap-python-debugger 'debugpy)
-	(add-hook 'dap-stopped-hook
-			  (lambda (arg) (call-interactively #'dap-hydra)))
-	(dap-register-debug-template "Rust::GDB Run Configuration"
-								 (list :type "gdb"
-									   :request "launch"
-									   :name "GDB::Run"
-									   :gdbpath "rust-gdb"
-									   :target nil
-									   :cwd nil)))
+  ;; (use-package consult-lsp)
+  ;; (use-package eglot)
+  ;; (use-package dap-mode
+  ;; 	:after lsp-mode
+  ;; 	:commands dap-debug
+  ;; 	:hook ((python-mode . dap-ui-mode) (python-mode . dap-mode))
+  ;; 	:config
+  ;; 	(dap-auto-configure-mode)
+  ;; 	(require 'dap-python)
+  ;; 	(require 'dap-gdb-lldb)
+  ;; 	(setq dap-python-debugger 'debugpy)
+  ;; 	(add-hook 'dap-stopped-hook
+  ;; 			  (lambda (arg) (call-interactively #'dap-hydra)))
+  ;; 	(dap-register-debug-template "Rust::GDB Run Configuration"
+  ;; 								 (list :type "gdb"
+  ;; 									   :request "launch"
+  ;; 									   :name "GDB::Run"
+  ;; 									   :gdbpath "rust-gdb"
+  ;; 									   :target nil
+  ;; 									   :cwd nil)))
 #+end_src
 * Perspective
 #+begin_src emacs-lisp
@@ -1734,7 +1736,8 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
   (use-package rustic
 	:config
-	(setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
+	(setq rustic-lsp-client nil)
+	;; (setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
 	)
 #+end_src
 ** GDScript
@@ -1744,7 +1747,7 @@ Highlight the diffs of the past commit in a file
 ** Haskell
 #+begin_src emacs-lisp
   (use-package haskell-mode)
-  (use-package lsp-haskell)
+  ;; (use-package lsp-haskell)
 #+end_src
 ** Agda
 Run agda-mode setup first
@@ -1761,11 +1764,12 @@ Run agda-mode setup first
   (use-package python-pytest)
   (use-package conda)
   (use-package anaconda-mode)
-  (use-package lsp-pyright
-	:ensure t
-	:hook (python-mode . (lambda ()
-						   (require 'lsp-pyright)
-						   (lsp))))  ; or lsp-deferred
+  
+  ;; (use-package lsp-pyright
+  ;; 	:ensure t
+  ;; 	:hook (python-mode . (lambda ()
+  ;; 						   (require 'lsp-pyright)
+  ;; 						   (lsp))))  ; or lsp-deferred
 #+end_src
 ** Prolog
 #+begin_src emacs-lisp
@@ -1774,9 +1778,11 @@ Run agda-mode setup first
 ** C/C++
 #+begin_src emacs-lisp
   (use-package demangle-mode)
-  (use-package ccls
-	:hook ((c-mode c++-mode objc-mode cuda-mode) .
-		   (lambda () (require 'ccls) (lsp))))
+
+  ;; (use-package ccls
+  ;; 	:hook ((c-mode c++-mode objc-mode cuda-mode) .
+  ;; 		   (lambda () (require 'ccls) (lsp))))
+  
   (use-package disaster)
   (use-package modern-cpp-font-lock)
 #+end_src
@@ -2204,6 +2210,10 @@ Ported from doom emacs lookup module
 			 org-music-media-directory "~/Music/OrgMusic/"
 			 org-music-operating-system "linux")))
 #+end_src
+* Crux
+#+begin_src emacs-lisp
+  (use-package crux)
+#+end_src
 * Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
@@ -2545,19 +2555,19 @@ Ported from doom emacs lookup module
 
    ;;code/lsp
    "c" '(nil :which-key "code")
-   "ca" '(lsp-execute-code-action :which-key "LSP Code action")
-   "cr" '(lsp-rename :which-key "LSP Rename")
+   ;; "ca" '(lsp-execute-code-action :which-key "LSP Code action")
+   ;; "cr" '(lsp-rename :which-key "LSP Rename")
    "cc" 'compile
    "cC" 'recompile
-   ;; "cd" '(+lookup/definition)
-   ;; "cD" '(+lookup/references)
+   "cd" '+lookup/definition
+   "cD" '+lookup/references
    "ce" 'eval-buffer
-   "cf" '(lsp-format-buffer :which-key "LSP format buffer")
-   ;; "ci" '(+lookup/implementations)
-   "cj" 'consult-lsp-symbols
-   ;; "ck" '(+lookup/documentation)
-   "co" '(lsp-organize-imports :which-key "LSP organize imports")
-   ;; "ct" '(+lookup/type-definition)
+   "cf" '(format-all-buffer :which-key "format buffer")
+   "ci" '+lookup/implementations
+   ;; "cj" 'consult-lsp-symbols
+   "ck" '+lookup/documentation
+   ;; "co" '(lsp-organize-imports :which-key "LSP organize imports")
+   "ct" '+lookup/type-definition
    "cw" 'delete-trailing-whitespace
    ) ;; End SPC prefix block
 
