@@ -168,7 +168,6 @@
 	(evil-set-initial-state 'dashboard-mode 'motion)
 	(evil-set-initial-state 'debugger-mode 'motion)
 	(evil-set-initial-state 'pdf-view-mode 'motion)
-	(evil-set-initial-state 'bufler-list-mode 'emacs)
 	(evil-set-initial-state 'inferior-python-mode 'emacs)
 	(evil-set-initial-state 'term-mode 'emacs)
 
@@ -206,67 +205,7 @@
   (use-package evil-easymotion
 	:config
 	(setq avy-background t))
-
-  ;;until combobulate gets on melpa
-  (use-package evil-textobj-tree-sitter
-	:config
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "f" (evil-textobj-tree-sitter-get-textobj "function.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "f" (evil-textobj-tree-sitter-get-textobj "function.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "a" (evil-textobj-tree-sitter-get-textobj "attribute.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "a" (evil-textobj-tree-sitter-get-textobj "attribute.inner"))
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "k" (evil-textobj-tree-sitter-get-textobj "block.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "k" (evil-textobj-tree-sitter-get-textobj "block.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "v" (evil-textobj-tree-sitter-get-textobj "call.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "v" (evil-textobj-tree-sitter-get-textobj "call.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "d" (evil-textobj-tree-sitter-get-textobj "class.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "d" (evil-textobj-tree-sitter-get-textobj "class.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "i" (evil-textobj-tree-sitter-get-textobj "conditional.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "i" (evil-textobj-tree-sitter-get-textobj "conditional.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "j" (evil-textobj-tree-sitter-get-textobj "loop.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "j" (evil-textobj-tree-sitter-get-textobj "loop.inner"))
-
-	;; bind `function.outer`(entire function block) to `f` for use in things like `vaf`, `yaf`
-	(define-key evil-outer-text-objects-map "p" (evil-textobj-tree-sitter-get-textobj "parameter.outer"))
-	;; bind `function.inner`(function block without name and args) to `f` for use in things like `vif`, `yif`
-	(define-key evil-inner-text-objects-map "p" (evil-textobj-tree-sitter-get-textobj "parameter.inner"))
-
-	;; Goto start of next function
-	(define-key evil-normal-state-map (kbd "]f") (lambda ()
-												   (interactive)
-												   (evil-textobj-tree-sitter-goto-textobj "function.outer")))
-	;; Goto start of previous function
-	(define-key evil-normal-state-map (kbd "[f") (lambda ()
-												   (interactive)
-												   (evil-textobj-tree-sitter-goto-textobj "function.outer" t)))
-	;; Goto end of next function
-	(define-key evil-normal-state-map (kbd "]F") (lambda ()
-												   (interactive)
-												   (evil-textobj-tree-sitter-goto-textobj "function.inner" nil t)))
-	;; Goto end of previous function
-	(define-key evil-normal-state-map (kbd "[F") (lambda ()
-												   (interactive)
-												   (evil-textobj-tree-sitter-goto-textobj "function.inner" t t)))
-	)
-  
+ 
   (use-package evil-args)
   (use-package evil-visualstar)
   (use-package evil-quick-diff
@@ -278,10 +217,6 @@
 	:init
 	(setq evil-quick-diff-key (kbd "zx"))
 	(evil-quick-diff-install))
-  ;;(use-package evil-quick-diff
-  ;;:init
-  ;;(setq evil-quick-diff-key (kbd "zx"))
-  ;;(evil-quick-diff-install))
   (use-package exato :ensure t)
   (use-package evil-vimish-fold)
   (use-package evil-escape)
@@ -581,12 +516,6 @@ Adapted from doom emacs textobjects.el
   (use-package undo-tree)
   (global-undo-tree-mode)
   (evil-set-undo-system 'undo-tree)
-#+end_src
-* Tree-sitter
-#+begin_src emacs-lisp
-  (use-package tree-sitter)
-  (use-package tree-sitter-langs)
-  ;; (use-package treesit-auto)
 #+end_src
 * Recent
 #+begin_src emacs-lisp
@@ -1352,19 +1281,11 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
   (use-package unfill :defer t)
 #+end_src
-* Burly
-#+begin_src emacs-lisp
-  (use-package burly :defer t)
-#+end_src
 * Jinx
 #+begin_src emacs-lisp
 (use-package jinx
   :hook (emacs-startup . global-jinx-mode)
   :bind ([remap ispell-word] . jinx-correct))
-#+end_src
-* Ace-window
-#+begin_src emacs-lisp
-  (use-package ace-window :defer t)
 #+end_src
 * Centered-cursor-mode
 #+begin_src emacs-lisp
@@ -1378,26 +1299,12 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
   (use-package diminish)
 #+end_src
-* Bufler
-#+begin_src emacs-lisp
-  (use-package bufler
-	:general
-	(:keymaps 'bufler-list-mode-map "Q" 'kill-this-buffer))
-#+end_src
 * mw-Thesaurus
 #+begin_src emacs-lisp
   (use-package mw-thesaurus
 	:defer t
 	:config
 	(add-hook 'mw-thesaurus-mode-hook (lambda () (define-key evil-normal-state-local-map (kbd "q") 'mw-thesaurus--quit))))
-#+end_src
-* Epithet
-#+begin_src emacs-lisp
-  (use-package epithet
-	:ensure nil
-	:config
-	(add-hook 'Info-selection-hook #'epithet-rename-buffer)
-	(add-hook 'help-mode-hook #'epithet-rename-buffer))
 #+end_src
 * EMMS
 #+begin_src emacs-lisp
@@ -1407,10 +1314,6 @@ Highlight the diffs of the past commit in a file
 	(setq emms-source-file-default-directory '"~/Music")
 	(emms-default-players)
 	)
-#+end_src
-* Most-used-words
-#+begin_src emacs-lisp
-  (use-package most-used-words :ensure nil)
 #+end_src
 * Deft
 #+begin_src emacs-lisp
@@ -1566,7 +1469,9 @@ Highlight the diffs of the past commit in a file
 	)
 #+end_src
 * Command-log-mode
+#+begin_src emacs-lisp
 (use-package command-log-mode)
+#+end_src
 * Pulsar
 #+begin_src emacs-lisp
   (use-package pulsar
@@ -1895,7 +1800,6 @@ Run agda-mode setup first
   (use-package less-css-mode)
   (use-package sass-mode)
   (use-package sws-mode)
-  (use-package rainbow-mode)
   (use-package web-mode
 	:config
 	(add-to-list 'auto-mode-alist '("\\.phtml\\'" . web-mode))
@@ -2332,6 +2236,75 @@ Ported from doom emacs lookup module
 #+begin_src emacs-lisp
 (use-package elfeed)
 #+end_src
+* Combobulate
+#+begin_src emacs-lisp
+  ;; `M-x combobulate' (default: `C-c o o') to start using Combobulate
+  (use-package treesit
+    :straight nil
+    :preface
+    (defun mp-setup-install-grammars ()
+      "Install Tree-sitter grammars if they are absent."
+      (interactive)
+      (dolist (grammar
+               '((css "https://github.com/tree-sitter/tree-sitter-css")
+                 (javascript . ("https://github.com/tree-sitter/tree-sitter-javascript" "master" "src"))
+                 (python "https://github.com/tree-sitter/tree-sitter-python")
+                 (rust "https://github.com/tree-sitter/tree-sitter-rust")
+                 (tsx . ("https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src"))
+                 (yaml "https://github.com/ikatyang/tree-sitter-yaml")))
+        (add-to-list 'treesit-language-source-alist grammar)
+        ;; Only install `grammar' if we don't already have it
+        ;; installed. However, if you want to *update* a grammar then
+        ;; this obviously prevents that from happening.
+        (unless (treesit-language-available-p (car grammar))
+          (treesit-install-language-grammar (car grammar)))))
+
+    ;; Optional, but recommended. Tree-sitter enabled major modes are
+    ;; distinct from their ordinary counterparts.
+    ;;
+    ;; You can remap major modes with `major-mode-remap-alist'. Note
+    ;; that this does *not* extend to hooks! Make sure you migrate them
+    ;; also
+    (dolist (mapping '((python-mode . python-ts-mode)
+                       (css-mode . css-ts-mode)
+                       (typescript-mode . tsx-ts-mode)
+                       (js-mode . js-ts-mode)
+                       (css-mode . css-ts-mode)
+                       (yaml-mode . yaml-ts-mode)))
+      (add-to-list 'major-mode-remap-alist mapping))
+
+    :config
+    (mp-setup-install-grammars)
+    )
+    ;; Do not forget to customize Combobulate to your liking:
+    ;;
+    ;;  M-x customize-group RET combobulate RET
+    ;;
+    (use-package combobulate
+  	:straight (combobulate
+  			   :type git
+  			   :host github
+  			   :repo "mickeynp/combobulate"
+  			   )
+      :preface
+      ;; You can customize Combobulate's key prefix here.
+      ;; Note that you may have to restart Emacs for this to take effect!
+      (setq combobulate-key-prefix "C-c o")
+
+      ;; Optional, but recommended.
+      ;;
+      ;; You can manually enable Combobulate with `M-x
+      ;; combobulate-mode'.
+      :hook ((python-ts-mode . combobulate-mode)
+             (js-ts-mode . combobulate-mode)
+             (css-ts-mode . combobulate-mode)
+             (yaml-ts-mode . combobulate-mode)
+             (typescript-ts-mode . combobulate-mode)
+             (tsx-ts-mode . combobulate-mode))
+      ;; Amend this to the directory where you keep Combobulate's source
+      ;; code.
+  )
+#+end_src
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
@@ -2414,7 +2387,6 @@ Ported from doom emacs lookup module
    "f" '(nil :which-key "files")
    "fb" '(consult-bookmark :which-key "bookmarks")
    "ff" '(find-file :which-key "find file")
-   ;; "fn" '(spacemacs/new-empty-buffer :which-key "new file")
    "fr" '(consult-recent-file :which-key "recent files")
    "fR" '(rename-file :which-key "rename file")
    "fs" '(save-buffer :which-key "save buffer")
@@ -2429,13 +2401,6 @@ Ported from doom emacs lookup module
    "hf" '(describe-function :which-key "des. func")
    "hF" '(describe-face :which-key "des. face")
    "hk" '(describe-key :which-key "des. key")
-
-   "hed" '((lambda () (interactive) (jump-to-register 67)) :which-key "edit dotfile")
-
-   "hm" '(nil :which-key "switch mode")
-   "hme" '(emacs-lisp-mode :which-key "elisp mode")
-   "hmo" '(org-mode :which-key "org mode")
-   "hmt" '(text-mode :which-key "text mode")
 
    ;; Git
    "g" '(nil :which-key "magit")
@@ -2555,8 +2520,6 @@ Ported from doom emacs lookup module
 
    ;;code/lsp
    "c" '(nil :which-key "code")
-   ;; "ca" '(lsp-execute-code-action :which-key "LSP Code action")
-   ;; "cr" '(lsp-rename :which-key "LSP Rename")
    "cc" 'compile
    "cC" 'recompile
    "cd" '+lookup/definition
@@ -2564,11 +2527,10 @@ Ported from doom emacs lookup module
    "ce" 'eval-buffer
    "cf" '(format-all-buffer :which-key "format buffer")
    "ci" '+lookup/implementations
-   ;; "cj" 'consult-lsp-symbols
    "ck" '+lookup/documentation
-   ;; "co" '(lsp-organize-imports :which-key "LSP organize imports")
    "ct" '+lookup/type-definition
    "cw" 'delete-trailing-whitespace
+   "cm" 'consult-imenu
    ) ;; End SPC prefix block
 
   ;; All-mode keymaps
@@ -2577,10 +2539,7 @@ Ported from doom emacs lookup module
 
 	;; Emacs --------
 	;; "M-x" 'M-x
-	"ß" 'evil-window-next ;; option-s
-	"Í" 'other-frame ;; option-shift-s
 	"C-S-B" 'consult-switch-buffer
-	"∫" 'consult-switch-buffer ;; option-b
 
 	;; Remapping normal help features to use Consult version
 	"C-h v" 'describe-variable
@@ -2594,8 +2553,6 @@ Ported from doom emacs lookup module
 	"M-c" 'simpleclip-copy
 	"M-u" 'capitalize-dwim ;; Default is upcase-dwim
 	"M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
-	;;"M-z" 'undo-fu-only-undo				
-	;;"M-S" 'undo-fu-only-redo
 
 	;; Utility ------
 	"C-c c" 'org-capture
@@ -2604,20 +2561,9 @@ Ported from doom emacs lookup module
 	"C-c a" 'org-agenda
 	"C-s" 'consult-line ;; Large files will use grep (faster)
 	"s-\"" 'ispell-word ;; that's super-shift-'
-	;; "M-+" 'jib/calc-speaking-time
 	"C-'" 'avy-goto-char-2
 
-	"C-x C-b" 'bufler-list
 	"C-M-x" 'ispell-complete-word
-
-	;; super-number functions
-	"s-1" 'mw-thesaurus-lookup-dwim
-	"s-!" 'mw-thesaurus-lookup
-	"s-2" 'ispell-buffer
-	"s-3" 'revert-buffer
-	;; "s-4" '(lambda () (interactive) (consult-file-jump nil jib/dropbox))
-	;; "s-5" '(lambda () (interactive) (consult-rg nil jib/dropbox))
-	"s-6" 'org-capture
 	)
 
   (general-def
@@ -2682,7 +2628,6 @@ Ported from doom emacs lookup module
 	:states 'normal
 	:keymaps 'org-mode-map
 	"t" 'org-todo
-	;; "<return>" 'org-open-at-point-global
 	"K" 'org-shiftup
 
 	"J" 'org-shiftdown
