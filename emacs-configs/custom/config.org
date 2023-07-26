@@ -1641,7 +1641,7 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
   (use-package rustic
 	:config
-	(setq rustic-lsp-client nil)
+	(setq rustic-lsp-client 'eglot)
 	;; (setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
 	)
 #+end_src
@@ -1693,7 +1693,6 @@ Run agda-mode setup first
 #+end_src
 ** C#
 #+begin_src emacs-lisp
-  (use-package csharp-mode)
   (use-package csproj-mode)
   ;; (use-package sln-mode)
   ;;Unity stuff'
@@ -2047,7 +2046,10 @@ Ported from doom emacs lookup module
 #+end_src
 * Org-transclusion
 #+begin_src emacs-lisp
-(use-package org-transclusion)
+  (use-package org-transclusion
+  :after org
+  :hook (org-mode . org-transclusion)
+  )
 #+end_src
 * Org-book
 #+begin_src emacs-lisp
@@ -2128,10 +2130,6 @@ Ported from doom emacs lookup module
   :straight (:host github
              :repo "tecosaur/org-pandoc-import"
              :files ("*.el" "filters" "preprocessors")))
-#+end_src
-* Org-transclusion
-#+begin_src emacs-lisp
-(use-package org-transclusion)
 #+end_src
 * Org-glossary
 #+begin_src emacs-lisp
@@ -2535,132 +2533,132 @@ Ported from doom emacs lookup module
 
   ;; All-mode keymaps
   (general-def
-	:keymaps 'override
+    :keymaps 'override
 
-	;; Emacs --------
-	;; "M-x" 'M-x
-	"C-S-B" 'consult-switch-buffer
+    ;; Emacs --------
+    ;; "M-x" 'M-x
+    "C-S-B" 'consult-switch-buffer
 
-	;; Remapping normal help features to use Consult version
-	"C-h v" 'describe-variable
-	"C-h o" 'describe-symbol
-	"C-h f" 'describe-function
-	"C-h F" 'describe-face
+    ;; Remapping normal help features to use Consult version
+    "C-h v" 'describe-variable
+    "C-h o" 'describe-symbol
+    "C-h f" 'describe-function
+    "C-h F" 'describe-face
 
-	;; Editing ------
-	"M-v" 'simpleclip-paste
-	"M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
-	"M-c" 'simpleclip-copy
-	"M-u" 'capitalize-dwim ;; Default is upcase-dwim
-	"M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
+    ;; Editing ------
+    "M-v" 'simpleclip-paste
+    "M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
+    "M-c" 'simpleclip-copy
+    "M-u" 'capitalize-dwim ;; Default is upcase-dwim
+    "M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
 
-	;; Utility ------
-	"C-c c" 'org-capture
-	"C-;" 'embark-act
-	"C-c C-u" 'string-inflection-all-cycle
-	"C-c a" 'org-agenda
-	"C-s" 'consult-line ;; Large files will use grep (faster)
-	"s-\"" 'ispell-word ;; that's super-shift-'
-	"C-'" 'avy-goto-char-2
+    ;; Utility ------
+    "C-c c" 'org-capture
+    "C-;" 'embark-act
+    "C-c C-u" 'string-inflection-all-cycle
+    "C-c a" 'org-agenda
+    "C-s" 'consult-line ;; Large files will use grep (faster)
+    "s-\"" 'ispell-word ;; that's super-shift-'
+    "C-'" 'avy-goto-char-2
 
-	"C-M-x" 'ispell-complete-word
-	)
+    "C-M-x" 'ispell-complete-word
+    )
 
   (general-def
-	:keymaps 'emacs
-	"C-w C-q" 'kill-this-buffer
-	)
+    :keymaps 'emacs
+    "C-w C-q" 'kill-this-buffer
+    )
 
   ;; Non-insert mode keymaps
   (general-def
-	:states '(normal visual motion)
-	"u" 'undo
-	"|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
-	"C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
-	"gc" '(evilnc-comment-operator :which-key "commentator")
-	"gD" '(xref-find-references :which-key "find references")
-	)
+    :states '(normal visual motion)
+    "u" 'undo
+    "|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
+    "C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
+    "gc" '(evilnc-comment-operator :which-key "commentator")
+    "gD" '(xref-find-references :which-key "find references")
+    )
   (general-def
-	:prefix "["
-	:states '(normal visual motion)
-	"c" '(+evil/previous-comment :which-key "previous comment")
-	"e" '(previous-error :which-key "previous error")
-	"F" '(+evil/previous-frame :which-key "previous frame")
-	"h" '(outline-previous-visible-heading :which-key "previous heading")
-	"m" '(+evil/previous-beginning-of-method :which-key "previous method")
-	"M" '(+evil/previous-end-of-method :which-key "previous end method")
-	"o" '(+evil/insert-newline-below :which-key "insert newline below")
-	)
+    :prefix "["
+    :states '(normal visual motion)
+    "c" '(+evil/previous-comment :which-key "previous comment")
+    "e" '(previous-error :which-key "previous error")
+    "F" '(+evil/previous-frame :which-key "previous frame")
+    "h" '(outline-previous-visible-heading :which-key "previous heading")
+    "m" '(+evil/previous-beginning-of-method :which-key "previous method")
+    "M" '(+evil/previous-end-of-method :which-key "previous end method")
+    "o" '(+evil/insert-newline-below :which-key "insert newline below")
+    )
   (general-def
-	:prefix "]"
-	:states '(normal visual motion)
-	"c" '(+evil/next-comment :which-key "next comment")
-	"e" '(next-error :which-key "next error")
-	"F" '(+evil/next-frame :which-key "next frame")
-	"h" '(outline-next-visible-heading :which-key "next heading")
-	"m" '(+evil/next-beginning-of-method :which-key "next method")
-	"M" '(+evil/next-end-of-method :which-key "next end method")
-	"o" '(+evil/insert-newline-above :which-key "insert newline below")
-	)
+    :prefix "]"
+    :states '(normal visual motion)
+    "c" '(+evil/next-comment :which-key "next comment")
+    "e" '(next-error :which-key "next error")
+    "F" '(+evil/next-frame :which-key "next frame")
+    "h" '(outline-next-visible-heading :which-key "next heading")
+    "m" '(+evil/next-beginning-of-method :which-key "next method")
+    "M" '(+evil/next-end-of-method :which-key "next end method")
+    "o" '(+evil/insert-newline-above :which-key "insert newline below")
+    )
   (general-def
-	:prefix "gs"
-	:states '(normal visual motion)
-	"s" '(evil-avy-goto-char-2 :which-key "avy char 2")
-	"/" '(evil-avy-goto-char-timer :which-key "avy timer")
-	"SPC" '(evil-avy-goto-char-timer :which-key "avy timer")
-	)
+    :prefix "gs"
+    :states '(normal visual motion)
+    "s" '(evil-avy-goto-char-2 :which-key "avy char 2")
+    "/" '(evil-avy-goto-char-timer :which-key "avy timer")
+    "SPC" '(evil-avy-goto-char-timer :which-key "avy timer")
+    )
 
 
   ;; Insert keymaps
   ;; Many of these are emulating standard Emacs bindings in Evil insert mode, such as C-a, or C-e.
   (general-def
-	:states '(insert)
-	"C-a" 'evil-beginning-of-visual-line
-	"C-e" 'evil-end-of-visual-line
-	"C-S-a" 'evil-beginning-of-line
-	"C-S-e" 'evil-end-of-line
-	"C-n" 'evil-next-visual-line
-	"C-p" 'evil-previous-visual-line
-	)
+    :states '(insert)
+    "C-a" 'evil-beginning-of-visual-line
+    "C-e" 'evil-end-of-visual-line
+    "C-S-a" 'evil-beginning-of-line
+    "C-S-e" 'evil-end-of-line
+    "C-n" 'evil-next-visual-line
+    "C-p" 'evil-previous-visual-line
+    )
 
 
   (general-def
-	:states 'normal
-	:keymaps 'org-mode-map
-	"t" 'org-todo
-	"K" 'org-shiftup
+    :states 'normal
+    :keymaps 'org-mode-map
+    "t" 'org-todo
+    "K" 'org-shiftup
 
-	"J" 'org-shiftdown
-	"TAB" 'org-cycle
-	)
-
-  (general-def
-	:states 'insert
-	:keymaps 'org-mode-map
-	"C-o" 'evil-org-open-above)
+    "J" 'org-shiftdown
+    "TAB" 'org-cycle
+    )
 
   (general-def
-	:states '(normal insert emacs)
-	:keymaps 'org-mode-map
-	"M-[" 'org-metaleft
-	"M-]" 'org-metaright
-	"C-M-=" 'ap/org-count-words
-	"s-r" 'org-refile
-	"M-k" 'org-insert-link
-	)
+    :states 'insert
+    :keymaps 'org-mode-map
+    "C-o" 'evil-org-open-above)
+
+  (general-def
+    :states '(normal insert emacs)
+    :keymaps 'org-mode-map
+    "M-[" 'org-metaleft
+    "M-]" 'org-metaright
+    "C-M-=" 'ap/org-count-words
+    "s-r" 'org-refile
+    "M-k" 'org-insert-link
+    )
 
   ;; Org-src - when editing an org source block
   (general-def
-	:prefix ","
-	:states 'normal
-	:keymaps 'org-src-mode-map
-	"b" '(nil :which-key "org src")
-	"bc" 'org-edit-src-abort
-	"bb" 'org-edit-src-exit
-	)
+    :prefix ","
+    :states 'normal
+    :keymaps 'org-src-mode-map
+    "b" '(nil :which-key "org src")
+    "bc" 'org-edit-src-abort
+    "bb" 'org-edit-src-exit
+    )
 
   (general-define-key
-   :prefix ","
+   :prefix "SPC m"
    :states 'motion
    :keymaps '(org-mode-map) ;; Available in org mode, org agenda
    "" nil
@@ -2708,10 +2706,24 @@ Ported from doom emacs lookup module
    "ci" '(org-clock-in :which-key "clock in")
    "co" '(org-clock-out :which-key "clock out")
    "cj" '(org-clock-goto :which-key "jump to clock")
+
+   ;; org-transclusion
+   "l" '(nil :which-key "transclusion")
+   "ll" '(org-transclusion-mode :which-key "org-transclusion mode")
+   "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
+   "la" '(org-transclusion-add :which-key "org-transclusion add")
+  ;;TODO make this open with org-open-atpoint
+   "lo" '(org-transclusion-open-source :which-key "org-transclusion open source")
+   "lO" '(org-transclusion-move-to-source :which-key "org-transclusion move to source")
+   "ld" '(org-transclusion-detach :which-key "org-transclusion detach")
+   "le" '(org-transclusion-live-sync-start :which-key "org-transclusion live sync")
+   "lg" '(org-transclusion-refresh :which-key "org-transclusion refresh")
+   "lm" '(org-transclusion-make-from-link :which-key "org-transclusion make from link")
    )
 
 
   ;; Org-agenda
+  ;;TODO figure out a better key than , for these mappings
   (general-define-key
    :prefix ","
    :states 'motion
@@ -2736,7 +2748,7 @@ Ported from doom emacs lookup module
    )
 
   (evil-define-key 'motion org-agenda-mode-map
-	(kbd "f") 'org-agenda-later
-	(kbd "b") 'org-agenda-earlier)
+    (kbd "f") 'org-agenda-later
+    (kbd "b") 'org-agenda-earlier)
 
 #+end_src
