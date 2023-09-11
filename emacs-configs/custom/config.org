@@ -7,8 +7,7 @@
 * Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
   (setq gc-cons-percentage 0.6)
-  (setq native-comp-async-report-warnings-errors 'silent) ;; native-comp warning
-  (setq byte-compile-warnings '(not free-vars unresolved noruntime lexical make-local))
+  (setq native-comp-async-report-warnings-errors 'silent) ;; native-comp warning (setq byte-compile-warnings '(not free-vars unresolved noruntime lexical make-local))
 
   (setq idle-update-delay 1.0)
   ;; Disabling bidi (bidirectional editing stuff)
@@ -140,9 +139,6 @@
   ;;flyspell stuff
   (add-hook 'text-mode-hook 'flyspell-mode)
   (add-hook 'prog-mode-hook 'flyspell-prog-mode)
-  ;;bookmarks
-  (setq bookmark-default-file "~/emacs-configs/custom/bookmarks")
-  (bookmark-load bookmark-default-file t)
 
   (defmacro η (fnc)
 	"Return function that ignores its arguments and invokes FNC."
@@ -2046,10 +2042,7 @@ Ported from doom emacs lookup module
 #+end_src
 * Org-transclusion
 #+begin_src emacs-lisp
-  (use-package org-transclusion
-  :after org
-  :hook (org-mode . org-transclusion)
-  )
+  (use-package org-transclusion)
 #+end_src
 * Org-book
 #+begin_src emacs-lisp
@@ -2105,6 +2098,17 @@ Ported from doom emacs lookup module
 	(global-org-modern-mode)
 	)
 #+end_src
+* Org Special block extras
+#+begin_src emacs-lisp
+(use-package org-special-block-extras
+  :ensure t
+  :hook (org-mode . org-special-block-extras-mode)
+  ;; All relevant Lisp functions are prefixed ‘o-’; e.g., `o-docs-insert'.
+  :custom
+    (o-docs-libraries
+     '("~/org-special-block-extras/documentation.org")
+     "The places where I keep my ‘#+documentation’"))
+#+end_src
 * Org music
 #+begin_src emacs-lisp
   ;; Org-Music Mode
@@ -2115,6 +2119,31 @@ Ported from doom emacs lookup module
 			 org-music-file "~/org/Music.org"
 			 org-music-media-directory "~/Music/OrgMusic/"
 			 org-music-operating-system "linux")))
+#+end_src
+* Exporting to website
+Setting the pipeline for exporting the notes to the website dir
+#+begin_src emacs-lisp 
+  (setq website-notes-dir "~/website/static/notes")
+  (require 'ox-publish)
+  (setq org-publish-project-alist
+  	  `(
+  		("org-notes"
+  		 :base-directory "~/org/notes/roam-notes"
+  		 :base-extension "org"
+  		 :publishing-directory ,website-notes-dir
+  		 :recursive t
+  		 :publishing-function org-html-publish-to-html
+  		 :auto-preamble t
+  		 )
+  		("org-static"
+  		 :base-directory "~/org/"
+  		 :base-extension "css\\|js\\|png\\|jpg\\|gif\\|pdf\\|mp3\\|ogg\\|swf"
+  		 :publishing-directory ,website-notes-dir
+  		 :recursive t
+  		 :publishing-function org-publish-attachment
+  		 )
+  		("org" :components ("org-notes" "org-static"))
+  		))
 #+end_src
 * Crux
 #+begin_src emacs-lisp
@@ -2309,57 +2338,63 @@ Ported from doom emacs lookup module
 #+end_src
 * Mu4e
 #+begin_src emacs-lisp
- (use-package mu4e-alert)
+  (use-package mu4e-alert)
   (require 'mu4e)
   (setq mu4e-context-policy 'ask-if-none
-		mu4e-compose-context-policy 'always-ask)
+  	  mu4e-compose-context-policy 'always-ask)
   (let ((context (make-mu4e-context
-				  :name "Personal"
-				  :enter-func
-				  (lambda () (mu4e-message "Switched to Personal"))
-				  :leave-func
-				  (lambda () (progn (setq +mu4e-personal-addresses nil)
-									(mu4e-clear-caches)))
-				  :match-func
-				  (lambda (msg)
-					(when msg
-					  (string-prefix-p (format "/Personal" )
-									   (mu4e-message-field msg :maildir) t)))
-				  :vars
-				  '((mu4e-sent-folder       . "/gmail/[Gmail]/Sent Mail")
-					(mu4e-drafts-folder     . "/gmail/[Gmail]/Drafts")
-					(mu4e-trash-folder      . "/gmail/[Gmail]/Trash")
-					(mu4e-refile-folder     . "/gmail/[Gmail]/All Mail")
-					(user-mail-address     . "a3madkour@gmail.com")
-					(user-full-name     . "Abdelrahman Madkour")
-					(smtpmail-smtp-user     . "a3madkour@gmail.com"))
-				  )))
-	(add-to-list 'mu4e-contexts context))
+  				:name "Personal"
+  				:enter-func
+  				(lambda () (mu4e-message "Switched to Personal"))
+  				:leave-func
+  				(lambda () (progn (setq +mu4e-personal-addresses nil)
+  								  (mu4e-clear-caches)))
+  				:match-func
+  				(lambda (msg)
+  				  (when msg
+  					(string-prefix-p (format "/Personal" )
+  									 (mu4e-message-field msg :maildir) t)))
+  				:vars
+  				'((mu4e-sent-folder       . "/gmail/[Gmail]/Sent Mail")
+  				  (mu4e-drafts-folder     . "/gmail/[Gmail]/Drafts")
+  				  (mu4e-trash-folder      . "/gmail/[Gmail]/Trash")
+  				  (mu4e-refile-folder     . "/gmail/[Gmail]/All Mail")
+  				  (user-mail-address     . "a3madkour@gmail.com")
+  				  (user-full-name     . "Abdelrahman Madkour")
+  				  (smtpmail-smtp-server . "smtp.gmail.com")
+  				  (smtpmail-stream-type . starttls)
+  				  (smtpmail-smtp-service . 587)
+  				  (smtpmail-smtp-user     . "a3madkour@gmail.com"))
+  				)))
+    (add-to-list 'mu4e-contexts context))
   ;;(add-to-list 'mu4e-user-mail-address-list "a3madkour@gmail.com"))
 
 
   (let ((context (make-mu4e-context
-				  :name "Work"
-				  :enter-func
-				  (lambda () (mu4e-message "Switched to Work"))
-				  :leave-func
-				  (lambda () (progn (setq +mu4e-personal-addresses nil)
-									(mu4e-clear-caches)))
-				  :match-func
-				  (lambda (msg)
-					(when msg
-					  (string-prefix-p (format "/Work" )
-									   (mu4e-message-field msg :maildir) t)))
-				  :vars
-				  '((mu4e-sent-folder       . "/work/Sent")
-					(mu4e-drafts-folder     . "/work/Drafts")
-					(mu4e-trash-folder      . "/work/Trash")
-					(mu4e-refile-folder     . "/work/Archive")
-					(user-mail-address     . "madkour.a@northeastern.edu")
-					(user-full-name     . "Abdelrahman Madkour")
-					(smtpmail-smtp-user     . "madkour.a@northeastern.edu"))
-				  )))
-	(add-to-list 'mu4e-contexts context))
+  				:name "Work"
+  				:enter-func
+  				(lambda () (mu4e-message "Switched to Work"))
+  				:leave-func
+  				(lambda () (progn (setq +mu4e-personal-addresses nil)
+  								  (mu4e-clear-caches)))
+  				:match-func
+  				(lambda (msg)
+  				  (when msg
+  					(string-prefix-p (format "/Work" )
+  									 (mu4e-message-field msg :maildir) t)))
+  				:vars
+  				'((mu4e-sent-folder       . "/work/Sent")
+  				  (mu4e-drafts-folder     . "/work/Drafts")
+  				  (mu4e-trash-folder      . "/work/Trash")
+  				  (mu4e-refile-folder     . "/work/Archive")
+  				  (user-mail-address     . "madkour.a@northeastern.edu")
+  				  (user-full-name     . "Abdelrahman Madkour")
+  				  (smtpmail-smtp-server . "smtp.office365.com")
+  				  (smtpmail-stream-type . starttls)
+  				  (smtpmail-smtp-service . 1025)
+  				  (smtpmail-smtp-user     . "madkour.a@northeastern.edu"))
+  				)))
+    (add-to-list 'mu4e-contexts context))
   ;;(add-to-list 'mu4e-user-mail-address-list "a3madkour@gmail.com"))
 
   ;; ;; refresh mbsync every 10 minutes
@@ -2379,9 +2414,9 @@ Ported from doom emacs lookup module
   (setq mu4e-change-filenames-when-moving t)
   ;; Configure the function to use for sending mail
   (setq message-send-mail-function 'smtpmail-send-it)
-  (setq smtpmail-stream-type 'starttls)
-  (setq smtpmail-default-smtp-server "smtp.gmail.com")
-  (setq smtpmail-smtp-server "smtp.gmail.com")
+  ;; (setq smtpmail-stream-type 'starttls)
+  ;; (setq smtpmail-default-smtp-server "smtp.gmail.com")
+  ;; (setq smtpmail-smtp-server "smtp.gmail.com")
   (setq smtpmail-smtp-service 587)
   (setq smtpmail-debug-info t)
   ;; Display options
@@ -2796,9 +2831,10 @@ Ported from doom emacs lookup module
    "co" '(org-clock-out :which-key "clock out")
    "cj" '(org-clock-goto :which-key "jump to clock")
 
-   ;; org-transclusion
-   "l" '(nil :which-key "transclusion")
+   ;; link stuff
+   "l" '(nil :which-key "link stuff")
    "ll" '(org-transclusion-mode :which-key "org-transclusion mode")
+   "ls" '(org-store-link :which-key "org-store-link")
    "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
    "la" '(org-transclusion-add :which-key "org-transclusion add")
   ;;TODO make this open with org-open-atpoint
