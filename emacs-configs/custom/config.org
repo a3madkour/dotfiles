@@ -2653,6 +2653,18 @@ Setting the pipeline for exporting the notes to the website dir
    "ct" '+lookup/type-definition
    "cw" 'delete-trailing-whitespace
    "cm" 'consult-imenu
+
+
+   ;;langtools
+   "l" '(nil :which-key "Language Tool")
+   "lb" #'langtool-check
+   "lc" #'langtool-corrct-buffer
+   "lm" #'langtool-show-message-at-point
+   "ld" #'langtool-check-done
+   "ln" #'langtool-goto-next-eror
+   "lp" #'langtool-goto-previous-error
+
+
    ) ;; End SPC prefix block
 
   ;; All-mode keymaps
