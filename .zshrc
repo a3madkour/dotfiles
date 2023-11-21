@@ -10,10 +10,14 @@ source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 # source ~/Workspace/emsdk/emsdk_env.sh > /dev/null 2> /dev/null
 
-alias xppen="/usr/lib/pentablet/pentablet"
-alias enf="emacsclient -c"
-alias e="emacsclient"
+alias enf="emacsclient -c -a 'emacs'"
+alias e="emacsclient -a 'emacs'"
+alias xppen="/usr/lib/pentablet/PenTablet.sh"
 
+
+export GTK_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+export QT_IM_MODULE=ibus
 eval $(thefuck --alias)
 export PATH="$PATH:$HOME/miniconda3/bin"
 export PATH="$PATH:$HOME/emacs-configs/doom/bin"
@@ -22,26 +26,15 @@ export PATH="$PATH:$HOME/.cabal/bin"
 export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/gem/ruby/3.0.0/bin/"
+export PATH="$PATH:$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
+export PATH="$PATH:$HOME/bun/bin/"
 export EDITOR="emacsclient"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/a3madkour/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/home/a3madkour/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/a3madkour/miniconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/home/a3madkour/miniconda3/bin:$PATH"
-    fi
-fi
-unset __conda_setup
-# <<< conda initialize <<<
+
 HISTFILE=~/.histfile
 HISTSIZE=1000
 SAVEHIST=1000
@@ -89,3 +82,26 @@ say() {
 #if [ -z "${DISPLAY}" ] && [ "${XDG_VTNR}" -eq 1 ]; then
 # exec startx
 #fi
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/home/a3madkour/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/home/a3madkour/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/home/a3madkour/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/home/a3madkour/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+
+# bun completions
+[ -s "/Stuff/a3madkour/.bun/_bun" ] && source "/Stuff/a3madkour/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

@@ -1228,7 +1228,18 @@ must be non-read-only, empty, and there must be a rule in
 #+end_src
 * Projectile
 #+begin_src emacs-lisp
-  (use-package projectile)
+  (use-package projectile
+  :ensure t  ; I have `use-package-always-ensure'
+  :defer t   ; I have `use-package-always-defer'
+  :hook
+  (after-init . projectile-global-mode)
+  :init
+  (setq-default
+   projectile-cache-file (expand-file-name ".projectile-cache" user-emacs-directory)
+   projectile-known-projects-file (expand-file-name ".projectile-bookmarks" user-emacs-directory))
+  :custom
+  (projectile-enable-caching t)
+  (projectile-track-known-projects-automatically nil))
 #+end_src
 * Flyspell
 #+begin_src emacs-lisp
@@ -1765,7 +1776,8 @@ Run agda-mode setup first
 	(add-hook 'LaTeX-mode-hook #'evil-tex-mode))
 
   (use-package cdlatex
-	:hook (org-mode . org-cdlatex-mode))
+	:hook (org-mode . org-cdlatex-mode)
+	:hook (tex-mode . cdlatex-mode))
 
   (use-package company-auctex)
   (use-package company-reftex)
@@ -2067,36 +2079,36 @@ Ported from doom emacs lookup module
 #+end_src
 * Org modern
 #+begin_src emacs-lisp
-  (use-package org-modern
-	:hook
-	(org-mode . org-modern-mode)
-	(org-agenda-finalize org-modern-agenda)
-	:config
-	(setq
-	 ;; Edit settings
-	 org-auto-align-tags nil
-	 org-tags-column 0
-	 org-catch-invisible-edits 'show-and-error
-	 org-special-ctrl-a/e t
-	 org-insert-heading-respect-content t
+  ;; (use-package org-modern
+  ;; 	:hook
+  ;; 	(org-mode . org-modern-mode)
+  ;; 	(org-agenda-finalize org-modern-agenda)
+  ;; 	:config
+  ;; 	(setq
+  ;; 	 ;; Edit settings
+  ;; 	 org-auto-align-tags nil
+  ;; 	 ;; org-tags-column 0
+  ;; 	 org-catch-invisible-edits 'show-and-error
+  ;; 	 org-special-ctrl-a/e t
+  ;; 	 org-insert-heading-respect-content t
 
-	 ;; Org styling, hide markup etc.
-	 org-hide-emphasis-markers t
-	 org-pretty-entities t
-	 org-ellipsis "…"
+  ;; 	 ;; Org styling, hide markup etc.
+  ;; 	 ;; org-hide-emphasis-markers t
+  ;; 	 org-pretty-entities t
+  ;; 	 org-ellipsis "…"
 
-	 ;; Agenda styling
-	 org-agenda-tags-column 0
-	 org-agenda-block-separator ?─
-	 org-agenda-time-grid
-	 '((daily today require-timed)
-	   (800 1000 1200 1400 1600 1800 2000)
-	   " ┄┄┄┄┄ " "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
-	 org-agenda-current-time-string
-	 "⭠ now ─────────────────────────────────────────────────")
+  ;; 	 ;; Agenda styling
+  ;; 	 org-agenda-tags-column 0
+  ;; 	 org-agenda-block-separator ?─
+  ;; 	 org-agenda-time-grid
+  ;; 	 '((daily today require-timed)
+  ;; 	   (800 1000 1200 1400 1600 1800 2000)
+  ;; 	   " ┄┄┄┄┄ " "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+  ;; 	 org-agenda-current-time-string
+  ;; 	 "⭠ now ─────────────────────────────────────────────────")
 
-	(global-org-modern-mode)
-	)
+  ;; 	(global-org-modern-mode)
+  ;; 	)
 #+end_src
 * Org Special block extras
 #+begin_src emacs-lisp
