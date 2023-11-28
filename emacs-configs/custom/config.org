@@ -1654,7 +1654,12 @@ Highlight the diffs of the past commit in a file
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
-  (use-package gdscript-mode)
+  (use-package gdscript-mode
+	:hook (gdscript-mode . eglot-ensure)
+	:custom (gdscript-eglot-version 3)
+	:config
+	(setq treesit-extra-load-path '("~/emacs-configs/custom/tree-sitter-gdscript/src/"))
+	)
 #+end_src
 ** Haskell
 #+begin_src emacs-lisp
@@ -1916,7 +1921,7 @@ Ported from doom emacs lookup module
 	  (let ((org-insert-heading-respect-content t))
 		(org-insert-todo-subheading t)))
 
-  (defun a3madkour/add-new-org-datetree-headline (selected_date)
+  (defun a3madkour/add-new-org-datetree-headline (selected-date)
 	(save-excursion
 	  (let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
 			 (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
