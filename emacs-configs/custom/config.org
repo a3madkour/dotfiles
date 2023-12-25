@@ -82,12 +82,13 @@
    org-roam-dailies-directory "~/org/ResearchJournal"
    org-roam-directory org-roam-dir
    )
+
   ;;dailies template
   (setq org-roam-dailies-capture-templates
-		'(("d" "default" entry
-		   "* %?"
-		   :target (file+head "%<%Y-%m-%d>.org"
-							  "#+title: %<%Y-%m-%d>\n"))))
+        '(("d" "default" entry
+       	 "* %?"
+       	 :target (file+head "%<%Y-%m-%d>.org"
+       						"#+title: %<%Y-%m-%d>\n"))))
   ;; Confirm to quit
   (setq confirm-kill-emacs 'yes-or-no-p)
 
@@ -96,7 +97,7 @@
   (setq initial-major-mode 'org-mode)
 
   ;;set default font size
-  (set-face-attribute 'default nil :height 130)
+  (set-face-attribute 'default nil :height 200)
   ;; WINDOW -----------
 
   ;; Don't resize the frames in steps; it looks weird, especially in tiling window
@@ -141,9 +142,9 @@
   (add-hook 'prog-mode-hook 'flyspell-prog-mode)
 
   (defmacro η (fnc)
-	"Return function that ignores its arguments and invokes FNC."
-	`(lambda (&rest _rest)
-	   (funcall ,fnc)))
+    "Return function that ignores its arguments and invokes FNC."
+    `(lambda (&rest _rest)
+       (funcall ,fnc)))
   (advice-add 'org-deadline       :after (η #'org-save-all-org-buffers))
   (advice-add 'org-schedule       :after (η #'org-save-all-org-buffers))
   (advice-add 'org-store-log-note :after (η #'org-save-all-org-buffers))
@@ -152,98 +153,99 @@
 * Evil
 #+begin_src emacs-lisp
   (use-package evil
-	:init
-	;; (setq evil-want-keybinding t)
-	;; (setq evil-want-fine-undo t)
-	;; (setq evil-want-keybinding nil)
-	;; (setq evil-want-Y-yank-to-eol t)
-	(setq evil-want-integration t) ;; This is optional since it's already set to t by default.
-	(setq evil-want-keybinding nil)
-	:config
+  	:init
+  	;; (setq evil-want-keybinding t)
+  	;; (setq evil-want-fine-undo t)
+  	;; (setq evil-want-keybinding nil)
+  	;; (setq evil-want-Y-yank-to-eol t)
+  	(setq evil-want-integration t) ;; This is optional since it's already set to t by default.
+  	(setq evil-want-keybinding nil)
+  
+  	:config
 
-	(evil-set-initial-state 'dashboard-mode 'motion)
-	(evil-set-initial-state 'debugger-mode 'motion)
-	(evil-set-initial-state 'pdf-view-mode 'motion)
-	(evil-set-initial-state 'inferior-python-mode 'emacs)
-	(evil-set-initial-state 'term-mode 'emacs)
+  	(evil-set-initial-state 'dashboard-mode 'motion)
+  	(evil-set-initial-state 'debugger-mode 'motion)
+  	(evil-set-initial-state 'pdf-view-mode 'motion)
+  	(evil-set-initial-state 'inferior-python-mode 'emacs)
+  	(evil-set-initial-state 'term-mode 'emacs)
 
-	;; ----- Keybindings
-	;; I tried using evil-define-key for these. Didn't work.
-	;; (define-key evil-motion-state-map "/" 'swiper)
-	(define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
-	(define-key evil-window-map "\C-w" 'kill-this-buffer)
-	(define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
+  	;; ----- Keybindings
+  	;; I tried using evil-define-key for these. Didn't work.
+  	;; (define-key evil-motion-state-map "/" 'swiper)
+  	(define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
+  	(define-key evil-window-map "\C-w" 'kill-this-buffer)
+  	(define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
 
-	(evil-mode 1))
+  	(evil-mode 1))
 
 
   (use-package evil-goggles
-	:ensure t
-	:config
-	(evil-goggles-mode)
-	)
+  	:ensure t
+  	:config
+  	(evil-goggles-mode)
+  	)
   ;;other evil packages
   (use-package evil-nerd-commenter
-	:after evil
-	)
+  	:after evil
+  	)
   (use-package evil-surround
-	:after evil
-	:defer 2
-	:config
-	(global-evil-surround-mode 1))
+  	:after evil
+  	:defer 2
+  	:config
+  	(global-evil-surround-mode 1))
 
   (use-package evil-collection
-	:after evil
-	:ensure t
-	:config
-	(evil-collection-init))
+  	:after evil
+  	:ensure t
+  	:config
+  	(evil-collection-init))
 
   (use-package evil-easymotion
-	:config
-	(setq avy-background t))
- 
+  	:config
+  	(setq avy-background t))
+
   (use-package evil-args)
   (use-package evil-visualstar)
   (use-package evil-quick-diff
-	:straight (evil-quick-diff
-			   :type git
-			   :host github
-			   :repo "rgrinberg/evil-quick-diff"
-			   )
-	:init
-	(setq evil-quick-diff-key (kbd "zx"))
-	(evil-quick-diff-install))
+  	:straight (evil-quick-diff
+  			   :type git
+  			   :host github
+  			   :repo "rgrinberg/evil-quick-diff"
+  			   )
+  	:init
+  	(setq evil-quick-diff-key (kbd "zx"))
+  	(evil-quick-diff-install))
   (use-package exato :ensure t)
   (use-package evil-vimish-fold)
   (use-package evil-escape)
   (use-package evil-numbers)
   (use-package evil-exchange)
   (use-package evil-lion
-	:ensure t
-	:config
-	(evil-lion-mode))
+  	:ensure t
+  	:config
+  	(evil-lion-mode))
   (use-package evil-indent-plus)
   (use-package evil-embrace)
   (use-package evil-snipe
-	:diminish evil-snipe-mode
-	:diminish evil-snipe-local-mode
-	:after evil
-	:config
-	(evil-snipe-mode +1))
+  	:diminish evil-snipe-mode
+  	:diminish evil-snipe-local-mode
+  	:after evil
+  	:config
+  	(evil-snipe-mode +1))
   (use-package evil-org
-	:diminish evil-org-mode
-	:after org
-	:config
-	(add-hook 'org-mode-hook 'evil-org-mode)
-	(add-hook 'evil-org-mode-hook
-			  (lambda () (evil-org-set-key-theme))))
+  	:diminish evil-org-mode
+  	:after org
+  	:config
+  	(add-hook 'org-mode-hook 'evil-org-mode)
+  	(add-hook 'evil-org-mode-hook
+  			  (lambda () (evil-org-set-key-theme))))
 
   (require 'evil-org-agenda)
   (setq org-modules '(org-habit))
   (setq org-habit-graph-column 110)
   (evil-org-agenda-set-keys)
   (eval-after-load 'org
-	'(org-load-modules-maybe t))
+  	'(org-load-modules-maybe t))
   (use-package evil-anzu :defer t)
 #+end_src
 ** Unimpared
@@ -2023,6 +2025,39 @@ Ported from doom emacs lookup module
 		)
   )
 #+end_src
+
+* Org-Babel
+** Ob-ipython
+#+begin_src emacs-lisp 
+;; (use-package ob-ipython)
+#+end_src
+
+** Ob-http
+#+begin_src emacs-lisp 
+(use-package ob-http)
+#+end_src
+
+
+** Final Setup
+#+begin_src emacs-lisp
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((python . t)
+     (emacs-lisp . t)
+     (awk . t)
+     (calc . t)
+     (haskell . t)
+     (latex . t)
+     ;;(ledger . t)
+     (gnuplot . t)
+     (C . t)
+     (js . t)
+     (http . t)
+     (shell . t)
+ ;;    (ipython .t)
+     ))
+#+end_src
+
 * Org-ql
 #+begin_src emacs-lisp
   (use-package org-ql
@@ -2137,6 +2172,7 @@ Ported from doom emacs lookup module
 			 org-music-media-directory "~/Music/OrgMusic/"
 			 org-music-operating-system "linux")))
 #+end_src
+
 * Exporting to website
 Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp 
@@ -2866,7 +2902,7 @@ Setting the pipeline for exporting the notes to the website dir
    "ls" '(org-store-link :which-key "org-store-link")
    "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
    "la" '(org-transclusion-add :which-key "org-transclusion add")
-  ;;TODO make this open with org-open-atpoint
+   ;;TODO make this open with org-open-atpoint
    "lo" '(org-transclusion-open-source :which-key "org-transclusion open source")
    "lO" '(org-transclusion-move-to-source :which-key "org-transclusion move to source")
    "ld" '(org-transclusion-detach :which-key "org-transclusion detach")
