@@ -52,6 +52,8 @@ fi
 xscreensaver &
 autorandr &
 ~/.config/polybar/launch.sh &
+emacs --daemon&
 sleep 4.0;
 exec xmonad
 exec xmonad --restart
+exec fcitx5

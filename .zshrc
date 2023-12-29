@@ -10,8 +10,8 @@ source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 # source ~/Workspace/emsdk/emsdk_env.sh > /dev/null 2> /dev/null
 
-alias enf="emacsclient -c -a 'emacs'"
-alias e="emacsclient -a 'emacs'"
+alias enf="emacsclient -c"
+alias e="emacsclient -r"
 alias xppen="/usr/lib/pentablet/PenTablet.sh"
 
 

@@ -79,7 +79,7 @@
    org-cite-default-bibliography (list zot-bib)
    org-cite-csl-styles-dir "~/Zotero/styles"
    org-cite-global-bibliography (list zot-bib)
-   org-roam-dailies-directory "~/org/ResearchJournal"
+   org-roam-dailies-directory "~/org/fleeting-notes"
    org-roam-directory org-roam-dir
    )
 
@@ -1318,11 +1318,11 @@ Highlight the diffs of the past commit in a file
 * EMMS
 #+begin_src emacs-lisp
   (use-package emms
-	:config
-	(emms-all)
-	(setq emms-source-file-default-directory '"~/Music")
-	(emms-default-players)
-	)
+  	:config
+  	(emms-all)
+  	(setq emms-source-file-default-directory '"~/Music/")
+  	(emms-default-players)
+  	)
 #+end_src
 * Deft
 #+begin_src emacs-lisp
@@ -2072,7 +2072,10 @@ Ported from doom emacs lookup module
 #+end_src
 * Org roam
 #+begin_src emacs-lisp
-  (use-package org-roam)
+  (use-package org-roam
+    :config
+    (org-roam-db-autosync-mode)
+    )
 #+end_src
 * Org noter
 #+begin_src emacs-lisp
@@ -2568,6 +2571,12 @@ Setting the pipeline for exporting the notes to the website dir
    "fS" '(evil-write-all :which-key "save all buffers")
 
    ;; Help/emacs
+   "e" '(nil :which-key "emms")
+   "ee" '(emms :which-key "emms launch")
+   "ep" '(emms-pause :which-key "emms pause")
+   "ef" '(emms-play-find :which-key "emms play find")
+
+   ;; Help/emacs
    "h" '(nil :which-key "help/emacs")
 
    "hv" '(describe-variable :which-key "des. variable")
@@ -2619,14 +2628,14 @@ Setting the pipeline for exporting the notes to the website dir
    "r" '(nil :which-key "org-roam")
    "rD" #'org-roam-demote-entire-buffer
    "rf" #'org-roam-node-find
-   "rF" #'org-roam-ref-find
+   "rr" #'org-roam-ref-find
    "rg" #'org-roam-graph
    "ri" #'org-roam-node-insert
    "rI" #'org-id-get-create
    "rm" #'org-roam-buffer-toggle
    "rM" #'org-roam-buffer-display-dedicated
    "rn" #'org-roam-capture
-   "rr" #'org-roam-refile
+   "rF" #'org-roam-refile
    "rR" #'org-roam-link-replace-all
    "rd" '(nil :which-key "by date")
    "rdb" '(org-roam-dailies-goto-previous-note :which-key "Goto previous note")
@@ -2847,6 +2856,14 @@ Setting the pipeline for exporting the notes to the website dir
     )
 
   (general-define-key
+   :prefix "SPC i"
+   :states 'motion
+   :keymaps '(org-mode-map) ;; Available in org mode, org agenda
+   "" nil
+   "l" '(org-insert-link :which-key "org-insert-link") 
+   )
+
+  (general-define-key
    :prefix "SPC m"
    :states 'motion
    :keymaps '(org-mode-map) ;; Available in org mode, org agenda
@@ -2940,5 +2957,21 @@ Setting the pipeline for exporting the notes to the website dir
   (evil-define-key 'motion org-agenda-mode-map
     (kbd "f") 'org-agenda-later
     (kbd "b") 'org-agenda-earlier)
+
+
+  (general-define-key
+   :prefix "SPC e"
+   :states 'motion
+   :keymaps '(emms-playlist-mode-map) ;; Available in org mode, org agenda
+   "" nil
+   "l" '(emms-toggle-repeat-playlist :which-key "emms-toggle-repeat-playlist")
+   "p" '(emms-insert-playlist :which-key "emms-insert-playlist")
+   "i" '(emms-insert-file :which-key "'emms-insert-file")
+   "t" '(emms-toggle-repeat-track :which-key "emms-toggle-repeat-track")
+   "s" '(emms-playlist-save :which-key "emms-playlist-save")
+   "m" '(emms-shuffle :which-key "emms-shuffle")
+   )
+
+  ;; Help/emacs
 
 #+end_src
