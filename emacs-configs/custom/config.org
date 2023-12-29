@@ -1798,6 +1798,10 @@ Run agda-mode setup first
 	(auctex-latexmk-setup)
 	)
 #+end_src
+** Lua
+#+begin_src emacs-lisp
+(use-package lua-mode)
+#+end_src
 ** Web
 #+begin_src emacs-lisp
   (use-package emmet-mode
@@ -2057,7 +2061,6 @@ Ported from doom emacs lookup module
  ;;    (ipython .t)
      ))
 #+end_src
-
 * Org-ql
 #+begin_src emacs-lisp
   (use-package org-ql
