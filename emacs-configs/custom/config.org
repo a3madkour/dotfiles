@@ -4,6 +4,7 @@
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
 :END:
+* TODO Go through the config and cite all the sources of information
 * Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
   (setq gc-cons-percentage 0.6)
@@ -499,6 +500,14 @@ Adapted from doom emacs textobjects.el
 			 ("‘" . "’")
 			 ("“" . "”"))))
 	  (evil-textobj-anyblock--make-textobj beg end type count t)))
+#+end_src
+** Evil-replace-with-register
+#+begin_src emacs-lisp
+  (use-package evil-replace-with-register
+  :config
+  (require 'evil-replace-with-register)
+  (evil-replace-with-register-install)
+  )
 #+end_src
 * Vterm
 #+begin_src emacs-lisp
@@ -1377,47 +1386,50 @@ Highlight the diffs of the past commit in a file
 * PDF-Tools
 #+begin_src emacs-lisp
   (use-package pdf-tools
-	:defer t
-	:mode  ("\\.pdf\\'" . pdf-view-mode)
-	:hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
-	:config
-	(pdf-loader-install)
-	(push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
-	(setq pdf-view-use-scaling t
-		  pdf-view-use-imagemagick nil)
+    :defer t
+    :mode  ("\\.pdf\\'" . pdf-view-mode)
+    :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
+    :config
+    (pdf-loader-install)
+    (push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
+    (setq pdf-view-use-scaling t
+  		pdf-view-use-imagemagick nil)
 
-	;; (setq-default pdf-view-display-size 'fit-height)
-	;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
-	(setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
-	:general
-	(general-define-key :states 'motion :keymaps 'pdf-view-mode-map
-						"j" 'pdf-view-next-page
-						"k" 'pdf-view-previous-page
+    ;; (setq-default pdf-view-display-size 'fit-height)
+    ;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
+    (setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
+    :general
+    (general-define-key :states 'motion :keymaps 'pdf-view-mode-map
+  					  "j" 'pdf-view-next-page
+  					  "k" 'pdf-view-previous-page
 
-						"C-j" 'pdf-view-next-line-or-next-page
-						"C-k" 'pdf-view-previous-line-or-previous-page
+    					  "C-j" 'pdf-view-next-line-or-next-page
+    					  "C-k" 'pdf-view-previous-line-or-previous-page
 
-						;; Arrows for movement as well
-						(kbd "<down>") 'pdf-view-next-line-or-next-page
-						(kbd "<up>") 'pdf-view-previous-line-or-previous-page
+    					  ;; Arrows for movement as well
+    					  (kbd "<down>") 'pdf-view-next-line-or-next-page
+    					  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
 
-						(kbd "<down>") 'pdf-view-next-line-or-next-page
-						(kbd "<up>") 'pdf-view-previous-line-or-previous-page
+    					  (kbd "<down>") 'pdf-view-next-line-or-next-page
+    					  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
 
-						(kbd "<left>") 'image-backward-hscroll
-						(kbd "<right>") 'image-forward-hscroll
+    					  (kbd "<left>") 'image-backward-hscroll
+    					  (kbd "<right>") 'image-forward-hscroll
 
-						"H" 'pdf-view-fit-height-to-window
-						"0" 'pdf-view-fit-height-to-window
-						"W" 'pdf-view-fit-width-to-window
-						"=" 'pdf-view-enlarge
-						"-" 'pdf-view-shrink
+    					  "H" 'pdf-view-fit-height-to-window
+    					  "0" 'pdf-view-fit-height-to-window
+    					  "W" 'pdf-view-fit-width-to-window
+    					  "=" 'pdf-view-enlarge
+    					  "-" 'pdf-view-shrink
 
-						"Q" 'quit-window
-						"q" 'kill-this-buffer
-						"g" 'revert-buffer
-						)
-	)
+    					  "Q" 'quit-window
+    					  "q" 'kill-this-buffer
+  					  "g" 'revert-buffer
+
+    					  )
+
+
+    )
 #+end_src
 * Popper
 #+begin_src emacs-lisp
@@ -1862,172 +1874,241 @@ Run agda-mode setup first
 #+end_src
 * Lookup
 Ported from doom emacs lookup module
+* Citar
+#+begin_src emacs-lisp
+  (defun citar-org-format-note-madkour (key entry)
+	"Format a note from KEY and ENTRY."
+	(let* ((template (citar--get-template 'note))
+		   (note-meta (when template
+						(citar-format--entry template entry)))
+		   (template-path (citar--get-template 'note-file))
+		   (note-path (when template-path
+						(citar-format--entry template-path entry)))
+		   (note-tags (cdr (citar-get-field-with-value '("keywords") key)))
+		   (filepath (expand-file-name
+					  (concat key ".org")
+					  (car citar-notes-paths)))
+		   (buffer (find-file filepath)))
+	  (with-current-buffer buffer
+		;; This just overrides other template insertion.
+		(erase-buffer)
+		(citar-org-roam-make-preamble key)
+		(insert "#+title: ")
+		(when template (insert note-meta))
+		(insert "\n#+filetags::")
+		(insert note-tags)
+		(insert "\n* Notes\n:PROPERTIES:\n:NOTER_DOCUMENT: ")
+		(when template-path (insert note-path))
+		(insert "\n:END:\n")
+		(insert "\n\n|\n\n#+print_bibliography:")
+		(search-backward "|")
+		(delete-char 1)
+		(when (fboundp 'evil-insert)
+		  (evil-insert 1)))))
+
+
+  (use-package citar
+	:no-require
+	:custom
+	(citar-templates
+	 '((main . "${author editor:30}     ${date year issued:4}     ${title:48}")
+	   (suffix . "          ${=key= id:15}    ${=type=:12}    ${tags keywords:*}")
+	   (preview . "${author editor} (${year issued date}) ${title}, ${journal journaltitle publisher container-title collection-title}.\n")
+	   (note . "Notes on ${author editor}, ${title}")
+	   (note-file . "${file}")))
+	(org-cite-global-bibliography (list zot-bib))
+	(org-cite-insert-processor 'citar)
+	(org-cite-follow-processor 'citar)
+	(citar-note-format-function 'citar-org-format-note-madkour)
+	(org-cite-activate-processor 'citar)
+	(citar-bibliography org-cite-global-bibliography)
+	(citar-notes-paths (list org-ref-notes))
+	;; optional: org-cite-insert is also bound to C-c C-x C-@
+	:bind
+	(:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
+
+  (use-package citar-embark
+	:after citar embark
+	:no-require
+	:config (citar-embark-mode))
+  (setq citar-at-point-function 'embark-act)
+
+#+end_src
 * Org-Mode
 #+begin_src emacs-lisp
   (defun a3madkour/clear-latex-temp-files ()
-	(shell-command "rm -rf *.tex *.prv preview.fmt"))
+    (shell-command "rm -rf *.tex *.prv preview.fmt"))
+
+  (defun a3madkour/org-noter-insert-subheading-note()
+    (interactive)
+    (org-noter-insert-note)
+    (org-insert-subheading t)
+    (let* ((location (org-noter--doc-approx-location (or nil 'interactive) (gv-ref force-new))))
+      (org-entry-put nil org-noter-property-note-location (org-noter--pretty-print-location location))
+  	)
+    )
 
   (defun a3madkour/export-to-latex-on-save (filename)
-	(when (string= (buffer-name) filename)
-	  ;; (org-open-file (org-latex-export-to-pdf))
-	  (org-latex-export-to-pdf)
-	  (a3madkour/clear-latex-temp-files)))
+    (when (string= (buffer-name) filename)
+  	;; (org-open-file (org-latex-export-to-pdf))
+  	(org-latex-export-to-pdf)
+  	(a3madkour/clear-latex-temp-files)))
 
   (defun a3madkour/export-to-latex-on-save-and-open (filename)
-	(when (string= (buffer-name) filename)
-	  (org-open-file (org-latex-export-to-pdf))
-	  (a3madkour/clear-latex-temp-files)))
+    (when (string= (buffer-name) filename)
+  	(org-open-file (org-latex-export-to-pdf))
+  	(a3madkour/clear-latex-temp-files)))
 
 
   (defun a3madkour/org-font-setup ()
-	;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
-	(set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
-	;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
-	;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
-	(set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
-	(set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
-	(set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
+    ;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
+    (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
+    ;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
+    ;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
+    (set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
+    (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
+    (set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
 
-	;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
-	;; (dolist (face '(org-list-dt org-tag org-todo org-table org-checkbox org-priority org-date org-verbatim org-special-keyword))
-	;;   (set-face-attribute `,face nil :inherit 'fixed-pitch))
+    ;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
+    ;; (dolist (face '(org-list-dt org-tag org-todo org-table org-checkbox org-priority org-date org-verbatim org-special-keyword))
+    ;;   (set-face-attribute `,face nil :inherit 'fixed-pitch))
 
-	;; (dolist (face '(org-code org-verbatim org-meta-line))
-	;;   (set-face-attribute `,face nil :inherit 'shadow :inherit 'fixed-pitch))
-	)
+    ;; (dolist (face '(org-code org-verbatim org-meta-line))
+    ;;   (set-face-attribute `,face nil :inherit 'shadow :inherit 'fixed-pitch))
+    )
   (use-package org
-	:hook (org-mode . a3madkour/org-font-setup)
-	:hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
-	:hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
-	:diminish org-indent-mode
-	:diminish visual-line-mode
-	:config
-	(require 'org-tempo)
-	(add-to-list 'org-structure-template-alist '("sh" . "src sh"))
-	(add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
-	(add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
-	(add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
-	(add-to-list 'org-structure-template-alist '("py" . "src python"))
-	(add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
-	(add-to-list 'org-structure-template-alist '("json" . "src json"))
-	;;figure out how to get to the category and see if it is a habit beeing added or a task
-	(defun a3madkour/org-set-effort ()
-	  (org-set-effort)
-	  ())
+    :hook (org-mode . a3madkour/org-font-setup)
+    :hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
+    :hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
+    :diminish org-indent-mode
+    :diminish visual-line-mode
+    :config
+    (require 'org-tempo)
+    (add-to-list 'org-structure-template-alist '("sh" . "src sh"))
+    (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
+    (add-to-list 'org-structure-template-alist '("sc" . "src scheme"))
+    (add-to-list 'org-structure-template-alist '("ts" . "src typescript"))
+    (add-to-list 'org-structure-template-alist '("py" . "src python"))
+    (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
+    (add-to-list 'org-structure-template-alist '("json" . "src json"))
+    ;;figure out how to get to the category and see if it is a habit beeing added or a task
+    (defun a3madkour/org-set-effort ()
+  	(org-set-effort)
+  	())
 
-	(defun a3madkour/add-scheduled-todo ()
-	  (interactive)
-	  (let ((selected-date (org-read-date)))
-		(org-insert-todo-heading-respect-content nil)
-		(call-interactively 'org-set-effort)
-		(org-schedule nil selected-date)))
+    (defun a3madkour/add-scheduled-todo ()
+  	(interactive)
+  	(let ((selected-date (org-read-date)))
+  	  (org-insert-todo-heading-respect-content nil)
+  	  (call-interactively 'org-set-effort)
+  	  (org-schedule nil selected-date)))
 
-	(defun a3madkour/org-insert-subheading-respect-content (&optional)
-	  (interactive)
-	  (let ((org-insert-heading-respect-content t))
-		(org-insert-todo-subheading t)))
+    (defun a3madkour/org-insert-subheading-respect-content (&optional)
+  	(interactive)
+  	(let ((org-insert-heading-respect-content t))
+  	  (org-insert-todo-subheading t)))
 
-  (defun a3madkour/add-new-org-datetree-headline (selected-date)
-	(save-excursion
-	  (let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
-			 (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
-		(org-datetree-find-date-create new-date)
-		(nth 4 (org-heading-components)))))
+    (defun a3madkour/add-new-org-datetree-headline (selected-date)
+  	(save-excursion
+  	  (let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
+  			 (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
+  		(org-datetree-find-date-create new-date)
+  		(nth 4 (org-heading-components)))))
 
-  (defun a3madkour/add-scheduled-headline-todo ()
-	(interactive)
-	(let* ((selected-date (org-read-date))
-		   (headline (a3madkour/add-new-org-datetree-headline selected-date))
-		   (new_pos (org-find-exact-headline-in-buffer headline)))
-	  (goto-char (+ 1 new_pos))
-	  (a3madkour/org-insert-subheading-respect-content )
-	  (call-interactively 'org-set-effort)
-	  (org-schedule nil selected-date)
-	  ))
+    (defun a3madkour/add-scheduled-headline-todo ()
+  	(interactive)
+  	(let* ((selected-date (org-read-date))
+  		   (headline (a3madkour/add-new-org-datetree-headline selected-date))
+  		   (new_pos (org-find-exact-headline-in-buffer headline)))
+  	  (goto-char (+ 1 new_pos))
+  	  (a3madkour/org-insert-subheading-respect-content )
+  	  (call-interactively 'org-set-effort)
+  	  (org-schedule nil selected-date)
+  	  ))
 
 
-  (defun a3madkour/refile-to (file headline selected-date)
-	"Move current headline to specified location"
-	(let ((pos (save-excursion
-				 (find-file file)
-				 (let ((new_pos (org-find-exact-headline-in-buffer headline)))
-				   (org-schedule nil selected-date)
-				   new_pos)
-				 )))
-	  (org-refile nil nil (list headline file nil pos))))
+    (defun a3madkour/refile-to (file headline selected-date)
+  	"Move current headline to specified location"
+  	(let ((pos (save-excursion
+  				 (find-file file)
+  				 (let ((new_pos (org-find-exact-headline-in-buffer headline)))
+  				   (org-schedule nil selected-date)
+  				   new_pos)
+  				 )))
+  	  (org-refile nil nil (list headline file nil pos))))
 
-  (defun a3madkour/refile-and-schedule ()
-	(interactive)
-	(let ((selected-date (org-read-date)))
-	  (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
+    (defun a3madkour/refile-and-schedule ()
+  	(interactive)
+  	(let ((selected-date (org-read-date)))
+  	  (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
 
-  (defun a3madkour/file-with-current-date (path)
-	(expand-file-name (format "%s.org"
-							  (format-time-string "%Y-%m-%d")) path))
+    (defun a3madkour/file-with-current-date (path)
+  	(expand-file-name (format "%s.org"
+  							  (format-time-string "%Y-%m-%d")) path))
 
-  ;;agenda dir
-  (setq org-agenda-files '("~/org/CS" "~/org/Academic" "~/org/Artistic" "~/org/Health" "~/org/Intellectual"))
+    ;;agenda dir
+    (setq org-agenda-files '("~/org/CS" "~/org/Academic" "~/org/Artistic" "~/org/Health" "~/org/Intellectual"))
 
-  (setq org-capture-templates
-		'(("c" "CS")
-		  ("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("ch" "Habit" entry (file "~/org/CS/habits.org")
-		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+    (setq org-capture-templates
+  		'(("c" "CS")
+  		  ("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("ch" "Habit" entry (file "~/org/CS/habits.org")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-		  ("a" "Academic")
-		  ("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("a" "Academic")
+  		  ("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
 
-		  ("ah" "Habit" entry (file "~/org/Academic/habits.org")
-		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  		  ("ah" "Habit" entry (file "~/org/Academic/habits.org")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-		  ("r" "Artistic")
-		  ("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("rh" "Habit" entry (file "~/org/Artistic/habits.org")
-		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  		  ("r" "Artistic")
+  		  ("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("rh" "Habit" entry (file "~/org/Artistic/habits.org")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-		  ("h" "Health")
-		  ("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("hh" "Habit" entry (file "~/org/Health/habits.org")
-		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  		  ("h" "Health")
+  		  ("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("hh" "Habit" entry (file "~/org/Health/habits.org")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-		  ("i" "Intellectual")
-		  ("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
-		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
-		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
-		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  		  ("i" "Intellectual")
+  		  ("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-		  ("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
-		   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
+  		  ("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
+  		   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
 
-		  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
-		   "* %?\n")
-		  ("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
-		   "* %?\n")
-		  ("a" "App idea" entry (file+headline "~/org/ideas.org" "App")
-		   "* %?\n")
-		  ("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
-		   "* %?\n")
-		  ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
-		   "* %?\n")
-		  ("f" "Fleeting note" entry (file (lambda () (a3madkour/file-with-current-date "~/org/fleeting-notes")) )
-		   "* %?\n")
-		  )
-		)
-  )
+  		  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
+  		   "* %?\n")
+  		  ("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
+  		   "* %?\n")
+  		  ("s" "Software idea" entry (file+headline "~/org/ideas.org" "App")
+  		   "* %?\n")
+  		  ("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
+  		   "* %?\n")
+  		  ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
+  		   "* %?\n")
+  		  ("f" "Fleeting note" entry (file (lambda () (a3madkour/file-with-current-date "~/org/fleeting-notes")) )
+  		   "* %?\n")
+  		  )
+  		)
+    )
 #+end_src
 
 * Org-Babel
@@ -2040,7 +2121,6 @@ Ported from doom emacs lookup module
 #+begin_src emacs-lisp 
 (use-package ob-http)
 #+end_src
-
 
 ** Final Setup
 #+begin_src emacs-lisp
@@ -2072,6 +2152,15 @@ Ported from doom emacs lookup module
 #+begin_src emacs-lisp
   (use-package org-bullets
 	:hook (org-mode . org-bullets-mode))
+#+end_src
+* Org-fancy-priorities
+#+begin_src emacs-lisp
+(use-package org-fancy-priorities
+  :ensure t
+  :hook
+  (org-mode . org-fancy-priorities-mode)
+  :config
+  (setq org-fancy-priorities-list '("IDEAL" "DOABLE" "G4N" )))
 #+end_src
 * Org roam
 #+begin_src emacs-lisp
@@ -2240,69 +2329,14 @@ Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp
   (use-package ob-async)
 #+end_src
-* Citar
-#+begin_src emacs-lisp
-  (defun citar-org-format-note-madkour (key entry)
-	"Format a note from KEY and ENTRY."
-	(let* ((template (citar--get-template 'note))
-		   (note-meta (when template
-						(citar-format--entry template entry)))
-		   (template-path (citar--get-template 'note-file))
-		   (note-path (when template-path
-						(citar-format--entry template-path entry)))
-		   (note-tags (cdr (citar-get-field-with-value '("keywords") key)))
-		   (filepath (expand-file-name
-					  (concat key ".org")
-					  (car citar-notes-paths)))
-		   (buffer (find-file filepath)))
-	  (with-current-buffer buffer
-		;; This just overrides other template insertion.
-		(erase-buffer)
-		(citar-org-roam-make-preamble key)
-		(insert "#+title: ")
-		(when template (insert note-meta))
-		(insert "\n#+filetags::")
-		(insert note-tags)
-		(insert "\n* Notes\n:PROPERTIES:\n:NOTER_DOCUMENT: ")
-		(when template-path (insert note-path))
-		(insert "\n:END:\n")
-		(insert "\n\n|\n\n#+print_bibliography:")
-		(search-backward "|")
-		(delete-char 1)
-		(when (fboundp 'evil-insert)
-		  (evil-insert 1)))))
-
-
-  (use-package citar
-	:no-require
-	:custom
-	(citar-templates
-	 '((main . "${author editor:30}     ${date year issued:4}     ${title:48}")
-	   (suffix . "          ${=key= id:15}    ${=type=:12}    ${tags keywords:*}")
-	   (preview . "${author editor} (${year issued date}) ${title}, ${journal journaltitle publisher container-title collection-title}.\n")
-	   (note . "Notes on ${author editor}, ${title}")
-	   (note-file . "${file}")))
-	(org-cite-global-bibliography (list zot-bib))
-	(org-cite-insert-processor 'citar)
-	(org-cite-follow-processor 'citar)
-	(citar-note-format-function 'citar-org-format-note-madkour)
-	(org-cite-activate-processor 'citar)
-	(citar-bibliography org-cite-global-bibliography)
-	(citar-notes-paths (list org-ref-notes))
-	;; optional: org-cite-insert is also bound to C-c C-x C-@
-	:bind
-	(:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
-
-  (use-package citar-embark
-	:after citar embark
-	:no-require
-	:config (citar-embark-mode))
-  (setq citar-at-point-function 'embark-act)
-
-#+end_src
 * String inflection
 #+begin_src emacs-lisp
 	(use-package string-inflection)
+#+end_src
+* Polymode
+#+begin_src emacs-lisp
+  (use-package poly-markdown
+  :ensure t)
 #+end_src
 * Keycast
 #+begin_src emacs-lisp
@@ -2394,6 +2428,10 @@ Setting the pipeline for exporting the notes to the website dir
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
+#+end_src
+* Outshine
+#+begin_src emacs-lisp
+  (use-package outshine)
 #+end_src
 * Mu4e
 #+begin_src emacs-lisp
@@ -2511,12 +2549,26 @@ Setting the pipeline for exporting the notes to the website dir
 	(doom-themes-org-config))
 #+end_src
 * My functions
+#+NAME: my_funcs
 #+begin_src emacs-lisp
-  (defun a3madkour/make-project ()
-	(interactive)
-	(let ((dir-name (read-directory-name "Select Project Directory")))
-	  (magit-init dir-name)
-	  (make-empty-file (concat dir-name "todo.org"))))
+    (defun a3madkour/make-project (&optional dir)
+      (interactive)
+      (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
+    	   )
+  (message dir-path)
+  (projectile-add-known-project dir-path)
+        (magit-init dir-path)
+        (make-empty-file (concat dir-path "/README.org"))))
+
+
+    (defun a3madkour/make-ws-project ()
+      (interactive)
+      (let ((dir-path "~/Workspace/"))
+    	(a3madkour/make-project dir-path)
+    	))
+
+
+
 #+end_src
 ** Adapted from doom
 #+begin_src emacs-lisp
@@ -2612,8 +2664,10 @@ Setting the pipeline for exporting the notes to the website dir
    "tm" '(hide-mode-line-mode :which-key "hide modeline mode")
    "tk" '(+toggle-keycast :which-key "toggle keycast")
 
-   ;;Search
+   ;;Search and store
+   "s" '(nil :which-key "Search and store")
    "sb" '(consult-line :which-key "search buffer")
+   "sl" '(org-store-link :which-key "org-store-link")
    ;; Windows
    "w" '(nil :which-key "window")
    ;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
@@ -2679,6 +2733,7 @@ Setting the pipeline for exporting the notes to the website dir
    "pR" '(projectile-run-project :which-key "projectile-run-project")
    "pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
    "pn" '(a3madkour/make-project :which-key "make-project")
+   "pw" '(a3madkour/make-ws-project :which-key "make-ws-project")
    "SPC" '(projectile-find-file :which-key "projectile-find-file")
 
    ;;citar
@@ -2704,6 +2759,7 @@ Setting the pipeline for exporting the notes to the website dir
    "ir" '(consult-register :which-key "Register")
    "is" '(yas-insert-snippet :which-key "Snippet")
    "iu" '(insert-char :which-key "Unicode")
+   "il" '(org-insert-link :which-key "Org-insert-link")
 
    ;;code/lsp
    "c" '(nil :which-key "code")
@@ -2859,14 +2915,6 @@ Setting the pipeline for exporting the notes to the website dir
     )
 
   (general-define-key
-   :prefix "SPC i"
-   :states 'motion
-   :keymaps '(org-mode-map) ;; Available in org mode, org agenda
-   "" nil
-   "l" '(org-insert-link :which-key "org-insert-link") 
-   )
-
-  (general-define-key
    :prefix "SPC m"
    :states 'motion
    :keymaps '(org-mode-map) ;; Available in org mode, org agenda
@@ -2902,8 +2950,8 @@ Setting the pipeline for exporting the notes to the website dir
    "it" '(nil :which-key "tables")
    "itt" '(org-table-create :which-key "create table")
    "itl" '(org-table-insert-hline :which-key "table hline")
-
    "il" '(org-insert-link :which-key "org-insert-link")
+
    "ib" '(org-books-add-url :which-key "Book url")
 
    "is" '(nil :which-key "insert stamp")
@@ -2920,6 +2968,7 @@ Setting the pipeline for exporting the notes to the website dir
    "l" '(nil :which-key "link stuff")
    "ll" '(org-transclusion-mode :which-key "org-transclusion mode")
    "ls" '(org-store-link :which-key "org-store-link")
+   "li" '(org-insert-link :which-key "org-insert-link")
    "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
    "la" '(org-transclusion-add :which-key "org-transclusion add")
    ;;TODO make this open with org-open-atpoint
@@ -2977,4 +3026,20 @@ Setting the pipeline for exporting the notes to the website dir
 
   ;; Help/emacs
 
+
+  (general-define-key
+   :states 'normal
+   :keymaps 'pdf-view-mode-map
+   "i" '(org-noter-insert-note :which-key "org-noter-insert-note")
+   "s" '(a3madkour/org-noter-insert-subheading-note :which-key "org-noter-insert-note subheading")
+   )
+
+  (general-define-key
+   :states 'motion
+   :keymaps 'outshine-mode-map
+   "TAB" '(outshine-cycle :which-key "outshine-cycle")
+   )
+
 #+end_src
+
+

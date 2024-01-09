@@ -51,16 +51,6 @@ fi
 setxkbmap -option caps:escape
 xscreensaver &
 autorandr &
-<<<<<<< HEAD
+sleep 4.0;
 ~/.config/polybar/launch.sh &
-emacs --daemon&
-sleep 4.0;
-exec xmonad
-exec xmonad --restart
-exec fcitx5
-=======
-sleep 4.0;
-emacs --daemon&
-./.config/polybar/launch.sh&
 exec i3
->>>>>>> origin/main
