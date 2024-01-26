@@ -13,7 +13,7 @@
   (setq idle-update-delay 1.0)
   ;; Disabling bidi (bidirectional editing stuff)
   (setq-default bidi-display-reordering 'left-to-right
-				bidi-paragraph-direction 'left-to-right)
+		bidi-paragraph-direction 'left-to-right)
   ;; (setq bidi-inhibit-bpa t)  ; emacs 27 only - disables bidirectional parenthesis
   ;;
   (setq-default cursor-in-non-selected-windows nil)
@@ -24,21 +24,22 @@
   ;; Window configuration
   (setq frame-inhibit-implied-resize t) ;; Supposed to hasten startup
 #+end_src
+
 * Straight
 #+name: config.el
 #+begin_src emacs-lisp
   (defvar bootstrap-version)
   (let ((bootstrap-file
-		 (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
-		(bootstrap-version 5))
-	(unless (file-exists-p bootstrap-file)
-	  (with-current-buffer
-		  (url-retrieve-synchronously
-		   "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-		   'silent 'inhibit-cookies)
-		(goto-char (point-max))
-		(eval-print-last-sexp)))
-	(load bootstrap-file nil 'nomessage))
+	 (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+	(bootstrap-version 5))
+    (unless (file-exists-p bootstrap-file)
+      (with-current-buffer
+	  (url-retrieve-synchronously
+	   "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+	   'silent 'inhibit-cookies)
+	(goto-char (point-max))
+	(eval-print-last-sexp)))
+    (load bootstrap-file nil 'nomessage))
 
   (straight-use-package 'use-package)
   (setq straight-use-package-by-default t)
@@ -46,23 +47,23 @@
 * GCMH
 #+begin_src emacs-lisp
   (use-package gcmh
-	:diminish gcmh-mode
-	:config
-	(setq gcmh-idle-delay 5
-		  gcmh-high-cons-threshold (* 16 1024 1024))  ; 16mb
-	(gcmh-mode 1))
+    :diminish gcmh-mode
+    :config
+    (setq gcmh-idle-delay 5
+	  gcmh-high-cons-threshold (* 16 1024 1024))  ; 16mb
+    (gcmh-mode 1))
 
   (add-hook 'emacs-startup-hook
-			(lambda ()
-			  (setq gc-cons-percentage 0.1))) ;; Default value for `gc-cons-percentage'
+	    (lambda ()
+	      (setq gc-cons-percentage 0.1))) ;; Default value for `gc-cons-percentage'
 
   (add-hook 'emacs-startup-hook
-			(lambda ()
-			  (message "Emacs ready in %s with %d garbage collections."
-					   (format "%.2f seconds"
-							   (float-time
-								(time-subtract after-init-time before-init-time)))
-					   gcs-done)))
+	    (lambda ()
+	      (message "Emacs ready in %s with %d garbage collections."
+		       (format "%.2f seconds"
+			       (float-time
+				(time-subtract after-init-time before-init-time)))
+		       gcs-done)))
 #+end_src
 
 * General configuration
@@ -87,9 +88,9 @@
   ;;dailies template
   (setq org-roam-dailies-capture-templates
         '(("d" "default" entry
-       	 "* %?"
-       	 :target (file+head "%<%Y-%m-%d>.org"
-       						"#+title: %<%Y-%m-%d>\n"))))
+       	   "* %?"
+       	   :target (file+head "%<%Y-%m-%d>.org"
+       			      "#+title: %<%Y-%m-%d>\n"))))
   ;; Confirm to quit
   (setq confirm-kill-emacs 'yes-or-no-p)
 
@@ -509,6 +510,24 @@ Adapted from doom emacs textobjects.el
   (evil-replace-with-register-install)
   )
 #+end_src
+* General 
+#+begin_src emacs-lisp
+  (use-package general
+  	:ensure t
+  	:init
+  	;; Create variables for leader keys for different states & uses
+  	(defvar general-leader "SPC"
+  	"Leader key for Evil")
+  	(defvar general-leader-alt "C-SPC"
+  	"Leader key for Emacs and Evil Insert states")
+  	(defvar general-localleader ","
+  	"Local leader key for major-mode specific commands")
+  	(defvar general-localleader-alt "C-SPC ,"
+  	"Local leader key for major-mode specific commands for Emacs and Evil Insert states.") 
+  )
+
+#+end_src
+
 * Vterm
 #+begin_src emacs-lisp
   (use-package vterm
@@ -523,6 +542,7 @@ Adapted from doom emacs textobjects.el
   (use-package undo-tree)
   (global-undo-tree-mode)
   (evil-set-undo-system 'undo-tree)
+  (add-to-list 'undo-tree-history-directory-alist '("." . "~/.undo-tree"))
 #+end_src
 * Recent
 #+begin_src emacs-lisp
@@ -555,11 +575,6 @@ Adapted from doom emacs textobjects.el
 	(setq which-key-sort-order 'which-key-key-order-alpha
 		  which-key-min-display-lines 6
 		  which-key-max-display-columns nil))
-#+end_src
-
-* General 
-#+begin_src emacs-lisp
-  (use-package general)
 #+end_src
 * All the icons
 #+begin_src emacs-lisp
@@ -1477,10 +1492,10 @@ Highlight the diffs of the past commit in a file
 #+end_src
 * Ranger
 #+begin_src emacs-lisp
-  (use-package ranger)
-
-  (ranger-override-dired-mode t)
-
+  (use-package ranger
+    :config
+    (ranger-override-dired-mode t)
+    )
 #+end_src
 * Eshell-git-prompt
 #+begin_src emacs-lisp
@@ -1728,10 +1743,6 @@ Run agda-mode setup first
 *** Elisp def
 #+begin_src emacs-lisp
   (use-package elisp-def)
-#+end_src
-*** Emacs autofmt
-#+begin_src emacs-lisp
-  (use-package elisp-autofmt)
 #+end_src
 ** Latex
 #+begin_src emacs-lisp
@@ -2052,42 +2063,42 @@ Ported from doom emacs lookup module
     (setq org-capture-templates
   		'(("c" "CS")
   		  ("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
   		  ("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n")
   		  ("ch" "Habit" entry (file "~/org/CS/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
   		  ("a" "Academic")
   		  ("at" "Todo" entry (file+datetree "~/org/Academic/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
   		  ("au" "Unscheduled" entry (file+headline "~/org/Academic/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n")
 
   		  ("ah" "Habit" entry (file "~/org/Academic/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
   		  ("r" "Artistic")
   		  ("rt" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
   		  ("ru" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n")
   		  ("rh" "Habit" entry (file "~/org/Artistic/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
   		  ("h" "Health")
   		  ("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
   		  ("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n")
   		  ("hh" "Habit" entry (file "~/org/Health/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
   		  ("i" "Intellectual")
   		  ("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
   		  ("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n#+BEGIN: clocktable :scope file :maxlevel 2 :properties ("Effort")#+END:\n")
+  		   "* TODO %? %(a3madkour/org-set-effort)\n")
   		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
@@ -2259,13 +2270,13 @@ Ported from doom emacs lookup module
 * Org music
 #+begin_src emacs-lisp
   ;; Org-Music Mode
-  (use-package org-music
-	:straight (:type git :host github :repo "debanjum/org-music")
-	:init (progn
-			(setq
-			 org-music-file "~/org/Music.org"
-			 org-music-media-directory "~/Music/OrgMusic/"
-			 org-music-operating-system "linux")))
+  ;; (use-package org-music
+  ;; 	:straight (:type git :host github :repo "debanjum/org-music")
+  ;; 	:init (progn
+  ;; 			(setq
+  ;; 			 org-music-file "~/org/Music.org"
+  ;; 			 org-music-media-directory "~/Music/OrgMusic/"
+  ;; 			 org-music-operating-system "linux")))
 #+end_src
 
 * Exporting to website
@@ -2551,6 +2562,23 @@ Setting the pipeline for exporting the notes to the website dir
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/add-transclusion-from-link (&optional arg)
+(interactive "P")
+(let* ((
+	auto-transclude-p (if (or (not arg) (numberp arg)) org-transclusion-mode
+;; if `universal-argument' is passed,
+;; reverse nil/t when
+                            (if org-transclusion-mode nil t))))
+  (insert (format "#+transclude:"))
+  (org-insert-link)
+  (when (and (numberp arg)
+                     (> arg 0)
+                     (<= arg 9))
+            (end-of-line)
+            (insert (format " :level %d" arg)))
+          (when auto-transclude-p (org-transclusion-add))))
+
+
     (defun a3madkour/make-project (&optional dir)
       (interactive)
       (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
@@ -2591,9 +2619,10 @@ Setting the pipeline for exporting the notes to the website dir
 * Keybindings
 #+begin_src emacs-lisp
   (general-define-key
-   :states '(normal motion visual)
+   :states '(normal motion visual insert)
    :keymaps 'override
-   :prefix "SPC"
+   :prefix general-leader 
+   :non-normal-prefix general-leader-alt
 
    ;; Top level functions
 
@@ -2640,6 +2669,7 @@ Setting the pipeline for exporting the notes to the website dir
    "hf" '(describe-function :which-key "des. func")
    "hF" '(describe-face :which-key "des. face")
    "hk" '(describe-key :which-key "des. key")
+   "hi" '(info :which-key "info")
 
    ;; Git
    "g" '(nil :which-key "magit")
@@ -2819,6 +2849,7 @@ Setting the pipeline for exporting the notes to the website dir
     "C-'" 'avy-goto-char-2
 
     "C-M-x" 'ispell-complete-word
+    "C-M-q" 'indent-pp-sexp
     )
 
   (general-def
@@ -2964,11 +2995,10 @@ Setting the pipeline for exporting the notes to the website dir
    "co" '(org-clock-out :which-key "clock out")
    "cj" '(org-clock-goto :which-key "jump to clock")
 
-   ;; link stuff
-   "l" '(nil :which-key "link stuff")
+   ;; transclusion stuff
+   "l" '(nil :which-key "transclusion stuff")
    "ll" '(org-transclusion-mode :which-key "org-transclusion mode")
-   "ls" '(org-store-link :which-key "org-store-link")
-   "li" '(org-insert-link :which-key "org-insert-link")
+   "li" '(a3madkour/add-transclusion-from-link :which-key "add-transclusion-from-link")
    "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
    "la" '(org-transclusion-add :which-key "org-transclusion add")
    ;;TODO make this open with org-open-atpoint
