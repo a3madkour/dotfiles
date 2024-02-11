@@ -151,6 +151,9 @@
   (advice-add 'org-schedule       :after (η #'org-save-all-org-buffers))
   (advice-add 'org-store-log-note :after (η #'org-save-all-org-buffers))
   (advice-add 'org-todo           :after (η #'org-save-all-org-buffers))
+
+  ;;for the love of god stop the ~s it is so trashy
+  (setq backup-directory-alist `(("." . "~/.saves")))
 #+end_src
 * Evil
 #+begin_src emacs-lisp
@@ -1860,17 +1863,20 @@ Run agda-mode setup first
 #+end_src
 ** Javascript and its ilk
 #+begin_src emacs-lisp
+  (add-to-list 'auto-mode-alist '("\\.ts?\\'" . tsx-ts-mode))
   (use-package npm-mode)
-  (use-package typescript-mode)
   (use-package rjsx-mode)
   (use-package js2-refactor
-	:hook ((js2-mode rjsx-mode) . js2-refactor-mode))
+    :hook ((js2-mode rjsx-mode) . js2-refactor-mode))
+
+  ;; if you use treesitter based typescript-ts-mode (emacs 29+)
   (use-package tide
-	:ensure t
-	:after (typescript-mode company flycheck)
-	:hook ((typescript-mode . tide-setup)
-		   (typescript-mode . tide-hl-identifier-mode)
-		   (before-save . tide-format-before-save)))
+    :ensure t
+    :after (company flycheck)
+    :hook (
+           (tsx-ts-mode . tide-setup)
+           (tsx-ts-mode . tide-hl-identifier-mode)
+           (before-save . tide-format-before-save)))
 #+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
@@ -2366,6 +2372,8 @@ Setting the pipeline for exporting the notes to the website dir
 * Elfeed
 #+begin_src emacs-lisp
 (use-package elfeed)
+(use-package elfeed-goodies)
+(use-package elfeed-org)
 #+end_src
 * Combobulate
 #+begin_src emacs-lisp
@@ -2715,6 +2723,7 @@ Setting the pipeline for exporting the notes to the website dir
    "r" '(nil :which-key "org-roam")
    "rD" #'org-roam-demote-entire-buffer
    "rf" #'org-roam-node-find
+   "rt" '(org-roam-dailies-goto-today :which-key "Goto today")
    "rr" #'org-roam-ref-find
    "rg" #'org-roam-graph
    "ri" #'org-roam-node-insert
