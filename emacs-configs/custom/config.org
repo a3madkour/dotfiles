@@ -99,7 +99,7 @@
   (setq initial-major-mode 'org-mode)
 
   ;;set default font size
-  (set-face-attribute 'default nil :height 150)
+  (set-face-attribute 'default nil :height 200)
   ;; WINDOW -----------
 
   ;; Don't resize the frames in steps; it looks weird, especially in tiling window
@@ -1770,14 +1770,17 @@ Run agda-mode setup first
 #+end_src
 ** Python
 #+begin_src emacs-lisp
-  (use-package ein)
+  (use-package ein
+    :config
+    (setq ein:output-area-inlined-images t))
+
   (use-package python-mode)
   (use-package py-isort)
   (use-package pyimport)
   (use-package python-pytest)
   (use-package conda)
   (use-package anaconda-mode)
-  
+
   ;; (use-package lsp-pyright
   ;; 	:ensure t
   ;; 	:hook (python-mode . (lambda ()
@@ -2177,7 +2180,7 @@ Run agda-mode setup first
   		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-  		  ("b" "Manual Book" entry (file "~/org/Intellectual/reading-list.org")
+  		  ("b" "Manual Book" entry (file "~/org/reading-list.org")
   		   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
 
   		  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
@@ -2353,30 +2356,32 @@ Run agda-mode setup first
   ;; 			 org-music-media-directory "~/Music/OrgMusic/"
   ;; 			 org-music-operating-system "linux")))
 #+end_src
-
+* Org Chef
+#+begin_src emacs-lisp
+  (use-package org-chef
+  :ensure t)
+#+end_src
 * Exporting to website
 Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp 
-  (setq website-notes-dir "~/website/static/notes")
+  (setq website-notes-dir "~/Workspace/website/notes")
+  (setq blog-dir "~/Workspace/website/blog")
   (require 'ox-publish)
   (setq org-publish-project-alist
   	  `(
   		("org-notes"
   		 :base-directory "~/org/notes/roam-notes"
-  		 :base-extension "org"
   		 :publishing-directory ,website-notes-dir
   		 :recursive t
   		 :publishing-function org-html-publish-to-html
   		 :auto-preamble t
   		 )
-  		("org-static"
-  		 :base-directory "~/org/"
-  		 :base-extension "css\\|js\\|png\\|jpg\\|gif\\|pdf\\|mp3\\|ogg\\|swf"
-  		 :publishing-directory ,website-notes-dir
-  		 :recursive t
-  		 :publishing-function org-publish-attachment
-  		 )
-  		("org" :components ("org-notes" "org-static"))
+	("blog"
+	   :base-directory "~/org/blog"
+	   :publishing-directory ,blog-dir
+	   :recursive t
+	   :publishing-function org-html-publish-to-html
+	   )
   		))
 #+end_src
 * Crux
@@ -2513,6 +2518,13 @@ Setting the pipeline for exporting the notes to the website dir
       ;; code.
   )
 #+end_src
+* EditorConfig
+#+begin_src emacs-lisp
+  (use-package editorconfig
+    :ensure t
+    :config
+    (editorconfig-mode 1))
+#+end_src
 * Citproc
 #+begin_src emacs-lisp
   (use-package citeproc)
@@ -2615,6 +2627,42 @@ Setting the pipeline for exporting the notes to the website dir
   (setq mu4e-context-policy 'pick-first)
   ;; Don't ask to quit... why is this the default?
   (setq mu4e-confirm-quit nil)
+#+end_src
+* Dape
+Debuging adapter protocol for emacs
+#+begin_src emacs-lisp
+(use-package dape
+  ;; To use window configuration like gud (gdb-mi)
+  :init
+  (setq dape-buffer-window-arrangement 'gud)
+
+  :config
+  ;; Info buffers to the right
+  (setq dape-buffer-window-arrangement 'right)
+
+  ;; To not display info and/or buffers on startup
+  ;; (remove-hook 'dape-on-start-hooks 'dape-info)
+  ;; (remove-hook 'dape-on-start-hooks 'dape-repl)
+
+  ;; To display info and/or repl buffers on stopped
+  (add-hook 'dape-on-stopped-hooks 'dape-info)
+  (add-hook 'dape-on-stopped-hooks 'dape-repl)
+
+  ;; By default dape uses gdb keybinding prefix
+  ;; If you do not want to use any prefix, set it to nil.
+  (setq dape-key-prefix "\C-x\C-a")
+
+  ;; Kill compile buffer on build success
+  (add-hook 'dape-compile-compile-hooks 'kill-buffer)
+
+  ;; Save buffers on startup, useful for interpreted languages
+  (add-hook 'dape-on-start-hooks
+            (defun dape--save-on-start ()
+              (save-some-buffers t t)))
+
+  ;; Projectile users
+  (setq dape-cwd-fn 'projectile-project-root)
+  )
 #+end_src
 * Themes
 #+begin_src emacs-lisp
@@ -2850,6 +2898,7 @@ Setting the pipeline for exporting the notes to the website dir
    "pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
    "pn" '(a3madkour/make-project :which-key "make-project")
    "pw" '(a3madkour/make-ws-project :which-key "make-ws-project")
+   "pv" '(projectile-run-vterm-other-window :which-key "projectile-run-vterm-other-window")
    "SPC" '(projectile-find-file :which-key "projectile-find-file")
 
    ;;citar
@@ -2864,7 +2913,7 @@ Setting the pipeline for exporting the notes to the website dir
    "ne" '(org-noter :which-key "Org Noter")
    ;; journal
    "nj" '(nil :which-key "journal")
-   "njj" '(org-journal-new-entry :which-key "new journal entru")
+   "njj" '(org-journal-new-entry :which-key "new journal entry")
    "njJ" '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
 
 
@@ -2873,6 +2922,7 @@ Setting the pipeline for exporting the notes to the website dir
    "if" '(+default/insert-file-path :which-key "Current file name")
    "iF" '(+default/insert-all-path :which-key "Current file name")
    "ir" '(consult-register :which-key "Register")
+   "ic" '(org-chef-insert-recipe :which-key "Org Chef Insert Recipe")
    "is" '(yas-insert-snippet :which-key "Snippet")
    "iu" '(insert-char :which-key "Unicode")
    "il" '(org-insert-link :which-key "Org-insert-link")
@@ -2929,6 +2979,7 @@ Setting the pipeline for exporting the notes to the website dir
     ;; Utility ------
     "C-c c" 'org-capture
     "C-;" 'embark-act
+    "C-=" 'embark-become
     "C-c C-u" 'string-inflection-all-cycle
     "C-c a" 'org-agenda
     "C-c d" 'consult-dash
@@ -3161,6 +3212,10 @@ Setting the pipeline for exporting the notes to the website dir
 
 #+end_src
 
+* Plz
+#+begin_src emacs-lisp
+(use-package plz)
+#+end_src
 * Final setup
 This is for the last command I want to run when emacs load.
 ** Persp load
