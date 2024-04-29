@@ -2770,6 +2770,9 @@ Debuging adapter protocol for emacs
    "x" 'org-capture
    "a" 'embark-act
 
+   ;; Defaults
+   "d" '(nil  :which-key "defaults")
+   "dp" '((lambda () (interactive) (persp-state-load "~/default-persp")) :which-key "load default persp")
    ;; Quit
    "q" '(nil :which-key "quit")
    "qq" '(save-buffers-kill-terminal :which-key "quit emacs")
