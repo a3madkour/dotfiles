@@ -99,7 +99,7 @@
   (setq initial-major-mode 'org-mode)
 
   ;;set default font size
-  (set-face-attribute 'default nil :height 200)
+  (set-face-attribute 'default nil :height 150)
   ;; WINDOW -----------
 
   ;; Don't resize the frames in steps; it looks weird, especially in tiling window
@@ -1754,7 +1754,7 @@ Highlight the diffs of the past commit in a file
 	:hook (gdscript-mode . eglot-ensure)
 	:custom (gdscript-eglot-version 3)
 	:config
-	(setq treesit-extra-load-path '("~/emacs-configs/custom/tree-sitter-gdscript/src/"))
+	;; (setq treesit-extra-load-path '("~/emacs-configs/custom/tree-sitter-gdscript/src/"))
 	)
 #+end_src
 ** Haskell
@@ -1913,14 +1913,14 @@ Run agda-mode setup first
 	(add-to-list 'auto-mode-alist '("\\.phtml\\'" . emmet-mode))
 	(add-to-list 'auto-mode-alist '("\\.css\\'" . emmet-mode)))
 
-  (use-package haml-mode)
-  (use-package company-web)
-  (use-package impatient-mode)
-  (use-package css-mode)
-  (use-package com-css-sort)
-  (use-package less-css-mode)
-  (use-package sass-mode)
-  (use-package sws-mode)
+  ;; (use-package haml-mode)
+  ;; (use-package company-web)
+  ;; (use-package impatient-mode)
+  ;; (use-package css-mode)
+  ;; (use-package com-css-sort)
+  ;; (use-package less-css-mode)
+  ;; (use-package sass-mode)
+  ;; (use-package sws-mode)
   (use-package web-mode
 	:config
 	(add-to-list 'auto-mode-alist '("\\.phtml\\'" . web-mode))
@@ -2203,11 +2203,10 @@ Run agda-mode setup first
 #+end_src
 
 * Org-Babel
-** Ob-ipython
-#+begin_src emacs-lisp 
-;; (use-package ob-ipython)
+** Ob-Async
+#+begin_src emacs-lisp
+  (use-package ob-async)
 #+end_src
-
 ** Ob-http
 #+begin_src emacs-lisp 
 (use-package ob-http)
@@ -2229,8 +2228,17 @@ Run agda-mode setup first
      (js . t)
      (http . t)
      (shell . t)
- ;;    (ipython .t)
+     ;;    (ipython .t)
      ))
+(setq org-src-preserve-indentation t  ; use native major-mode indentation
+	org-src-tab-acts-natively t     ; we do this ourselves
+	;; You don't need my permission (just be careful, mkay?)
+	org-confirm-babel-evaluate nil
+	org-link-elisp-confirm-function nil
+	;; Show src buffer in popup, and don't monopolize the frame
+	org-src-window-setup 'other-window
+	;; Our :lang common-lisp module uses sly, so...
+	org-babel-lisp-eval-fn #'sly-eval)
 #+end_src
 * Org-ql
 #+begin_src emacs-lisp
@@ -2418,10 +2426,6 @@ Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp
 (use-package lexic)
 #+end_src
-* Ob-Async
-#+begin_src emacs-lisp
-  (use-package ob-async)
-#+end_src
 * String inflection
 #+begin_src emacs-lisp
 	(use-package string-inflection)
@@ -2430,6 +2434,8 @@ Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp
   (use-package poly-markdown
   :ensure t)
+  ;; (use-package poly-org
+  ;; :ensure t)
 #+end_src
 * Keycast
 #+begin_src emacs-lisp
@@ -2689,43 +2695,49 @@ Debuging adapter protocol for emacs
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+  (defun a3madkour/store-region-lines-to-register()
+    (interactive)
+    (let* ((start (line-number-at-pos (region-beginning)))
+		 (end (line-number-at-pos (region-end))))
+	(set-register 1 (format " :lines %d-%d" start end))))
+
   (defun a3madkour/persp-org-roam-dailies-go-to-today ()
-  (save-excursion
-    (org-roam-dailies-goto-today)
-    (buffer-file-name)))
+    (save-excursion
+  	(org-roam-dailies-goto-today)
+  	(buffer-file-name)))
 
   (defun a3madkour/add-transclusion-from-link (&optional arg)
-  (interactive "P")
-  (let* ((
-  	auto-transclude-p (if (or (not arg) (numberp arg)) org-transclusion-mode
-  ;; if `universal-argument' is passed,
-  ;; reverse nil/t when
-                              (if org-transclusion-mode nil t))))
-    (insert (format "#+transclude:"))
-    (org-insert-link)
-    (when (and (numberp arg)
-                       (> arg 0)
-                       (<= arg 9))
-              (end-of-line)
-              (insert (format " :level %d" arg)))
-            (when auto-transclude-p (org-transclusion-add))))
+    (interactive "P")
+    (let* ((
+  		  auto-transclude-p (if (or (not arg) (numberp arg)) org-transclusion-mode
+  							  ;; if `universal-argument' is passed,
+  							  ;; reverse nil/t when
+                                (if org-transclusion-mode nil t))))
+  	(insert (format "#+transclude: "))
+  	(org-insert-link)
+  	(when (and (numberp arg)
+                 (> arg 0)
+                 (<= arg 9))
+        (end-of-line)
+        (insert (format " :level %d" arg)))
+      (when auto-transclude-p (org-transclusion-add))))
 
 
-      (defun a3madkour/make-project (&optional dir)
-        (interactive)
-        (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
-      	   )
-    (message dir-path)
-    (projectile-add-known-project dir-path)
-          (magit-init dir-path)
-          (make-empty-file (concat dir-path "/README.org"))))
+  (defun a3madkour/make-project (&optional dir)
+    (interactive)
+    (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
+      	 )
+  	(message dir-path)
+  	(projectile-add-known-project dir-path)
+      (magit-init dir-path)
+      (make-empty-file (concat dir-path "/README.org"))))
 
 
-      (defun a3madkour/make-ws-project ()
-        (interactive)
-        (let ((dir-path "~/Workspace/"))
-      	(a3madkour/make-project dir-path)
-      	))
+  (defun a3madkour/make-ws-project ()
+    (interactive)
+    (let ((dir-path "~/Workspace/"))
+      (a3madkour/make-project dir-path)
+      ))
 
 
 
@@ -2793,11 +2805,12 @@ Debuging adapter protocol for emacs
    "fs" '(save-buffer :which-key "save buffer")
    "fS" '(evil-write-all :which-key "save all buffers")
 
-   ;; Help/emacs
+   ;; Emms and email
    "e" '(nil :which-key "emms")
    "ee" '(emms :which-key "emms launch")
    "ep" '(emms-pause :which-key "emms pause")
    "ef" '(emms-play-find :which-key "emms play find")
+   "em" '(mu4e :which-key "mu4e")
 
    ;; Help/emacs
    "h" '(nil :which-key "help/emacs")
@@ -2805,6 +2818,7 @@ Debuging adapter protocol for emacs
    "hv" '(describe-variable :which-key "des. variable")
    "hb" '(describe-bindings :which-key "des. bindings")
    "hM" '(describe-mode :which-key "des. mode")
+   "hc" '(describe-char :which-key "des. character")
    "hf" '(describe-function :which-key "des. func")
    "hF" '(describe-face :which-key "des. face")
    "hk" '(describe-key :which-key "des. key")
@@ -2838,6 +2852,7 @@ Debuging adapter protocol for emacs
    "sb" '(consult-line :which-key "search buffer")
    "sd" '(consult-dash :which-key "search docsets")
    "sl" '(org-store-link :which-key "org-store-link")
+   "sr" '(a3madkour/store-region-lines-to-register :which-key "store-region-to-register 1")
    "sf" '(org-ql-find :which-key "org-ql-find")
    "sa" '(org-ql-find-in-agenda :which-key "org-ql in agenda")
    "ss" '(org-ql-search :which-key "org-ql search")
