@@ -1936,6 +1936,8 @@ Run agda-mode setup first
 	(add-to-list 'auto-mode-alist '("\\.js?\\'" . web-mode))
 	(add-to-list 'auto-mode-alist '("\\.vue?\\'" . web-mode))
 	(setq web-mode-enable-auto-pairing t)
+	(setq web-mode-enable-auto-opening t)
+	(setq web-mode-enable-auto-closing t)
 	)
 #+end_src
 ** Javascript and its ilk
@@ -2649,8 +2651,8 @@ Debuging adapter protocol for emacs
   (setq dape-buffer-window-arrangement 'right)
 
   ;; To not display info and/or buffers on startup
-  ;; (remove-hook 'dape-on-start-hooks 'dape-info)
-  ;; (remove-hook 'dape-on-start-hooks 'dape-repl)
+  (remove-hook 'dape-on-start-hooks 'dape-info)
+  (remove-hook 'dape-on-start-hooks 'dape-repl)
 
   ;; To display info and/or repl buffers on stopped
   (add-hook 'dape-on-stopped-hooks 'dape-info)
@@ -2658,7 +2660,8 @@ Debuging adapter protocol for emacs
 
   ;; By default dape uses gdb keybinding prefix
   ;; If you do not want to use any prefix, set it to nil.
-  (setq dape-key-prefix "\C-x\C-a")
+  ;; (setq dape-key-prefix "\C-x\C-a")
+  (setq dape-key-prefix 'nil)
 
   ;; Kill compile buffer on build success
   (add-hook 'dape-compile-compile-hooks 'kill-buffer)
@@ -2762,483 +2765,719 @@ Debuging adapter protocol for emacs
 
 * Keybindings
 #+begin_src emacs-lisp
-  (general-define-key
-   :states '(normal motion visual insert)
-   :keymaps 'override
-   :prefix general-leader 
-   :non-normal-prefix general-leader-alt
+(general-define-key
+ :states '(normal motion visual insert)
+ :keymaps 'override
+ :prefix general-leader
+ :non-normal-prefix general-leader-alt
 
-   ;; Top level functions
+ ;; Top level functions
 
-   ;;consult has to have its own bind because fuck you
-   "/" 'consult-ripgrep 
-   ";" 'deft 
-   ":" 'project-find-file 
-   "." 'find-file 
-   "," 'consult-recent-file 
-   "TAB" '(perspective-map :which-key "perspective map")
-   "q" '(save-buffers-kill-terminal :which-key "quit emacs")
-   "j" '(jump-to-register :which-key "registers")
-   "x" 'org-capture
-   "a" 'embark-act
+ ;;consult has to have its own bind because fuck you
+ "/" 'consult-ripgrep
+ ";" 'deft
+ ":" 'project-find-file
+ "." 'find-file
+ "," 'consult-recent-file
+ "TAB"
+ '(perspective-map :which-key "perspective map")
+ "q"
+ '(save-buffers-kill-terminal :which-key "quit emacs")
+ "j"
+ '(jump-to-register :which-key "registers")
+ "x" 'org-capture
+ "a" 'embark-act
 
-   ;; Defaults
-   "d" '(nil  :which-key "defaults")
-   "dp" '((lambda () (interactive) (persp-state-load "~/default-persp")) :which-key "load default persp")
-   ;; Quit
-   "q" '(nil :which-key "quit")
-   "qq" '(save-buffers-kill-terminal :which-key "quit emacs")
-   ;; Buffers
-   "b" '(nil :which-key "buffer")
-   "bb" '(consult-buffer :which-key "switch buffers")
-   "bd" '(kill-this-buffer :which-key "delete buffer")
-   "bi" '(ibuffer  :which-key "ibuffer")
-   "br" '(revert-buffer :which-key "revert buffer")
+ ;; Defaults and debugging
+ "d"
+ '(nil  :which-key "defaults")
+ "dP"
+ '((lambda () (interactive) (persp-state-load "~/default-persp"))
+   :which-key "load default persp")
+ "dd"
+ '(dape :which-key "dape run")
+ "db"
+ '(dape-breakpoint-toggle :which-key "dape breakpoint")
+ "dn"
+ '(dape-next :which-key "dape next")
+ "ds"
+ '(dape-step-in :which-key "dape step in")
+ "do"
+ '(dape-step-out :which-key "dape step out")
+ "dc"
+ '(dape-continue :which-key "dape continue")
+ "dr"
+ '(dape-restart :which-key "dape restart")
+ "dq"
+ '(dape-quit :which-key "dape quit")
+ "dp"
+ '(dape-pause :which-key "dape pause")
+ "dR"
+ '(dape-repl :which-key "dape repl")
+ "dx"
+ '(dape-evaluate-expression :which-key "dape evaluate expression")
+ "dm"
+ '(dape-read-memory :which-key "dape read bytes at memory address")
+ "dB"
+ '(dape-breakpoint-remove-all :which-key "dape remove all breakpoints")
+ "de"
+ '(dape-breakpoint-expression :which-key "dape breakpoints expression")
+ ;; Quit
+ "q"
+ '(nil :which-key "quit")
+ "qq"
+ '(save-buffers-kill-terminal :which-key "quit emacs")
+ ;; Buffers
+ "b"
+ '(nil :which-key "buffer")
+ "bb"
+ '(consult-buffer :which-key "switch buffers")
+ "bd"
+ '(kill-this-buffer :which-key "delete buffer")
+ "bi"
+ '(ibuffer  :which-key "ibuffer")
+ "br"
+ '(revert-buffer :which-key "revert buffer")
 
-   ;; Files
-   "f" '(nil :which-key "files")
-   "fb" '(consult-bookmark :which-key "bookmarks")
-   "ff" '(find-file :which-key "find file")
-   "fd" '(dired :which-key "dired")
-   "fr" '(consult-recent-file :which-key "recent files")
-   "fR" '(rename-file :which-key "rename file")
-   "fs" '(save-buffer :which-key "save buffer")
-   "fS" '(evil-write-all :which-key "save all buffers")
+ ;; Files
+ "f"
+ '(nil :which-key "files")
+ "fb"
+ '(consult-bookmark :which-key "bookmarks")
+ "ff"
+ '(find-file :which-key "find file")
+ "fd"
+ '(dired :which-key "dired")
+ "fr"
+ '(consult-recent-file :which-key "recent files")
+ "fR"
+ '(rename-file :which-key "rename file")
+ "fs"
+ '(save-buffer :which-key "save buffer")
+ "fS"
+ '(evil-write-all :which-key "save all buffers")
 
-   ;; Emms and email
-   "e" '(nil :which-key "emms")
-   "ee" '(emms :which-key "emms launch")
-   "ep" '(emms-pause :which-key "emms pause")
-   "ef" '(emms-play-find :which-key "emms play find")
-   "em" '(mu4e :which-key "mu4e")
+ ;; Emms and email
+ "e"
+ '(nil :which-key "emms")
+ "ee"
+ '(emms :which-key "emms launch")
+ "ep"
+ '(emms-pause :which-key "emms pause")
+ "ef"
+ '(emms-play-find :which-key "emms play find")
+ "em"
+ '(mu4e :which-key "mu4e")
 
-   ;; Help/emacs
-   "h" '(nil :which-key "help/emacs")
+ ;; Help/emacs
+ "h"
+ '(nil :which-key "help/emacs")
 
-   "hv" '(describe-variable :which-key "des. variable")
-   "hb" '(describe-bindings :which-key "des. bindings")
-   "hM" '(describe-mode :which-key "des. mode")
-   "hc" '(describe-char :which-key "des. character")
-   "hf" '(describe-function :which-key "des. func")
-   "hF" '(describe-face :which-key "des. face")
-   "hk" '(describe-key :which-key "des. key")
-   "hi" '(info :which-key "info")
+ "hv"
+ '(describe-variable :which-key "des. variable")
+ "hb"
+ '(describe-bindings :which-key "des. bindings")
+ "hM"
+ '(describe-mode :which-key "des. mode")
+ "hc"
+ '(describe-char :which-key "des. character")
+ "hf"
+ '(describe-function :which-key "des. func")
+ "hF"
+ '(describe-face :which-key "des. face")
+ "hk"
+ '(describe-key :which-key "des. key")
+ "hi"
+ '(info :which-key "info")
 
-   ;; Git
-   "g" '(nil :which-key "magit")
-   "gg" '(magit-status :which-key "magit status")
+ ;; Git
+ "g"
+ '(nil :which-key "magit")
+ "gg"
+ '(magit-status :which-key "magit status")
 
-   ;; Open
-   "ot" '(vterm-other-window :which-key "Open vterm in another window")
-   "oT" '(vterm :which-key "Open vterm in the same window")
-   "oa" '(org-agenda :which-key "org-agenda")
+ ;; Open
+ "ot"
+ '(vterm-other-window :which-key "Open vterm in another window")
+ "oT"
+ '(vterm :which-key "Open vterm in the same window")
+ "oa"
+ '(org-agenda :which-key "org-agenda")
 
-   ;; Toggles
-   "t" '(nil :which-key "toggles")
-   "tt" '(toggle-truncate-lines :which-key "truncate lines")
-   "tv" '(visual-line-mode :which-key "visual line mode")
-   "tn" '(display-line-numbers-mode :which-key "display line numbers")
-   "ta" '(mixed-pitch-mode :which-key "variable pitch mode")
-   "tc" '(visual-fill-column-mode :which-key "visual fill column mode")
-   "ty" '(load-theme :which-key "load theme")
-   "tR" '(read-only-mode :which-key "read only mode")
-   "tI" '(toggle-input-method :which-key "toggle input method")
-   "tr" '(display-fill-column-indicator-mode :which-key "fill column indicator")
-   "tm" '(hide-mode-line-mode :which-key "hide modeline mode")
-   "tk" '(+toggle-keycast :which-key "toggle keycast")
+ ;; Toggles
+ "t"
+ '(nil :which-key "toggles")
+ "tt"
+ '(toggle-truncate-lines :which-key "truncate lines")
+ "tv"
+ '(visual-line-mode :which-key "visual line mode")
+ "tn"
+ '(display-line-numbers-mode :which-key "display line numbers")
+ "ta"
+ '(mixed-pitch-mode :which-key "variable pitch mode")
+ "tc"
+ '(visual-fill-column-mode :which-key "visual fill column mode")
+ "ty"
+ '(load-theme :which-key "load theme")
+ "tR"
+ '(read-only-mode :which-key "read only mode")
+ "tI"
+ '(toggle-input-method :which-key "toggle input method")
+ "tr"
+ '(display-fill-column-indicator-mode :which-key "fill column indicator")
+ "tm"
+ '(hide-mode-line-mode :which-key "hide modeline mode")
+ "tk"
+ '(+toggle-keycast :which-key "toggle keycast")
 
-   ;;Search and store
-   "s" '(nil :which-key "Search and store")
-   "sb" '(consult-line :which-key "search buffer")
-   "sd" '(consult-dash :which-key "search docsets")
-   "sl" '(org-store-link :which-key "org-store-link")
-   "sr" '(a3madkour/store-region-lines-to-register :which-key "store-region-to-register 1")
-   "sf" '(org-ql-find :which-key "org-ql-find")
-   "sa" '(org-ql-find-in-agenda :which-key "org-ql in agenda")
-   "ss" '(org-ql-search :which-key "org-ql search")
-   ;; org ql views
-   "v" '(nil :which-key "ql views")
-   "vv" '(org-ql-view :which-key "org ql views")
-   "vs" '(org-ql-view-sidebar :which-key "org ql view sidebar")
-   ;; Windows
-   "w" '(nil :which-key "window")
-   ;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
-   "wN" '(make-frame :which-key "make frame")
-   "wd" '(evil-window-delete :which-key "delete window")
-   "ws" '(split-window-vertically :which-key "split below")
-   "wv" '(split-window-horizontally :which-key "split right")
-   "wl" '(evil-window-right :which-key "evil-window-right")
-   "wh" '(evil-window-left :which-key "evil-window-left")
-   "wj" '(evil-window-down :which-key "evil-window-down")
-   "wk" '(evil-window-up :which-key "evil-window-up")
-   "wz" '(text-scale-adjust :which-key "text zoom")
+ ;;Search and store
+ "s"
+ '(nil :which-key "Search and store")
+ "sb"
+ '(consult-line :which-key "search buffer")
+ "sd"
+ '(consult-dash :which-key "search docsets")
+ "sl"
+ '(org-store-link :which-key "org-store-link")
+ "sr"
+ '(a3madkour/store-region-lines-to-register :which-key "store-region-to-register 1")
+ "sf"
+ '(org-ql-find :which-key "org-ql-find")
+ "sa"
+ '(org-ql-find-in-agenda :which-key "org-ql in agenda")
+ "ss"
+ '(org-ql-search :which-key "org-ql search")
+ ;; org ql views
+ "v"
+ '(nil :which-key "ql views")
+ "vv"
+ '(org-ql-view :which-key "org ql views")
+ "vs"
+ '(org-ql-view-sidebar :which-key "org ql view sidebar")
+ ;; Windows
+ "w"
+ '(nil :which-key "window")
+ ;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
+ "wN"
+ '(make-frame :which-key "make frame")
+ "wd"
+ '(evil-window-delete :which-key "delete window")
+ "ws"
+ '(split-window-vertically :which-key "split below")
+ "wv"
+ '(split-window-horizontally :which-key "split right")
+ "wl"
+ '(evil-window-right :which-key "evil-window-right")
+ "wh"
+ '(evil-window-left :which-key "evil-window-left")
+ "wj"
+ '(evil-window-down :which-key "evil-window-down")
+ "wk"
+ '(evil-window-up :which-key "evil-window-up")
+ "wz"
+ '(text-scale-adjust :which-key "text zoom")
 
-   ;;org-roam
-   "r" '(nil :which-key "org-roam")
-   "rD" #'org-roam-demote-entire-buffer
-   "rf" #'org-roam-node-find
-   "rt" '(org-roam-dailies-goto-today :which-key "Goto today")
-   "rr" #'org-roam-ref-find
-   "rt" '(org-roam-dailies-goto-today :which-key "Goto today")
-   "rg" #'org-roam-graph
-   "ri" #'org-roam-node-insert
-   "rI" #'org-id-get-create
-   "rm" #'org-roam-buffer-toggle
-   "rM" #'org-roam-buffer-display-dedicated
-   "rn" #'org-roam-capture
-   "rF" #'org-roam-refile
-   "rR" #'org-roam-link-replace-all
-   "rd" '(nil :which-key "by date")
-   "rdb" '(org-roam-dailies-goto-previous-note :which-key "Goto previous note")
-   "rdd" '(org-roam-dailies-goto-date :which-key "Goto date")
-   "rdD" '(org-roam-dailies-capture-date :which-key "Capture date")
-   "rdf" '(org-roam-dailies-goto-next-note :which-key "Goto next note")
-   "rdm" '(org-roam-dailies-goto-tomorrow :which-key "Goto tomorrow")
-   "rdM" '(org-roam-dailies-capture-tomorrow :which-key "Capture tomorrow")
-   "rdn" '(org-roam-dailies-capture-today :which-key "Capture today")
-   "rdt" '(org-roam-dailies-goto-today :which-key "Goto today")
-   "rdT" '(org-roam-dailies-capture-today :which-key "Capture today")
-   "rdy" '(org-roam-dailies-goto-yesterday :which-key "Goto yesterday")
-   "rdY" '(org-roam-dailies-capture-yesterday :which-key "Capture yesterday")
-   "rd-" '(org-roam-dailies-find-directory :which-key "Find directory")
-   "ro" '(nil :which-key "node properties")
-   "roa" #'org-roam-alias-add
-   "roA" #'org-roam-alias-remove
-   "rot" #'org-roam-tag-add
-   "roT" #'org-roam-tag-remove
-   "ror" #'org-roam-ref-add
-   "roR" #'org-roam-ref-remove
-   ;; Projectile
-   "p" '(nil :which-key "projectile")
-   "pr" '(projectile-recentf :which-key "projectile-recentf")
-   "p&" '(projectile-run-async-shell-command-in-root :which-key "projectile-run-async-shell-command-in-root")
-   "p!" '(projectile-run-shell-command-in-root :which-key "projectile-run-shell-command-in-root")
-   "pd" '(projectile-remove-known-project :which-key "projectile-remove-known-project")
-   "pb" '(projectile-switch-to-buffer :which-key "projectile-switch-to-buffer")
-   "pa" '(projectile-add-known-project :which-key "projectile-add-known-project")
-   "ps" '(projectile-save-project-buffers :which-key "projectile-save-project-buffers")
-   "pg" '(projectile-configure-project :which-key "projectile-configure-project")
-   "pi" '(projectile-invalidate-cache :which-key "projectile-invalidate-cache")
-   "po" '(projectile-find-other-file :which-key "projectile-find-other-file")
-   "pe" '(projectile-edit-dir-locals :which-key "projectile-edit-dir-locals")
-   "pc" '(projectile-compile-project :which-key "projectile-compile-project")
-   "pp" '(projectile-switch-project :which-key "projectile-switch-project")
-   "pT" '(projectile-test-project :which-key "projectile-test-project")
-   "pR" '(projectile-run-project :which-key "projectile-run-project")
-   "pk" '(projectile-kill-buffers :which-key "projectile-kill-buffers")
-   "pn" '(a3madkour/make-project :which-key "make-project")
-   "pw" '(a3madkour/make-ws-project :which-key "make-ws-project")
-   "pv" '(projectile-run-vterm-other-window :which-key "projectile-run-vterm-other-window")
-   "SPC" '(projectile-find-file :which-key "projectile-find-file")
+ ;;org-roam
+ "r"
+ '(nil :which-key "org-roam")
+ "rD" #'org-roam-demote-entire-buffer
+ "rf" #'org-roam-node-find
+ "rt"
+ '(org-roam-dailies-goto-today :which-key "Goto today")
+ "rr" #'org-roam-ref-find
+ "rt"
+ '(org-roam-dailies-goto-today :which-key "Goto today")
+ "rg" #'org-roam-graph
+ "ri" #'org-roam-node-insert
+ "rI" #'org-id-get-create
+ "rm" #'org-roam-buffer-toggle
+ "rM" #'org-roam-buffer-display-dedicated
+ "rn" #'org-roam-capture
+ "rF" #'org-roam-refile
+ "rR" #'org-roam-link-replace-all
+ "rd"
+ '(nil :which-key "by date")
+ "rdb"
+ '(org-roam-dailies-goto-previous-note :which-key "Goto previous note")
+ "rdd"
+ '(org-roam-dailies-goto-date :which-key "Goto date")
+ "rdD"
+ '(org-roam-dailies-capture-date :which-key "Capture date")
+ "rdf"
+ '(org-roam-dailies-goto-next-note :which-key "Goto next note")
+ "rdm"
+ '(org-roam-dailies-goto-tomorrow :which-key "Goto tomorrow")
+ "rdM"
+ '(org-roam-dailies-capture-tomorrow :which-key "Capture tomorrow")
+ "rdn"
+ '(org-roam-dailies-capture-today :which-key "Capture today")
+ "rdt"
+ '(org-roam-dailies-goto-today :which-key "Goto today")
+ "rdT"
+ '(org-roam-dailies-capture-today :which-key "Capture today")
+ "rdy"
+ '(org-roam-dailies-goto-yesterday :which-key "Goto yesterday")
+ "rdY"
+ '(org-roam-dailies-capture-yesterday :which-key "Capture yesterday")
+ "rd-"
+ '(org-roam-dailies-find-directory :which-key "Find directory")
+ "ro"
+ '(nil :which-key "node properties")
+ "roa" #'org-roam-alias-add
+ "roA" #'org-roam-alias-remove
+ "rot" #'org-roam-tag-add
+ "roT" #'org-roam-tag-remove
+ "ror" #'org-roam-ref-add
+ "roR" #'org-roam-ref-remove
+ ;; Projectile
+ "p"
+ '(nil :which-key "projectile")
+ "pr"
+ '(projectile-recentf :which-key "projectile-recentf")
+ "p&"
+ '(projectile-run-async-shell-command-in-root :which-key "projectile-run-async-shell-command-in-root")
+ "p!"
+ '(projectile-run-shell-command-in-root :which-key "projectile-run-shell-command-in-root")
+ "pd"
+ '(projectile-remove-known-project :which-key "projectile-remove-known-project")
+ "pb"
+ '(projectile-switch-to-buffer :which-key "projectile-switch-to-buffer")
+ "pa"
+ '(projectile-add-known-project :which-key "projectile-add-known-project")
+ "ps"
+ '(projectile-save-project-buffers :which-key "projectile-save-project-buffers")
+ "pg"
+ '(projectile-configure-project :which-key "projectile-configure-project")
+ "pi"
+ '(projectile-invalidate-cache :which-key "projectile-invalidate-cache")
+ "po"
+ '(projectile-find-other-file :which-key "projectile-find-other-file")
+ "pe"
+ '(projectile-edit-dir-locals :which-key "projectile-edit-dir-locals")
+ "pc"
+ '(projectile-compile-project :which-key "projectile-compile-project")
+ "pp"
+ '(projectile-switch-project :which-key "projectile-switch-project")
+ "pT"
+ '(projectile-test-project :which-key "projectile-test-project")
+ "pR"
+ '(projectile-run-project :which-key "projectile-run-project")
+ "pk"
+ '(projectile-kill-buffers :which-key "projectile-kill-buffers")
+ "pn"
+ '(a3madkour/make-project :which-key "make-project")
+ "pw"
+ '(a3madkour/make-ws-project :which-key "make-ws-project")
+ "pv"
+ '(projectile-run-vterm-other-window :which-key "projectile-run-vterm-other-window")
+ "SPC"
+ '(projectile-find-file :which-key "projectile-find-file")
 
-   ;;citar
-   "z" '(nil :which-key "citation")
-   "zo" '(citar-open :which-key "citar-open")
-   "zi" '(org-cite-insert :which-key "org-cite-insert")
-   "ze" '(citar-insert-edit :which-key "Edit citation")
-   "zd" '(citar-dwim :which-key "citar-dwim")
+ ;;citar
+ "z"
+ '(nil :which-key "citation")
+ "zo"
+ '(citar-open :which-key "citar-open")
+ "zi"
+ '(org-cite-insert :which-key "org-cite-insert")
+ "ze"
+ '(citar-insert-edit :which-key "Edit citation")
+ "zd"
+ '(citar-dwim :which-key "citar-dwim")
 
-   ;;notes stuff 'n'
-   "n" '(nil :which-key "notes")
-   "ne" '(org-noter :which-key "Org Noter")
-   ;; journal
-   "nj" '(nil :which-key "journal")
-   "njj" '(org-journal-new-entry :which-key "new journal entry")
-   "njJ" '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
-
-
-   ;;insert 
-   "i" '(nil :which-key "insert")
-   "if" '(+default/insert-file-path :which-key "Current file name")
-   "iF" '(+default/insert-all-path :which-key "Current file name")
-   "ir" '(consult-register :which-key "Register")
-   "ic" '(org-chef-insert-recipe :which-key "Org Chef Insert Recipe")
-   "is" '(yas-insert-snippet :which-key "Snippet")
-   "iu" '(insert-char :which-key "Unicode")
-   "il" '(org-insert-link :which-key "Org-insert-link")
-   "it" '(a3madkour/add-transclusion-from-link :which-key "Insert transclude based on link")
-
-   ;;code/lsp
-   "c" '(nil :which-key "code")
-   "cc" 'compile
-   "cC" 'recompile
-   "cd" '+lookup/definition
-   "cD" '+lookup/references
-   "ce" 'eval-buffer
-   "cf" '(format-all-buffer :which-key "format buffer")
-   "ci" '+lookup/implementations
-   "ck" '+lookup/documentation
-   "ct" '+lookup/type-definition
-   "cw" 'delete-trailing-whitespace
-   "cm" 'consult-imenu
+ ;;notes stuff 'n'
+ "n"
+ '(nil :which-key "notes")
+ "ne"
+ '(org-noter :which-key "Org Noter")
+ ;; journal
+ "nj"
+ '(nil :which-key "journal")
+ "njj"
+ '(org-journal-new-entry :which-key "new journal entry")
+ "njJ"
+ '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
 
 
-   ;;langtools
-   "l" '(nil :which-key "Language Tool")
-   "lb" #'langtool-check
-   "lc" #'langtool-corrct-buffer
-   "lm" #'langtool-show-message-at-point
-   "ld" #'langtool-check-done
-   "ln" #'langtool-goto-next-eror
-   "lp" #'langtool-goto-previous-error
+ ;;insert
+ "i"
+ '(nil :which-key "insert")
+ "if"
+ '(+default/insert-file-path :which-key "Current file name")
+ "iF"
+ '(+default/insert-all-path :which-key "Current file name")
+ "ir"
+ '(consult-register :which-key "Register")
+ "ic"
+ '(org-chef-insert-recipe :which-key "Org Chef Insert Recipe")
+ "is"
+ '(yas-insert-snippet :which-key "Snippet")
+ "iu"
+ '(insert-char :which-key "Unicode")
+ "il"
+ '(org-insert-link :which-key "Org-insert-link")
+ "it"
+ '(a3madkour/add-transclusion-from-link :which-key "Insert transclude based on link")
+
+ ;;code/lsp
+ "c"
+ '(nil :which-key "code")
+ "cc" 'compile
+ "cC" 'recompile
+ "cd" '+lookup/definition
+ "cD" '+lookup/references
+ "ce" 'eval-buffer
+ "cf"
+ '(format-all-buffer :which-key "format buffer")
+ "ci" '+lookup/implementations
+ "ck" '+lookup/documentation
+ "ct" '+lookup/type-definition
+ "cw" 'delete-trailing-whitespace
+ "cm" 'consult-imenu
 
 
-   ) ;; End SPC prefix block
+ ;;langtools
+ "l"
+ '(nil :which-key "Language Tool")
+ "lb" #'langtool-check
+ "lc" #'langtool-corrct-buffer
+ "lm" #'langtool-show-message-at-point
+ "ld" #'langtool-check-done
+ "ln" #'langtool-goto-next-eror
+ "lp" #'langtool-goto-previous-error
+
+
+ ) ;; End SPC prefix block
 
   ;; All-mode keymaps
-  (general-def
-    :keymaps 'override
+(general-def
+  :keymaps 'override
 
-    ;; Emacs --------
-    ;; "M-x" 'M-x
-    "C-S-B" 'consult-switch-buffer
+  ;; Emacs --------
+  ;; "M-x" 'M-x
+  "C-S-B" 'consult-switch-buffer
 
-    ;; Remapping normal help features to use Consult version
-    "C-h v" 'describe-variable
-    "C-h o" 'describe-symbol
-    "C-h f" 'describe-function
-    "C-h F" 'describe-face
+  ;; Remapping normal help features to use Consult version
+  "C-h v" 'describe-variable
+  "C-h o" 'describe-symbol
+  "C-h f" 'describe-function
+  "C-h F" 'describe-face
 
-    ;; Editing ------
-    "M-v" 'simpleclip-paste
-    "M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
-    "M-c" 'simpleclip-copy
-    "M-u" 'capitalize-dwim ;; Default is upcase-dwim
-    "M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
+  ;; Editing ------
+  "M-v" 'simpleclip-paste
+  "M-V" 'evil-paste-after ;; shift-paste uses the internal clipboard
+  "M-c" 'simpleclip-copy
+  "M-u" 'capitalize-dwim ;; Default is upcase-dwim
+  "M-U" 'upcase-dwim ;; M-S-u (switch upcase and capitalize)
 
-    ;; Utility ------
-    "C-c c" 'org-capture
-    "C-;" 'embark-act
-    "C-=" 'embark-become
-    "C-c C-u" 'string-inflection-all-cycle
-    "C-c a" 'org-agenda
-    "C-c d" 'consult-dash
-    "C-s" 'consult-line ;; Large files will use grep (faster)
-    "C-c p" 'mw-thesaurus-lookup-at-point ;; Look up word at point
-    "s-\"" 'ispell-word ;; that's super-shift-'
-    "C-'" 'avy-goto-char-2
+  ;; Utility ------
+  "C-c c" 'org-capture
+  "C-;" 'embark-act
+  "C-=" 'embark-become
+  "C-c C-u" 'string-inflection-all-cycle
+  "C-c a" 'org-agenda
+  "C-c d" 'consult-dash
+  "C-s" 'consult-line ;; Large files will use grep (faster)
+  "C-c p" 'mw-thesaurus-lookup-at-point ;; Look up word at point
+  "s-\"" 'ispell-word ;; that's super-shift-'
+  "C-'" 'avy-goto-char-2
 
-    "C-M-x" 'ispell-complete-word
-    "C-M-q" 'indent-pp-sexp
-    )
+  "C-M-x" 'ispell-complete-word
+  "C-M-q" 'indent-pp-sexp)
 
-  (general-def
-    :keymaps 'emacs
-    "C-w C-q" 'kill-this-buffer
-    )
+(general-def :keymaps 'emacs "C-w C-q" 'kill-this-buffer)
 
   ;; Non-insert mode keymaps
-  (general-def
-    :states '(normal visual motion)
-    "u" 'undo
-    "|" '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
-    "C-|" '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
-    "gc" '(evilnc-comment-operator :which-key "commentator")
-    "gD" '(xref-find-references :which-key "find references")
-    )
-  (general-def
-    :prefix "["
-    :states '(normal visual motion)
-    "c" '(+evil/previous-comment :which-key "previous comment")
-    "e" '(previous-error :which-key "previous error")
-    "F" '(+evil/previous-frame :which-key "previous frame")
-    "h" '(outline-previous-visible-heading :which-key "previous heading")
-    "m" '(+evil/previous-beginning-of-method :which-key "previous method")
-    "M" '(+evil/previous-end-of-method :which-key "previous end method")
-    "o" '(+evil/insert-newline-below :which-key "insert newline below")
-    )
-  (general-def
-    :prefix "]"
-    :states '(normal visual motion)
-    "c" '(+evil/next-comment :which-key "next comment")
-    "e" '(next-error :which-key "next error")
-    "F" '(+evil/next-frame :which-key "next frame")
-    "h" '(outline-next-visible-heading :which-key "next heading")
-    "m" '(+evil/next-beginning-of-method :which-key "next method")
-    "M" '(+evil/next-end-of-method :which-key "next end method")
-    "o" '(+evil/insert-newline-above :which-key "insert newline below")
-    )
-  (general-def
-    :prefix "gs"
-    :states '(normal visual motion)
-    "s" '(evil-avy-goto-char-2 :which-key "avy char 2")
-    "/" '(evil-avy-goto-char-timer :which-key "avy timer")
-    "SPC" '(evil-avy-goto-char-timer :which-key "avy timer")
-    )
+(general-def
+  :states '(normal visual motion)
+  "u" 'undo
+  "|"
+  '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
+  "C-|"
+  '(lambda () (interactive) (org-agenda nil "j")) ;; Opens my m custom org-super-agenda view
+  "gc"
+  '(evilnc-comment-operator :which-key "commentator")
+  "gD"
+  '(xref-find-references :which-key "find references"))
+(general-def
+  :prefix "["
+  :states '(normal visual motion)
+  "c"
+  '(+evil/previous-comment :which-key "previous comment")
+  "e"
+  '(previous-error :which-key "previous error")
+  "F"
+  '(+evil/previous-frame :which-key "previous frame")
+  "h"
+  '(outline-previous-visible-heading :which-key "previous heading")
+  "m"
+  '(+evil/previous-beginning-of-method :which-key "previous method")
+  "M"
+  '(+evil/previous-end-of-method :which-key "previous end method")
+  "o"
+  '(+evil/insert-newline-below :which-key "insert newline below"))
+(general-def
+  :prefix "]"
+  :states '(normal visual motion)
+  "c"
+  '(+evil/next-comment :which-key "next comment")
+  "e"
+  '(next-error :which-key "next error")
+  "F"
+  '(+evil/next-frame :which-key "next frame")
+  "h"
+  '(outline-next-visible-heading :which-key "next heading")
+  "m"
+  '(+evil/next-beginning-of-method :which-key "next method")
+  "M"
+  '(+evil/next-end-of-method :which-key "next end method")
+  "o"
+  '(+evil/insert-newline-above :which-key "insert newline below"))
+(general-def
+  :prefix "gs"
+  :states '(normal visual motion)
+  "s"
+  '(evil-avy-goto-char-2 :which-key "avy char 2")
+  "/"
+  '(evil-avy-goto-char-timer :which-key "avy timer")
+  "SPC"
+  '(evil-avy-goto-char-timer :which-key "avy timer"))
 
 
   ;; Insert keymaps
   ;; Many of these are emulating standard Emacs bindings in Evil insert mode, such as C-a, or C-e.
-  (general-def
-    :states '(insert)
-    "C-a" 'evil-beginning-of-visual-line
-    "C-e" 'evil-end-of-visual-line
-    "C-S-a" 'evil-beginning-of-line
-    "C-S-e" 'evil-end-of-line
-    "C-n" 'evil-next-visual-line
-    "C-p" 'evil-previous-visual-line
-    )
+(general-def
+  :states '(insert)
+  "C-a" 'evil-beginning-of-visual-line
+  "C-e" 'evil-end-of-visual-line
+  "C-S-a" 'evil-beginning-of-line
+  "C-S-e" 'evil-end-of-line
+  "C-n" 'evil-next-visual-line
+  "C-p" 'evil-previous-visual-line)
 
 
-  (general-def
-    :states 'normal
-    :keymaps 'org-mode-map
-    "t" 'org-todo
-    "K" 'org-shiftup
+(general-def
+  :states 'normal
+  :keymaps 'org-mode-map
+  "t" 'org-todo
+  "K" 'org-shiftup
 
-    "J" 'org-shiftdown
-    "TAB" 'org-cycle
-    )
+  "J" 'org-shiftdown
+  "TAB" 'org-cycle)
 
-  (general-def
-    :states 'insert
-    :keymaps 'org-mode-map
-    "C-o" 'evil-org-open-above)
+(general-def
+  :states 'insert
+  :keymaps 'org-mode-map
+  "C-o" 'evil-org-open-above)
 
-  (general-def
-    :states '(normal insert emacs)
-    :keymaps 'org-mode-map
-    "M-[" 'org-metaleft
-    "M-]" 'org-metaright
-    "C-M-=" 'ap/org-count-words
-    "s-r" 'org-refile
-    "M-k" 'org-insert-link
-    )
+(general-def
+  :states '(normal insert emacs)
+  :keymaps 'org-mode-map
+  "M-[" 'org-metaleft
+  "M-]" 'org-metaright
+  "C-M-=" 'ap/org-count-words
+  "s-r" 'org-refile
+  "M-k" 'org-insert-link)
 
   ;; Org-src - when editing an org source block
-  (general-def
-    :prefix ","
-    :states 'normal
-    :keymaps 'org-src-mode-map
-    "b" '(nil :which-key "org src")
-    "bc" 'org-edit-src-abort
-    "bb" 'org-edit-src-exit
-    )
+(general-def
+  :prefix ","
+  :states 'normal
+  :keymaps 'org-src-mode-map
+  "b"
+  '(nil :which-key "org src")
+  "bc" 'org-edit-src-abort
+  "bb" 'org-edit-src-exit)
 
-  (general-define-key
-   :prefix "SPC m"
-   :states 'motion
-   :keymaps '(org-mode-map) ;; Available in org mode, org agenda
-   "" nil
-   "A" '(org-archive-subtree-default :which-key "org-archive")
-   "a" '(org-agenda :which-key "org agenda")
-   "6" '(org-sort :which-key "sort")
-   "c" '(org-capture :which-key "org-capture")
-   "s" '(org-schedule :which-key "schedule")
-   "d" '(org-deadline :which-key "deadline")
-   "g" '(org-goto :which-key "goto heading")
-   "t" '(a3madkour/add-scheduled-todo :which-key "add scheduled todo")
-   "T" '(a3madkour/add-scheduled-headline-todo :which-key "add new datetree deadline todo")
-   "p" '(org-set-property :which-key "set property")
-   "e" '(org-export-dispatch :which-key "export org")
-   "B" '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
-   "H" '(org-html-convert-region-to-html :which-key "convert region to html")
-   "r" 'a3madkour/refile-and-schedule 
+(general-define-key
+ :prefix "SPC m"
+ :states 'motion
+ :keymaps '(org-mode-map) ;; Available in org mode, org agenda
+ "" nil
+ "A"
+ '(org-archive-subtree-default :which-key "org-archive")
+ "a"
+ '(org-agenda :which-key "org agenda")
+ "6"
+ '(org-sort :which-key "sort")
+ "c"
+ '(org-capture :which-key "org-capture")
+ "s"
+ '(org-schedule :which-key "schedule")
+ "d"
+ '(org-deadline :which-key "deadline")
+ "g"
+ '(org-goto :which-key "goto heading")
+ "t"
+ '(a3madkour/add-scheduled-todo :which-key "add scheduled todo")
+ "T"
+ '(a3madkour/add-scheduled-headline-todo :which-key "add new datetree deadline todo")
+ "p"
+ '(org-set-property :which-key "set property")
+ "e"
+ '(org-export-dispatch :which-key "export org")
+ "B"
+ '(org-toggle-narrow-to-subtree :which-key "toggle narrow to subtree")
+ "H"
+ '(org-html-convert-region-to-html :which-key "convert region to html")
+ "r" 'a3madkour/refile-and-schedule
 
-   "1" '(org-toggle-link-display :which-key "toggle link display")
-   "2" '(org-toggle-inline-images :which-key "toggle images")
+ "1"
+ '(org-toggle-link-display :which-key "toggle link display")
+ "2"
+ '(org-toggle-inline-images :which-key "toggle images")
 
-   ;; org-babel
-   "b" '(nil :which-key "babel")
-   "bt" '(org-babel-tangle :which-key "org-babel-tangle")
-   "bb" '(org-edit-special :which-key "org-edit-special")
-   "bc" '(org-edit-src-abort :which-key "org-edit-src-abort")
-   "bk" '(org-babel-remove-result-one-or-many :which-key "org-babel-remove-result-one-or-many")
+ ;; org-babel
+ "b"
+ '(nil :which-key "babel")
+ "bt"
+ '(org-babel-tangle :which-key "org-babel-tangle")
+ "bb"
+ '(org-edit-special :which-key "org-edit-special")
+ "bc"
+ '(org-edit-src-abort :which-key "org-edit-src-abort")
+ "bk"
+ '(org-babel-remove-result-one-or-many :which-key "org-babel-remove-result-one-or-many")
 
-   ;; insert
-   "i" '(nil :which-key "insert")
+ ;; insert
+ "i"
+ '(nil :which-key "insert")
 
-   "it" '(nil :which-key "tables")
-   "itt" '(org-table-create :which-key "create table")
-   "itl" '(org-table-insert-hline :which-key "table hline")
-   "il" '(org-insert-link :which-key "org-insert-link")
+ "it"
+ '(nil :which-key "tables")
+ "itt"
+ '(org-table-create :which-key "create table")
+ "itl"
+ '(org-table-insert-hline :which-key "table hline")
+ "il"
+ '(org-insert-link :which-key "org-insert-link")
 
-   "ib" '(org-books-add-url :which-key "Book url")
+ "ib"
+ '(org-books-add-url :which-key "Book url")
 
-   "is" '(nil :which-key "insert stamp")
-   "iss" '((lambda () (interactive) (call-interactively (org-time-stamp-inactive))) :which-key "org-time-stamp-inactive")
-   "isS" '((lambda () (interactive) (call-interactively (org-time-stamp nil))) :which-key "org-time-stamp")
+ "is"
+ '(nil :which-key "insert stamp")
+ "iss"
+ '((lambda ()
+	 (interactive)
+	 (call-interactively (org-time-stamp-inactive)))
+   :which-key "org-time-stamp-inactive")
+ "isS"
+ '((lambda ()
+	 (interactive)
+	 (call-interactively (org-time-stamp nil)))
+   :which-key "org-time-stamp")
 
-   ;; clocking
-   "c" '(nil :which-key "clocking")
-   "ci" '(org-clock-in :which-key "clock in")
-   "co" '(org-clock-out :which-key "clock out")
-   "cj" '(org-clock-goto :which-key "jump to clock")
+ ;; clocking
+ "c"
+ '(nil :which-key "clocking")
+ "ci"
+ '(org-clock-in :which-key "clock in")
+ "co"
+ '(org-clock-out :which-key "clock out")
+ "cj"
+ '(org-clock-goto :which-key "jump to clock")
 
-   ;; transclusion stuff
-   "l" '(nil :which-key "transclusion stuff")
-   "ll" '(org-transclusion-mode :which-key "org-transclusion mode")
-   "li" '(a3madkour/add-transclusion-from-link :which-key "add-transclusion-from-link")
-   "lr" '(org-transclusion-remove :which-key "org-transclusion remove")
-   "la" '(org-transclusion-add :which-key "org-transclusion add")
-   ;;TODO make this open with org-open-atpoint
-   "lo" '(org-transclusion-open-source :which-key "org-transclusion open source")
-   "lO" '(org-transclusion-move-to-source :which-key "org-transclusion move to source")
-   "ld" '(org-transclusion-detach :which-key "org-transclusion detach")
-   "le" '(org-transclusion-live-sync-start :which-key "org-transclusion live sync")
-   "lg" '(org-transclusion-refresh :which-key "org-transclusion refresh")
-   "lm" '(org-transclusion-make-from-link :which-key "org-transclusion make from link")
-   )
+ ;; transclusion stuff
+ "l"
+ '(nil :which-key "transclusion stuff")
+ "ll"
+ '(org-transclusion-mode :which-key "org-transclusion mode")
+ "li"
+ '(a3madkour/add-transclusion-from-link :which-key "add-transclusion-from-link")
+ "lr"
+ '(org-transclusion-remove :which-key "org-transclusion remove")
+ "la"
+ '(org-transclusion-add :which-key "org-transclusion add")
+ ;;TODO make this open with org-open-atpoint
+ "lo"
+ '(org-transclusion-open-source :which-key "org-transclusion open source")
+ "lO"
+ '(org-transclusion-move-to-source :which-key "org-transclusion move to source")
+ "ld"
+ '(org-transclusion-detach :which-key "org-transclusion detach")
+ "le"
+ '(org-transclusion-live-sync-start :which-key "org-transclusion live sync")
+ "lg"
+ '(org-transclusion-refresh :which-key "org-transclusion refresh")
+ "lm"
+ '(org-transclusion-make-from-link :which-key "org-transclusion make from link"))
 
 
   ;; Org-agenda
   ;;TODO figure out a better key than , for these mappings
-  (general-define-key
-   :prefix ","
-   :states 'motion
-   :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
-   "" nil
-   "a" '(org-agenda :which-key "org agenda")
-   "c" '(org-capture :which-key "org-capture")
-   "s" '(org-agenda-schedule :which-key "schedule")
-   "d" '(org-agenda-deadline :which-key "deadline")
-   "t" '(org-agenda-set-tags :which-key "set tags")
-   ;; clocking
-   "c" '(nil :which-key "clocking")
-   "ci" '(org-agenda-clock-in :which-key "clock in")
-   "co" '(org-agenda-clock-out :which-key "clock out")
-   "cj" '(org-clock-goto :which-key "jump to clock")
-   )
+(general-define-key
+ :prefix ","
+ :states 'motion
+ :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
+ "" nil
+ "a"
+ '(org-agenda :which-key "org agenda")
+ "c"
+ '(org-capture :which-key "org-capture")
+ "s"
+ '(org-agenda-schedule :which-key "schedule")
+ "d"
+ '(org-agenda-deadline :which-key "deadline")
+ "t"
+ '(org-agenda-set-tags :which-key "set tags")
+ ;; clocking
+ "c"
+ '(nil :which-key "clocking")
+ "ci"
+ '(org-agenda-clock-in :which-key "clock in")
+ "co"
+ '(org-agenda-clock-out :which-key "clock out")
+ "cj"
+ '(org-clock-goto :which-key "jump to clock"))
   ;; Org-agenda
-  (general-define-key
-   :states 'motion
-   :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
-   "cp" '(org-pomodoro :which-key "Start or stop pomodoro")
-   )
+(general-define-key
+ :states 'motion
+ :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
+ "cp"
+ '(org-pomodoro :which-key "Start or stop pomodoro"))
 
-  (evil-define-key 'motion org-agenda-mode-map
-    (kbd "f") 'org-agenda-later
-    (kbd "b") 'org-agenda-earlier)
+(evil-define-key 'motion org-agenda-mode-map
+  (kbd "f")
+  'org-agenda-later
+  (kbd "b")
+  'org-agenda-earlier)
 
 
-  (general-define-key
-   :prefix "SPC e"
-   :states 'motion
-   :keymaps '(emms-playlist-mode-map) ;; Available in org mode, org agenda
-   "" nil
-   "l" '(emms-toggle-repeat-playlist :which-key "emms-toggle-repeat-playlist")
-   "p" '(emms-insert-playlist :which-key "emms-insert-playlist")
-   "i" '(emms-insert-file :which-key "'emms-insert-file")
-   "t" '(emms-toggle-repeat-track :which-key "emms-toggle-repeat-track")
-   "s" '(emms-playlist-save :which-key "emms-playlist-save")
-   "m" '(emms-shuffle :which-key "emms-shuffle")
-   )
+(general-define-key
+ :prefix "SPC e"
+ :states 'motion
+ :keymaps '(emms-playlist-mode-map) ;; Available in org mode, org agenda
+ "" nil
+ "l"
+ '(emms-toggle-repeat-playlist :which-key "emms-toggle-repeat-playlist")
+ "p"
+ '(emms-insert-playlist :which-key "emms-insert-playlist")
+ "i"
+ '(emms-insert-file :which-key "'emms-insert-file")
+ "t"
+ '(emms-toggle-repeat-track :which-key "emms-toggle-repeat-track")
+ "s"
+ '(emms-playlist-save :which-key "emms-playlist-save")
+ "m"
+ '(emms-shuffle :which-key "emms-shuffle"))
 
   ;; Help/emacs
 
 
-  (general-define-key
-   :states 'normal
-   :keymaps 'pdf-view-mode-map
-   "i" '(org-noter-insert-note :which-key "org-noter-insert-note")
-   "s" '(a3madkour/org-noter-insert-subheading-note :which-key "org-noter-insert-note subheading")
-   )
+(general-define-key
+ :states 'normal
+ :keymaps 'pdf-view-mode-map
+ "i"
+ '(org-noter-insert-note :which-key "org-noter-insert-note")
+ "s"
+ '(a3madkour/org-noter-insert-subheading-note :which-key "org-noter-insert-note subheading"))
 
-  (general-define-key
-   :states 'motion
-   :keymaps 'outshine-mode-map
-   "TAB" '(outshine-cycle :which-key "outshine-cycle")
-   )
+(general-define-key
+ :states 'motion
+ :keymaps 'outshine-mode-map
+ "TAB"
+ '(outshine-cycle :which-key "outshine-cycle"))
 
 #+end_src
 
