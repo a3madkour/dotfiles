@@ -1745,6 +1745,10 @@ Highlight the diffs of the past commit in a file
   )
 #+end_src
 * Language Packages
+** Racket
+#+begin_src emacs-lisp
+(use-package racket-mode)
+#+end_src
 ** Rust
 #+begin_src emacs-lisp
   (use-package rustic
@@ -1924,11 +1928,18 @@ Run agda-mode setup first
 
   ;; (use-package haml-mode)
   ;; (use-package company-web)
+<<<<<<< HEAD
+  (use-package css-mode)
+  ;; (use-package com-css-sort)
+  ;; (use-package less-css-mode)
+  (use-package sass-mode)
+=======
   ;; (use-package impatient-mode)
   ;; (use-package css-mode)
   ;; (use-package com-css-sort)
   ;; (use-package less-css-mode)
   ;; (use-package sass-mode)
+>>>>>>> origin/main
   ;; (use-package sws-mode)
   (use-package web-mode
 	:config
@@ -2281,6 +2292,19 @@ Run agda-mode setup first
     :config
     (org-roam-db-autosync-mode)
     )
+#+end_src
+* Org roam ui
+#+begin_src emacs-lisp
+  (use-package org-roam-ui
+    :straight
+    (:host github :repo "org-roam/org-roam-ui" :branch "main" :file (".el" "out"))
+    :after org-roam
+    :config
+    (setq org-roam-ui-sync-theme t
+	  org-roam-ui-follow t
+	  org-roam-ui-update-on-save t
+	  org-roam-ui-open-on-start t))
+
 #+end_src
 * Org noter
 #+begin_src emacs-lisp
