@@ -1888,7 +1888,7 @@ Run agda-mode setup first
   (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer) ;; Standard way
 
   (use-package company-auctex
-	:after auctex
+	:after auctex company
 	:init
 	(add-to-list 'company-backends 'company-auctex)
 	(company-auctex-init))
@@ -1928,18 +1928,15 @@ Run agda-mode setup first
 
   ;; (use-package haml-mode)
   ;; (use-package company-web)
-<<<<<<< HEAD
   (use-package css-mode)
   ;; (use-package com-css-sort)
   ;; (use-package less-css-mode)
   (use-package sass-mode)
-=======
   ;; (use-package impatient-mode)
   ;; (use-package css-mode)
   ;; (use-package com-css-sort)
   ;; (use-package less-css-mode)
   ;; (use-package sass-mode)
->>>>>>> origin/main
   ;; (use-package sws-mode)
   (use-package web-mode
 	:config
