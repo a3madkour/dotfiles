@@ -622,8 +622,8 @@ Adapted from doom emacs textobjects.el
 
 	:config
 	(setq company-idle-delay 0.01)
-	(add-to-list 'company-backends 'company-math-symbols-unicode)
 	(add-to-list 'company-backends 'company-ispell)
+	(add-to-list 'company-backends 'company-math-symbols-unicode)
 	:custom-face
 	(company-tooltip ((t (:family "Roboto Mono")))))
 #+end_src
@@ -3222,6 +3222,7 @@ _SPC_ cancel	_o_nly this   	_d_elete
  "ce" 'eval-buffer
  "cf"
  '(format-all-buffer :which-key "format buffer")
+ "cr" 'eglot-rename
  "ci" '+lookup/implementations
  "ck" '+lookup/documentation
  "ct" '+lookup/type-definition
