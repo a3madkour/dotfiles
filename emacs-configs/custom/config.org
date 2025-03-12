@@ -583,8 +583,12 @@ Adapted from doom emacs textobjects.el
 #+end_src
 * All the icons
 #+begin_src emacs-lisp
-  (use-package all-the-icons
-	:if (display-graphic-p))
+(use-package all-the-icons
+  :if (display-graphic-p))
+(use-package all-the-icons-completion
+  :config
+  (all-the-icons-completion-mode)
+  (add-hook 'marginalia-mode-hook #'all-the-icons-completion-marginalia-setup))
 #+end_src
 * Hydra
 #+begin_src emacs-lisp
@@ -617,7 +621,8 @@ Adapted from doom emacs textobjects.el
 		  company-dabbrev-downcase nil)
 
 	:config
-	(setq company-idle-delay 0.35)
+	(setq company-idle-delay 0.01)
+	(add-to-list 'company-backends 'company-ispell)
 	(add-to-list 'company-backends 'company-math-symbols-unicode)
 	:custom-face
 	(company-tooltip ((t (:family "Roboto Mono")))))
@@ -1586,7 +1591,7 @@ Highlight the diffs of the past commit in a file
 		  '(recenter-top-bottom
 			move-to-window-line-top-bottom
 			reposition-window
-			;; bookmark-jump
+			bookmark-jump
 			;; other-window
 			;; delete-window
 			;; delete-other-windows
@@ -1797,6 +1802,10 @@ Run agda-mode setup first
 #+begin_src emacs-lisp
   (add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
 #+end_src
+** Racket
+#+begin_src emacs-lisp
+(use-package racket-mode)
+#+end_src
 ** C/C++
 #+begin_src emacs-lisp
   (use-package demangle-mode)
@@ -1879,7 +1888,7 @@ Run agda-mode setup first
   (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer) ;; Standard way
 
   (use-package company-auctex
-	:after auctex
+	:after auctex company
 	:init
 	(add-to-list 'company-backends 'company-auctex)
 	(company-auctex-init))
@@ -1893,7 +1902,7 @@ Run agda-mode setup first
 	:hook (org-mode . org-cdlatex-mode)
 	:hook (tex-mode . cdlatex-mode))
 
-  (use-package company-auctex)
+  ;; (use-package company-auctex)
   (use-package company-reftex)
   (use-package company-math)
   (use-package adaptive-wrap
@@ -2188,8 +2197,11 @@ Run agda-mode setup first
   		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
   		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-  		  ("b" "Manual Book" entry (file "~/org/reading-list.org")
+  		  ("b" "Manual Book" entry (file+headline "~/org/reading-list.org" "Books")
   		   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
+
+  		  ("l" "Manual Paper" entry (file+headline "~/org/reading-list.org" "Papers")
+  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \"\")\n")
 
   		  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
   		   "* %?\n")
@@ -3206,6 +3218,7 @@ _SPC_ cancel	_o_nly this   	_d_elete
  "ce" 'eval-buffer
  "cf"
  '(format-all-buffer :which-key "format buffer")
+ "cr" 'eglot-rename
  "ci" '+lookup/implementations
  "ck" '+lookup/documentation
  "ct" '+lookup/type-definition
