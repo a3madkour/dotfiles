@@ -36,7 +36,7 @@
 (straight-use-package 'use-package)
 (setq straight-use-package-by-default t)
 (setq straight-built-in-pseudo-packages
-	  '(emacs nadvice python image-mode project flymake))
+	  '(emacs nadvice python image-mode project flymake xref))
 (use-package org)
 
 (org-babel-load-file "~/emacs-configs/custom/config.org")
