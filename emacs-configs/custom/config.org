@@ -1919,18 +1919,11 @@ Run agda-mode setup first
 
   ;; (use-package haml-mode)
   ;; (use-package company-web)
-<<<<<<< HEAD
-  (use-package css-mode)
-  ;; (use-package com-css-sort)
-  ;; (use-package less-css-mode)
-  (use-package sass-mode)
-=======
   ;; (use-package impatient-mode)
   ;; (use-package css-mode)
   ;; (use-package com-css-sort)
   ;; (use-package less-css-mode)
   ;; (use-package sass-mode)
->>>>>>> origin/main
   ;; (use-package sws-mode)
   (use-package web-mode
 	:config
@@ -2814,7 +2807,7 @@ Debuging adapter protocol for emacs
 
  ;; Defaults and debugging
  "d"
- '(nil  :which-key "defaults")
+ '(nil  :which-key "defaults and debug")
  "dP"
  '((lambda () (interactive) (persp-state-load "~/default-persp"))
    :which-key "load default persp")
@@ -2857,7 +2850,7 @@ Debuging adapter protocol for emacs
  "bb"
  '(consult-buffer :which-key "switch buffers")
  "bd"
- '(kill-this-buffer :which-key "delete buffer")
+ '(kill-current-buffer :which-key "delete buffer")
  "bi"
  '(ibuffer  :which-key "ibuffer")
  "br"
@@ -3000,7 +2993,7 @@ Debuging adapter protocol for emacs
  '(evil-window-up :which-key "evil-window-up")
  "wz"
  '(text-scale-adjust :which-key "text zoom")
- "wh"
+ "wH"
  (defhydra hydra-window ()
    "
 Movement^^        ^Split^         ^Switch^		^Resize^
