@@ -1075,6 +1075,18 @@ must be non-read-only, empty, and there must be a rule in
 	:config
 	(marginalia-mode))
 #+end_src
+* Dash Docs
+#+begin_src emacs-lisp
+  (use-package dash-docs
+	:config
+	(setq dash-docs-docsets-path "~/.docsets")
+	(setq installed-langs (dash-docs-installed-docsets))
+	;;figure out to convert spaces into underscores when installing the docs
+	(setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell"))
+	(dolist (lang docset-langs)
+	  (when (null (member lang installed-langs))
+		(dash-docs-install-docset lang))))
+#+end_src
 * Consult
 #+begin_src emacs-lisp
   ;; Example configuration for Consult
@@ -1202,15 +1214,16 @@ must be non-read-only, empty, and there must be a rule in
 #+end_src
 * Consult-dash
 #+begin_src emacs-lisp
-  (use-package consult-dash
-:config
-(setq counsel-dash-docsets-path "~/.docset")
-(setq counsel-dash-docsets-url "https://raw.github.com/Kapeli/feeds/master")
-(setq counsel-dash-min-length 3)
-(setq counsel-dash-candidate-format "%d %n (%t)")
-(setq counsel-dash-enable-debugging nil)
-(setq counsel-dash-browser-func 'browse-url)
-(setq counsel-dash-ignored-docsets nil))
+(use-package consult-dash
+  :config
+  (setq counsel-dash-docsets-path "~/.docset")
+  (setq counsel-dash-docsets-url "https://raw.github.com/Kapeli/feeds/master")
+  (setq counsel-dash-min-length 3)
+  (setq counsel-dash-candidate-format "%d %n (%t)")
+  (setq counsel-dash-enable-debugging nil)
+  (setq counsel-dash-browser-func 'browse-url)
+  (setq counsel-dash-ignored-docsets nil)
+  (consult-customize consult-dash :initial (thing-at-point 'symbol)))
 #+end_src
 * Embark
 #+begin_src emacs-lisp
@@ -1632,18 +1645,6 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
   (use-package rg)
 #+end_src
-* Dash Docs
-#+begin_src emacs-lisp
-  (use-package dash-docs
-	:config
-	(setq dash-docs-docsets-path "~/.docsets")
-	(setq installed-langs (dash-docs-installed-docsets))
-	;;figure out to convert spaces into underscores when installing the docs
-	(setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "OpenGL_4" "OCaml" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell" "React" "D3JS"))
-	(dolist (lang docset-langs)
-	  (when (null (member lang installed-langs))
-		(dash-docs-install-docset lang))))
-#+end_src
 * Define word
 #+begin_src emacs-lisp
 (use-package define-word)
@@ -1686,15 +1687,18 @@ Highlight the diffs of the past commit in a file
 * Language Packages
 ** Racket
 #+begin_src emacs-lisp
-(use-package racket-mode)
+(use-package racket-mode
+  :dash "Racket")
 #+end_src
 ** Rust
 #+begin_src emacs-lisp
-  (use-package rustic
-	:config
-	(setq rustic-lsp-client 'eglot)
-	;; (setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
-	)
+(use-package rust-mode
+  :dash "Rust")
+(use-package rustic
+  :config
+  (setq rustic-lsp-client 'eglot)
+  ;; (setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
+  )
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
@@ -1707,8 +1711,8 @@ Highlight the diffs of the past commit in a file
 #+end_src
 ** Haskell
 #+begin_src emacs-lisp
-  (use-package haskell-mode)
-  ;; (use-package lsp-haskell)
+  (use-package haskell-mode
+	:dash "Haskell")
 #+end_src
 ** Agda
 Run agda-mode setup first
@@ -1721,7 +1725,8 @@ Run agda-mode setup first
   (use-package ein
     :config
     (setq ein:output-area-inlined-images t))
-  (use-package python-mode)
+  (use-package python-mode
+	:dash "Python")
   (use-package sphinx-doc
     :hook
     (python-mode . sphinx-doc-mode))
@@ -1740,10 +1745,6 @@ Run agda-mode setup first
 ** Prolog
 #+begin_src emacs-lisp
   (add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
-#+end_src
-** Racket
-#+begin_src emacs-lisp
-(use-package racket-mode)
 #+end_src
 ** C/C++
 #+begin_src emacs-lisp
@@ -2903,6 +2904,8 @@ Debuging adapter protocol for emacs
  '(nil :which-key "Search and store")
  "sb"
  '(consult-line :which-key "search buffer")
+ "so"
+ '(occur :which-key "occur")
  "sd"
  '(consult-dash :which-key "search docsets")
  "sl"
@@ -2965,8 +2968,6 @@ _SPC_ cancel	_o_nly this   	_d_elete
    ("w" hydra-move-splitter-down)
    ("e" hydra-move-splitter-up)
    ("r" hydra-move-splitter-right)
-   ("b" helm-mini)
-   ("f" helm-find-files)
    ("F" follow-mode)
    ("a"
 	(lambda ()
