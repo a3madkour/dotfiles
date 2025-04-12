@@ -26,7 +26,7 @@ export PATH="$PATH:$HOME/.ghcup/bin"
 export PATH="$PATH:$HOME/.cabal/bin"
 export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/bin"
-export PATH="$PATH:$HOME/.local/share/gem/ruby/3.0.0/bin/"
+export PATH="$PATH:$HOME/.local/share/gem/ruby/3.3.0/bin/"
 export PATH="$PATH:$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
 export EDITOR="emacsclient"
 

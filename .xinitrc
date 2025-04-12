@@ -52,5 +52,7 @@ setxkbmap -option caps:escape
 xscreensaver &
 autorandr &
 sleep 4.0;
+emacs --daemon &
 ~/.config/polybar/launch.sh &
+setxkbmap -option caps:escape
 exec i3
