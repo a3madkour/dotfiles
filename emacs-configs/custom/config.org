@@ -558,6 +558,14 @@ Adapted from doom emacs textobjects.el
   (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds))
 (add-hook 'vterm-mode-hook (lambda()
 							 (goto-address-mode 1)))
+(use-package vterm-toggle
+  :config
+  (setq vtrm-toggle-cd-auto-create-buffer nil))
+(defun a3madkour/vterm-cd ()
+  (interactive)
+  (progn (vterm-toggle-insert-cd)
+		 (vterm-toggle-insert-cd)))
+(use-package multi-vterm :ensure t)
 #+end_src
 * Undo-tree
 #+begin_src emacs-lisp
@@ -2964,7 +2972,7 @@ Debuging adapter protocol for emacs
  "oa"
  '(org-agenda :which-key "org-agenda")
 
- ;; Toggles
+ ;; Toggles and terminals
  "t"
  '(nil :which-key "toggles")
  "tt"
@@ -2987,8 +2995,8 @@ Debuging adapter protocol for emacs
  '(display-fill-column-indicator-mode :which-key "fill column indicator")
  "tm"
  '(hide-mode-line-mode :which-key "hide modeline mode")
- "tk"
- '(+toggle-keycast :which-key "toggle keycast")
+ "td"
+ '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
  ;;Search and store
  "s"
