@@ -15,6 +15,7 @@ alias e="emacsclient -r"
 alias xppen="/usr/lib/pentablet/PenTablet.sh"
 
 alias vim="nvim"
+alias vi="nvim"
 
 export GTK_IM_MODULE=ibus
 export XMODIFIERS=@im=ibus

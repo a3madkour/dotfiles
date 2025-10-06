@@ -55,16 +55,18 @@
 (setq use-short-answers t)
 (setq ns-pop-up-frames nil)
 (setq
- org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
+ org-roam-node-display-template
+ (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
  org-ref-notes "~/org/notes/ref-notes"
  org-roam-dir "~/org/notes"
  zot-bib  "~/org/notes/ref-notes/library.bib"
- org-cite-default-bibliography (list zot-bib)
+ org-cite-default-bibliography
+ (list zot-bib)
  org-cite-csl-styles-dir "~/Zotero/styles"
- org-cite-global-bibliography (list zot-bib)
+ org-cite-global-bibliography
+ (list zot-bib)
  org-roam-dailies-directory "~/org/fleeting-notes"
- org-roam-directory org-roam-dir
- )
+ org-roam-directory org-roam-dir)
 (add-to-list 'display-buffer-alist
              '("\\*org-roam\\*"
                (display-buffer-in-side-window)
@@ -72,14 +74,12 @@
 			   (slot . 0)
                (window-width . 0.33)
                (window-height . fit-window-to-buffer)
-			   (window-parameters . (
-									 ))))
+			   (window-parameters . ())))
 ;dailies template
 (setq org-roam-dailies-capture-templates
       '(("d" "default" entry
        	 "* %?"
-       	 :target (file+head "%<%Y-%m-%d>.org"
-       						"#+title: %<%Y-%m-%d>\n"))))
+       	 :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n"))))
 ;; Confirm to quit
 (setq confirm-kill-emacs 'yes-or-no-p)
 
@@ -134,11 +134,11 @@
 
 (defmacro η (fnc)
   "Return function that ignores its arguments and invokes FNC."
-  `(lambda (&rest _rest)
-     (funcall ,fnc)))
+  `(lambda (&rest _rest) (funcall ,fnc)))
 (advice-add 'org-deadline       :after (η #'org-save-all-org-buffers))
 (advice-add 'org-schedule       :after (η #'org-save-all-org-buffers))
-(advice-add 'org-store-log-note :after (η #'org-save-all-org-buffers))
+(advice-add 'org-store-log-note :after
+			(η #'org-save-all-org-buffers))
 (advice-add 'org-todo           :after (η #'org-save-all-org-buffers))
 
 ;;for the love of god stop the ~s it is so trashy
@@ -147,6 +147,32 @@
 (setq inhibit-startup-screen t)
 ;; enable winnr-mode
 (winner-mode 1)
+
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+               '(text-mode . ("harper-ls" "--stdio"))))
+(with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+			   '(org-mode . ("harper-ls" "--stdio"))))
+(setq-default eglot-workspace-configuration
+              '(:harper-ls (:userDictPath ""
+                            :fileDictPath ""
+                            :linters (:SpellCheck t
+                                      :SpelledNumbers :json-false
+                                      :AnA t
+                                      :SentenceCapitalization t
+                                      :UnclosedQuotes t
+                                      :WrongQuotes :json-false
+                                      :LongSentences t
+                                      :RepeatedWords t
+                                      :Spaces t
+                                      :Matcher t
+                                      :CorrectNumberSuffix t)
+                            :codeActions (:ForceStable :json-false)
+                            :markdown (:IgnoreLinkTitle :json-false)
+                            :diagnosticSeverity "hint"
+                            :isolateEnglish :json-false
+                            :dialect "American")))
 #+end_src
 * Evil
 #+begin_src emacs-lisp
@@ -532,6 +558,14 @@ Adapted from doom emacs textobjects.el
   (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds))
 (add-hook 'vterm-mode-hook (lambda()
 							 (goto-address-mode 1)))
+(use-package vterm-toggle
+  :config
+  (setq vtrm-toggle-cd-auto-create-buffer nil))
+(defun a3madkour/vterm-cd ()
+  (interactive)
+  (progn (vterm-toggle-insert-cd)
+		 (vterm-toggle-insert-cd)))
+(use-package multi-vterm :ensure t)
 #+end_src
 * Undo-tree
 #+begin_src emacs-lisp
@@ -1376,6 +1410,7 @@ must be non-read-only, empty, and there must be a rule in
   :custom
   (projectile-enable-caching t)
   (projectile-track-known-projects-automatically nil))
+(use-package ibuffer-projectile)
 #+end_src
 * Flyspell
 #+begin_src emacs-lisp
@@ -1649,6 +1684,9 @@ Highlight the diffs of the past commit in a file
 * Format all
 #+begin_src emacs-lisp
 (use-package format-all)
+  ;; :hook (prog-mode . format-all)
+  ;; :config
+  ;; (add-hook 'format-all-mode-hook 'format-all-ensure-formatter))
 #+end_src
 * Lsp
 #+begin_src emacs-lisp
@@ -1686,6 +1724,15 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
 (use-package racket-mode
   :dash "Racket")
+#+end_src
+** Markdown
+#+begin_src emacs-lisp
+(use-package markdown-mode
+  :config
+  (with-eval-after-load 'eglot
+  (add-to-list 'eglot-server-programs
+               '(markdown-mode . ("harper-ls" "--stdio"))))
+)
 #+end_src
 ** Rust
 #+begin_src emacs-lisp
@@ -1731,7 +1778,43 @@ Run agda-mode setup first
 (use-package python-pytest)
 (use-package conda)
 (use-package anaconda-mode)
+(use-package jupyter)
 
+;;uv I LOVE YOU DUDE: https://mclare.blog/posts/using-uv-in-emacs/
+(defun uv-activate ()
+  "Activate Python environment managed by uv based on current project directory.
+Looks for .venv directory in project root and activates the Python interpreter."
+  (interactive)
+  (let* ((project-root (project-root (project-current t)))
+         (venv-path (expand-file-name ".venv" project-root))
+         (python-path (expand-file-name
+                       (if (eq system-type 'windows-nt)
+                           "Scripts/python.exe"
+                         "bin/python")
+                       venv-path)))
+    (if (file-exists-p python-path)
+        (progn
+          ;; Set Python interpreter path
+          (setq python-shell-interpreter python-path)
+
+          ;; Update exec-path to include the venv's bin directory
+          (let ((venv-bin-dir (file-name-directory python-path)))
+            (setq exec-path (cons venv-bin-dir
+                                  (remove venv-bin-dir exec-path))))
+
+          ;; Update PATH environment variable
+          (setenv "PATH" (concat (file-name-directory python-path)
+                                 path-separator
+                                 (getenv "PATH")))
+
+          ;; Update VIRTUAL_ENV environment variable
+          (setenv "VIRTUAL_ENV" venv-path)
+
+          ;; Remove PYTHONHOME if it exists
+          (setenv "PYTHONHOME" nil)
+
+          (message "Activated UV Python environment at %s" venv-path))
+      (error "No UV Python environment found in %s" project-root))))
 ;; (use-package lsp-pyright
 ;; 	:ensure t
 ;; 	:hook (python-mode . (lambda ()
@@ -2894,7 +2977,7 @@ Debuging adapter protocol for emacs
  "oa"
  '(org-agenda :which-key "org-agenda")
 
- ;; Toggles
+ ;; Toggles and terminals
  "t"
  '(nil :which-key "toggles")
  "tt"
@@ -2917,8 +3000,8 @@ Debuging adapter protocol for emacs
  '(display-fill-column-indicator-mode :which-key "fill column indicator")
  "tm"
  '(hide-mode-line-mode :which-key "hide modeline mode")
- "tk"
- '(+toggle-keycast :which-key "toggle keycast")
+ "td"
+ '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
  ;;Search and store
  "s"
