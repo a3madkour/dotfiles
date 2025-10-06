@@ -1276,7 +1276,7 @@ must be non-read-only, empty, and there must be a rule in
 
   :bind
   (("C-." . embark-act)         ;; pick some comfortable binding
-   ("C-;" . embark-dwim)        ;; good alternative: M-.
+   ("C-/" . embark-dwim)        ;; good alternative: M-.
    ("C-h B" . embark-bindings)) ;; alternative for `describe-bindings'
 
   :init
@@ -2606,6 +2606,11 @@ Setting the pipeline for exporting the notes to the website dir
 ;; Don't ask to quit... why is this the default?
 (setq mu4e-confirm-quit nil)
 #+end_src
+* Obisidian
+Heresy
+#+begin_src emacs-lisp
+;;(use-package obsidian)
+#+end_src
 * Dape
 Debuging adapter protocol for emacs
 #+begin_src emacs-lisp
@@ -3207,7 +3212,7 @@ _SPC_ cancel	_o_nly this   	_d_elete
 
   ;; Utility ------
   "C-c c" 'org-capture
-  "C-;" 'embark-act
+  "C-/" 'embark-act
   "C-=" 'embark-become
   "C-c C-u" 'string-inflection-all-cycle
   "C-c a" 'org-agenda
