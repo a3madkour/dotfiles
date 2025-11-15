@@ -12,6 +12,7 @@ source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 
 alias enf="emacsclient -c"
 alias e="emacsclient -r"
+alias eda="emacs --daemon &"
 alias xppen="/usr/lib/pentablet/PenTablet.sh"
 
 alias vim="nvim"
