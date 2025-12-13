@@ -1462,9 +1462,11 @@ Highlight the diffs of the past commit in a file
 #+end_src
 * Jinx
 #+begin_src emacs-lisp
-(use-package jinx
-  :hook (emacs-startup . global-jinx-mode)
-  :bind ([remap ispell-word] . jinx-correct))
+(pcase system-type
+	('gnu/linux 
+	(use-package jinx
+	  :hook (emacs-startup . global-jinx-mode)
+	  :bind ([remap ispell-word] . jinx-correct))))
 #+end_src
 * Centered-cursor-mode
 #+begin_src emacs-lisp
@@ -1761,8 +1763,10 @@ Highlight the diffs of the past commit in a file
 ** Agda
 Run agda-mode setup first
 #+begin_src emacs-lisp
-(load-file (let ((coding-system-for-read 'utf-8))
-             (shell-command-to-string "agda-mode locate")))
+(pcase system-type
+	('gnu/linux 
+		(load-file (let ((coding-system-for-read 'utf-8))
+			     (shell-command-to-string "agda-mode locate")))))
 #+end_src
 ** Python
 #+begin_src emacs-lisp
