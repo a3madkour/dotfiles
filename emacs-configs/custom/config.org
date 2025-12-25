@@ -363,8 +363,7 @@
 #+end_src
 * Hydra
 #+begin_src emacs-lisp
-(use-package hydra
-  :defer t)
+(use-package hydra)
 #+end_src
 * Company
 #+begin_src emacs-lisp
@@ -405,6 +404,10 @@
   (corfu-auto t)
   :init
   (global-corfu-mode))
+#+end_src
+* Ace window
+#+begin_src emacs-lisp
+(use-package ace-window)
 #+end_src
 * Cape
 #+begin_src emacs-lisp
@@ -2924,8 +2927,6 @@ _SPC_ cancel	_o_nly this   	_d_elete
  "ld" #'langtool-check-done
  "ln" #'langtool-goto-next-eror
  "lp" #'langtool-goto-previous-error
-
-
  ) ;; End SPC prefix block
 
 ;; All-mode keymaps
