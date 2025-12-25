@@ -365,38 +365,6 @@
 #+begin_src emacs-lisp
 (use-package hydra)
 #+end_src
-* Company
-#+begin_src emacs-lisp
-;; (use-package company
-;; 	:diminish company-mode
-;; 	:general
-;; 	(general-define-key :keymaps 'company-active-map
-;; 						"C-j" 'company-select-next
-;; 						"C-k" 'company-select-previous)
-;; 	:init
-;; 	;; These configurations come from Doom Emacs:
-;; 	(add-hook 'after-init-hook 'global-company-mode)
-;; 	(setq company-minimum-prefix-length 2
-;; 		  company-tooltip-limit 14
-;; 		  company-tooltip-align-annotations t
-;; 		  company-require-match 'never
-;; 		  company-global-modes '(not erc-mode message-mode help-mode gud-mode)
-;; 		  company-frontends
-;; 		  '(company-pseudo-tooltip-frontend  ; always show candidates in overlay tooltip
-;; 			company-echo-metadata-frontend)  ; show selected candidate docs in echo area
-;; 		  company-auto-complete nil
-;; 		  company-auto-complete-chars nil
-;; 		  company-dabbrev-other-buffers nil
-;; 		  company-dabbrev-ignore-case nil
-;; 		  company-dabbrev-downcase nil)
-
-;; 	:config
-;; 	(setq company-idle-delay 0.01)
-;; 	(add-to-list 'company-backends 'company-ispell)
-;; 	(add-to-list 'company-backends 'company-math-symbols-unicode)
-;; 	:custom-face
-;; 	(company-tooltip ((t (:family "Roboto Mono")))))
-#+end_src
 * Corfu
 #+begin_src emacs-lisp
 (use-package corfu
@@ -482,8 +450,7 @@ Fd support for dired
 #+begin_src emacs-lisp
 (use-package ranger
   :config
-  (ranger-override-dired-mode t)
-  )
+  (ranger-override-dired-mode t))
 #+end_src
 * Super-save
 #+begin_src emacs-lisp
