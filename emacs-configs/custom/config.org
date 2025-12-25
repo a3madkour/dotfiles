@@ -202,6 +202,7 @@
 
   (evil-mode 1))
 
+(use-package evil-textobj-tree-sitter :ensure t)
 
 (use-package evil-goggles
   :ensure t
