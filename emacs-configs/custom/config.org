@@ -2390,7 +2390,18 @@ Debuging adapter protocol for emacs
 
   ;; Projectile users
   (setq dape-cwd-fn 'projectile-project-root)
-  )
+  (add-to-list 'dape-configs
+               `(rust-gdb
+                 modes (rust-mode rust-ts-mode)
+                 command "rust-gdb"
+                 command-args ("--interpreter=dap")
+                 :type "executable"
+                 :request "launch"
+                 :program (lambda ()
+                            (expand-file-name
+                             (concat "target/debug/" (project-name (project-current)))
+                             (project-root (project-current))))
+                 :cwd dape-cwd-fn)))
 #+end_src
 * Themes
 #+begin_src emacs-lisp
@@ -2556,6 +2567,8 @@ Debuging adapter protocol for emacs
  '(dape-breakpoint-remove-all :which-key "dape remove all breakpoints")
  "de"
  '(dape-breakpoint-expression :which-key "dape breakpoints expression")
+ "di"
+ '(dape-info :which-key "dape info")
  ;; Quit
  "q"
  '(nil :which-key "quit")
@@ -2600,7 +2613,7 @@ Debuging adapter protocol for emacs
  '(emms-pause :which-key "emms pause")
  "ef"
  '(emms-play-find :which-key "emms play find")
-
+ 
  ;; Help/emacs
  "h"
  '(nil :which-key "help/emacs")
@@ -2696,6 +2709,8 @@ Debuging adapter protocol for emacs
  ;; "wm" '(jib/toggle-maximize-buffer :which-key "maximize buffer")
  "wN"
  '(make-frame :which-key "make frame")
+ "wa"
+ '(ace-window :which-key "ace-window")
  "wd"
  '(evil-window-delete :which-key "delete window")
  "ws"
