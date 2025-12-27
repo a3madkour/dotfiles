@@ -167,7 +167,7 @@ bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'You pressed the exit shortcu
 bindsym $mod+b exec "firefox"
 
 # emacs
-bindsym $mod+e exec "emacsclient -nc"
+bindsym $mod+e exec "emacsclient -a '' -c "
 
 # resize window (you can also use the mouse for that)
 mode "resize" {
