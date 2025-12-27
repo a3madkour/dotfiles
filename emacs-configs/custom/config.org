@@ -8,6 +8,10 @@
 * Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
 (setq gc-cons-percentage 0.6)
+(setq gc-cons-threshold most-positive-fixnum)
+(push '(menu-bar-lines . 0) default-frame-alist)
+(push '(tool-bar-lines . 0) default-frame-alist)
+(push '(vertical-scroll-bars) default-frame-alist)
 (setq native-comp-async-report-warnings-errors 'silent) ;; native-comp warning (setq byte-compile-warnings '(not free-vars unresolved noruntime lexical make-local))
 
 (setq idle-update-delay 1.0)
@@ -23,6 +27,13 @@
 
 ;; Window configuration
 (setq frame-inhibit-implied-resize t) ;; Supposed to hasten startup
+
+(setq default-file-name-handler-alist file-name-handler-alist)
+(setq file-name-handler-alist nil)
+;;return file-name-hanlder-alist to default after loading
+(add-hook 'emacs-startup-hook
+	      (lambda ()
+					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
 
 * GCMH
@@ -36,7 +47,10 @@
 
 (add-hook 'emacs-startup-hook
 	      (lambda ()
-			(setq gc-cons-percentage 0.1))) ;; Default value for `gc-cons-percentage'
+			(setq gc-cons-percentage 0.2)
+                        (setq gc-cons-threshold 8000000)
+                        ))
+
 
 (add-hook 'emacs-startup-hook
 	      (lambda ()
@@ -87,6 +101,8 @@
 ;; Major mode of new buffers
 (setq initial-major-mode 'org-mode)
 
+;;make defer always the default
+(setq use-package-always-defer t)
 ;;set default font size
 (set-face-attribute 'default nil :height 150)
 ;; WINDOW -----------
@@ -117,8 +133,6 @@
 (scroll-bar-mode -1)
 (setq display-line-numbers-type 'relative)
 (global-display-line-numbers-mode)
-(menu-bar-mode -1)
-(tool-bar-mode -1)
 (line-number-mode)
 (column-number-mode)
 (display-time-mode -1)
@@ -177,6 +191,7 @@
 * Evil
 #+begin_src emacs-lisp
 (use-package evil
+  :defer nil
   :init
   ;; (setq evil-want-keybinding t)
   ;; (setq evil-want-fine-undo t)
@@ -202,9 +217,13 @@
 
   (evil-mode 1))
 
-(use-package evil-textobj-tree-sitter :ensure t)
+(use-package evil-textobj-tree-sitter
+  :after evil
+  :ensure t)
+
 
 (use-package evil-goggles
+  :after evil
   :ensure t
   :config
   (evil-goggles-mode)
@@ -221,6 +240,7 @@
 
 (use-package evil-collection
   :after evil
+  :defer nil
   :ensure t
   :config
   (evil-collection-init))
@@ -229,8 +249,10 @@
   :config
   (setq avy-background t))
 
-(use-package evil-args)
-(use-package evil-visualstar)
+(use-package evil-args
+  :after evil)
+(use-package evil-visualstar
+  :after evil)
 (use-package evil-quick-diff
   :straight (evil-quick-diff
   			 :type git
@@ -281,6 +303,7 @@
 * General 
 #+begin_src emacs-lisp
 (use-package general
+  :defer nil
   :ensure t
   :init
   ;; Create variables for leader keys for different states & uses
@@ -291,7 +314,7 @@
   (defvar general-localleader ","
   	"Local leader key for major-mode specific commands")
   (defvar general-localleader-alt "C-SPC ,"
-  	"Local leader key for major-mode specific commands for Emacs and Evil Insert states.") 
+  	"Local leader key for major-mode specific commands for Emacs and Evil Insert states.")
   )
 
 #+end_src
@@ -325,6 +348,7 @@
 #+begin_src emacs-lisp
 (use-package recentf
   :ensure nil
+  :defer nil
   :config
   (setq ;;recentf-auto-cleanup 'never
    ;; recentf-max-menu-items 0
@@ -475,300 +499,6 @@ Fd support for dired
   :config (save-place-mode))
 #+end_src
 * Yasnippet
-** Doom emacs file templates
-#+begin_src emacs-lisp
-  ;;; editor/file-templates/autoload.el -*- lexical-binding: t; -*-
-(defun +file-templates--set (pred plist)
-  (if (null (car-safe plist))
-	  (setq +file-templates-alist
-			(delq (assoc pred +file-templates-alist)
-				  +file-templates-alist))
-	(push `(,pred ,@plist) +file-templates-alist)))
-
-  ;;;###autodef
-(defun set-file-template (pred &rest plist)
-  "Register a file template.
-
-  PRED can either be a regexp string or a major mode symbol. PLIST may contain
-  these properties:
-
-	:when FUNCTION
-	  Provides a secondary predicate. This function takes no arguments and is
-	  executed from within the target buffer. If it returns nil, this rule will be
-	  skipped over.
-	:trigger STRING|FUNCTION
-	  If a string, this is the yasnippet trigger keyword used to trigger the
-		target snippet.
-	  If a function, this function will be run in the context of the buffer to
-		insert a file template into. It is given no arguments and must insert text
-		into the current buffer manually.
-	  If omitted, `+file-templates-default-trigger' is used.
-	:mode SYMBOL
-	  What mode to get the yasnippet snippet from. If omitted, either PRED (if
-	  it's a major-mode symbol) or the mode of the buffer is used.
-	:project BOOL
-	  If non-nil, ignore this template if this buffer isn't in a project.
-	:ignore BOOL
-	  If non-nil, don't expand any template for this file and don't test any other
-	  file template rule against this buffer.
-
-  \(fn PRED &key WHEN TRIGGER MODE PROJECT IGNORE)"
-  (declare (indent defun))
-  (defer-until! (boundp '+file-templates-alist)
-				(+file-templates--set pred plist)))
-
-  ;;;###autodef
-(defun set-file-templates (&rest templates)
-  "Like `set-file-template!', but can register multiple file templates at once.
-
-  \(fn &rest (PRED &key WHEN TRIGGER MODE PROJECT IGNORE))"
-  (defer-until! (boundp '+file-templates-alist)
-				(dolist (template templates)
-				  (+file-templates--set (car template) (cdr template)))))
-
-
-;;
-  ;;; Library
-
-  ;;;###autoload
-(cl-defun +file-templates--expand (pred &key project mode trigger ignore _when)
-  "Auto insert a yasnippet snippet into current file and enter insert mode (if
-  evil is loaded and enabled)."
-  (when (and pred (not ignore))
-	(when (if project (doom-project-p) t)
-	  (unless mode
-		(setq mode
-			  (if (and (symbolp pred) (not (booleanp pred)))
-				  pred
-				major-mode)))
-	  (unless mode
-		(user-error "Couldn't determine mode for %s file template" pred))
-	  (unless trigger
-		(setq trigger +file-templates-default-trigger))
-	  (if (functionp trigger)
-		  (funcall trigger)
-		(require 'yasnippet)
-		(unless yas-minor-mode
-		  (yas-minor-mode-on))
-		(when (and yas-minor-mode
-				   (when-let
-					   (template (cl-find trigger (yas--all-templates (yas--get-snippet-tables mode))
-										  :key #'yas--template-key :test #'equal))
-					 (yas-expand-snippet (yas--template-content template)))
-				   (and (featurep 'evil) evil-local-mode)
-				   (and yas--active-field-overlay
-						(overlay-buffer yas--active-field-overlay)
-						(overlay-get yas--active-field-overlay 'yas--field)))
-		  (evil-initialize-state 'insert))))))
-
-  ;;;###autoload
-(defun +file-templates-get-short-path ()
-  "Fetches a short file path for the header in Doom module templates."
-  (let ((path (file-truename (or buffer-file-name default-directory))))
-	(save-match-data
-	  (cond ((string-match "/modules/\\(.+\\)$" path)
-			 (match-string 1 path))
-			((file-in-directory-p path doom-emacs-dir)
-			 (file-relative-name path doom-emacs-dir))
-			((file-in-directory-p path doom-user-dir)
-			 (file-relative-name path doom-user-dir))
-			((abbreviate-file-name path))))))
-
-  ;;;###autoload
-(defun +file-templates-module-for-path (&optional path)
-  "Generate a title for a doom module's readme at PATH."
-  (let ((m (doom-module-from-path (or path (buffer-file-name)))))
-	(if (eq (cdr m) 'README.org)
-		(symbol-name (car m))
-	  (format "%s %s" (car m) (cdr m)))))
-
-
-;;
-  ;;; Commands
-
-  ;;;###autoload
-(defun +file-templates/insert-license ()
-  "Insert a license file template into the current file."
-  (interactive)
-  (require 'yasnippet)
-  (unless (gethash 'text-mode yas--tables)
-	(yas-reload-all t))
-  (let ((templates
-		 (let (yas-choose-tables-first ; avoid prompts
-			   yas-choose-keys-first)
-		   (cl-loop for tpl in (yas--all-templates (yas--get-snippet-tables 'text-mode))
-					for uuid = (yas--template-uuid tpl)
-					if (string-prefix-p "__license-" uuid)
-					collect (cons (string-remove-prefix "__license-" uuid) tpl)))))
-	(when-let (uuid (yas-choose-value (mapcar #'car templates)))
-	  (yas-expand-snippet (cdr (assoc uuid templates))))))
-
-  ;;;###autoload
-(defun +file-templates/debug ()
-  "Tests the current buffer and outputs the file template rule most appropriate
-  for it. This is used for testing."
-  (interactive)
-  (cl-destructuring-bind (pred &rest plist &key trigger mode &allow-other-keys)
-	  (or (cl-find-if #'+file-template-p +file-templates-alist)
-		  (user-error "Found no file template for this file"))
-	(if (or (functionp trigger)
-			(cl-find trigger
-					 (yas--all-templates
-					  (yas--get-snippet-tables
-					   mode))
-					 :key #'yas--template-key :test #'equal))
-		(message "Found %s" (cons pred plist))
-	  (message "Found rule, but can't find associated snippet: %s" (cons pred plist)))))
-;;; editor/file-templates/config.el -*- lexical-binding: t; -*-
-
-(defvar +file-templates-dir
-  (expand-file-name "templates/" (file-name-directory (or load-file-name (buffer-file-name))))
-  "The path to a directory of yasnippet folders to use for file templates.")
-
-(defvar +file-templates-default-trigger "__"
-  "The default yasnippet trigger key (a string) for file template rules that
-don't have a :trigger property in `+file-templates-alist'.")
-
-(defvar +file-templates-inhibit nil
-  "If non-nil, inhibit file template expansion.")
-
-(defvar +file-templates-alist
-  '(;; General
-    (gitignore-mode)
-    (dockerfile-mode)
-    ("/docker-compose\\.yml$" :mode yaml-mode)
-    ("/Makefile$"             :mode makefile-gmake-mode)
-    ;; elisp
-    ("/\\.dir-locals\\.el$")
-    ("/\\.doomrc$"
-     :trigger "__doomrc"
-     :mode emacs-lisp-mode)
-    ("/packages\\.el$" :when +file-templates-in-emacs-dirs-p
-     :trigger "__doom-packages"
-     :mode emacs-lisp-mode)
-    ("/doctor\\.el$" :when +file-templates-in-emacs-dirs-p
-     :trigger "__doom-doctor"
-     :mode emacs-lisp-mode)
-    ("/test/.+\\.el$" :when +file-templates-in-emacs-dirs-p
-     :trigger "__doom-test"
-     :mode emacs-lisp-mode)
-    ("\\.el$" :when +file-templates-in-emacs-dirs-p
-     :trigger "__doom-module"
-     :mode emacs-lisp-mode)
-    ("-test\\.el$" :mode emacs-ert-mode)
-    (emacs-lisp-mode :trigger "__package")
-    (snippet-mode)
-    ;; C/C++
-    ("/main\\.c\\(?:c\\|pp\\)$"   :trigger "__main.cpp"    :mode c++-mode)
-    ("/win32_\\.c\\(?:c\\|pp\\)$" :trigger "__winmain.cpp" :mode c++-mode)
-    ("\\.c\\(?:c\\|pp\\)$"        :trigger "__cpp" :mode c++-mode)
-    ("\\.h\\(?:h\\|pp\\|xx\\)$"   :trigger "__hpp" :mode c++-mode)
-    ("\\.h$" :trigger "__h" :mode c-mode)
-    (c-mode  :trigger "__c")
-    ;; direnv
-    ("/\\.envrc$" :trigger "__envrc" :mode direnv-envrc-mode)
-    ;; go
-    ("/main\\.go$" :trigger "__main.go" :mode go-mode :project t)
-    (go-mode :trigger "__.go")
-    ;; web-mode
-    ("/normalize\\.scss$" :trigger "__normalize.scss" :mode scss-mode)
-    ("/master\\.scss$" :trigger "__master.scss" :mode scss-mode)
-    ("\\.html$" :trigger "__.html" :mode web-mode)
-    (scss-mode)
-    ;; java
-    ("/main\\.java$" :trigger "__main" :mode java-mode)
-    ("/build\\.gradle$" :trigger "__build.gradle" :mode android-mode)
-    ("/src/.+\\.java$" :mode java-mode)
-    ;; javascript
-    ("/package\\.json$"        :trigger "__package.json" :mode json-mode)
-    ("/bower\\.json$"          :trigger "__bower.json" :mode json-mode)
-    ("/gulpfile\\.js$"         :trigger "__gulpfile.js" :mode js-mode)
-    ("/webpack\\.config\\.js$" :trigger "__webpack.config.js" :mode js-mode)
-    ;; Lua
-    ("/main\\.lua$" :trigger "__main.lua" :mode love-mode)
-    ("/conf\\.lua$" :trigger "__conf.lua" :mode love-mode)
-    ;; Markdown
-    (markdown-mode)
-    ;; Markdown
-    (nxml-mode)
-    ;; Nix
-    ("/shell\\.nix$" :trigger "__shell.nix")
-    (nix-mode)
-    ;; Org
-    (org-journal-mode :ignore t)
-    (org-mode)
-    ;; PHP
-    ("\\.class\\.php$" :trigger "__.class.php" :mode php-mode)
-    (php-mode)
-    ;; Python
-    ;; TODO ("tests?/test_.+\\.py$" :trigger "__" :mode nose-mode)
-    ;; TODO ("/setup\\.py$" :trigger "__setup.py" :mode python-mode)
-    (python-mode)
-    ;; Ruby
-    ("/lib/.+\\.rb$"      :trigger "__module"   :mode ruby-mode :project t)
-    ("/spec_helper\\.rb$" :trigger "__helper"   :mode rspec-mode :project t)
-    ("_spec\\.rb$"                              :mode rspec-mode :project t)
-    ("/\\.rspec$"         :trigger "__.rspec"   :mode rspec-mode :project t)
-    ("\\.gemspec$"        :trigger "__.gemspec" :mode ruby-mode :project t)
-    ("/Gemfile$"          :trigger "__Gemfile"  :mode ruby-mode :project t)
-    ("/Rakefile$"         :trigger "__Rakefile" :mode ruby-mode :project t)
-    (ruby-mode)
-    ;; Rust
-    ("/Cargo\\.toml$" :trigger "__Cargo.toml" :mode rust-mode)
-    ("/main\\.rs$" :trigger "__main.rs" :mode rust-mode)
-    ;; Slim
-    ("/\\(?:index\\|main\\)\\.slim$" :mode slim-mode)
-    ;; Shell scripts
-    ("\\.zunit$" :trigger "__zunit" :mode sh-mode)
-    (fish-mode)
-    (sh-mode)
-    ;; Solidity
-    (solidity-mode :trigger "__sol"))
-  "An alist of file template rules. The CAR of each rule is either a major mode
-symbol or regexp string. The CDR is a plist. See `set-file-template!' for more
-information.")
-
-
-;;
-;;; Library
-
-(defun +file-templates-in-emacs-dirs-p (file)
-  "Returns t if FILE is in Doom or your private directory."
-  (or (file-in-directory-p file doom-user-dir)
-      (file-in-directory-p file doom-emacs-dir)))
-
-(defun +file-template-p (rule)
-  "Return t if RULE applies to the current buffer."
-  (let ((pred (car rule))
-        (plist (cdr rule)))
-    (and (or (and (symbolp pred)
-                  (eq major-mode pred))
-             (and (stringp pred)
-                  (stringp buffer-file-name)
-                  (string-match-p pred buffer-file-name)))
-         (or (not (plist-member plist :when))
-             (funcall (plist-get plist :when)
-                      buffer-file-name))
-         rule)))
-
-(defun +file-templates-check-h ()
-  "Check if the current buffer is a candidate for file template expansion. It
-must be non-read-only, empty, and there must be a rule in
-`+file-templates-alist' that applies to it."
-  (and (not +file-templates-inhibit)
-       buffer-file-name        ; this buffer represents a file and
-       (not buffer-read-only)  ; ...isn't read-only
-       (bobp) (eobp)           ; ...is empty
-       (not (member (substring (buffer-name) 0 1) '("*" " ")))  ; ...isn't a "special" buffer
-       (not (bound-and-true-p org-capture-current-plist))  ; ...isn't an org-capture buffer
-       (not (file-exists-p buffer-file-name))  ; ...is a new file
-       (not (buffer-modified-p))    ; ...hasn't been modified
-       (null (buffer-base-buffer))  ; ...isn't an indirect clone
-       (when-let (rule (cl-find-if #'+file-template-p +file-templates-alist))
-         (apply #'+file-templates--expand rule))))
-
-
-#+end_src
 ** Regular Yasnippet
 #+begin_src emacs-lisp
 (use-package yasnippet
@@ -777,10 +507,6 @@ must be non-read-only, empty, and there must be a rule in
   :config
   ;; (setq yas-snippet-dirs (list (expand-file-name "snippets" jib/emacs-stuff)))
   (yas-global-mode 1)
-  (add-to-list 'yas-snippet-dirs '+file-templates-dir 'append #'eq)
-  (setq yas-prompt-functions (delq #'yas-dropdown-prompt yas-prompt-functions)
-		yas-snippet-dirs '(+file-templates-dir))
-  ;; Ensure file templates in `+file-templates-dir' are visible
   (yas-reload-all)) ;; or M-x yas-reload-all if you've started YASnippet already.
 (require 'warnings)
 (add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
@@ -794,6 +520,7 @@ must be non-read-only, empty, and there must be a rule in
 * Doom modeline
 #+begin_src emacs-lisp
 (use-package doom-modeline
+  :defer nil
   :config
   (doom-modeline-mode)
   (setq doom-modeline-buffer-file-name-style 'auto ;; Just show file name (no path)
@@ -920,7 +647,7 @@ must be non-read-only, empty, and there must be a rule in
 		 ("M-s m" . consult-multi-occur)
 		 ("M-s k" . consult-keep-lines)
 		 ("M-s u" . consult-focus-lines)
-		 
+
 
 		 ;; Isearch integration
 		 ("M-s e" . consult-isearch-history)
@@ -1128,6 +855,7 @@ must be non-read-only, empty, and there must be a rule in
 
 ;; "Enable Flyspell mode, which highlights all misspelled words. "
 (use-package flyspell
+  :after general
   :config
 
   (add-to-list 'ispell-skip-region-alist '("~" "~"))
@@ -1200,6 +928,7 @@ Highlight the diffs of the past commit in a file
 * PDF-Tools
 #+begin_src emacs-lisp
 (use-package pdf-tools
+  :after general
   :defer t
   :mode  ("\\.pdf\\'" . pdf-view-mode)
   :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
@@ -1389,11 +1118,6 @@ Highlight the diffs of the past commit in a file
   )
 #+end_src
 * Language Packages
-** Racket
-#+begin_src emacs-lisp
-(use-package racket-mode
-  :dash "Racket")
-#+end_src
 ** Markdown
 #+begin_src emacs-lisp
 (use-package markdown-mode
@@ -1409,9 +1133,7 @@ Highlight the diffs of the past commit in a file
   :dash "Rust")
 (use-package rustic
   :config
-  (setq rustic-lsp-client 'eglot)
-  ;; (setq rustic-analyzer-command '("~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"))
-  )
+  (setq rustic-lsp-client 'eglot))
 #+end_src
 ** GDScript
 #+begin_src emacs-lisp
@@ -1426,14 +1148,6 @@ Highlight the diffs of the past commit in a file
 #+begin_src emacs-lisp
 (use-package haskell-mode
   :dash "Haskell")
-#+end_src
-** Agda
-Run agda-mode setup first
-#+begin_src emacs-lisp
-(pcase system-type
-	('gnu/linux 
-		(load-file (let ((coding-system-for-read 'utf-8))
-			     (shell-command-to-string "agda-mode locate")))))
 #+end_src
 ** Python
 #+begin_src emacs-lisp
@@ -1510,13 +1224,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package disaster)
 (use-package modern-cpp-font-lock)
 #+end_src
-** C#
-#+begin_src emacs-lisp
-(use-package csproj-mode)
-;; (use-package sln-mode)
-;;Unity stuff'
-(use-package shader-mode)
-#+end_src
 ** Emacs lisp
 *** Elisp def
 #+begin_src emacs-lisp
@@ -1541,7 +1248,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (add-hook 'org-mode-hook 'reftex-mode)
 (add-hook 'TeX-mode-hook 'reftex-mode)
 (use-package auctex
-  :ensure nil
+  :after general
   :defer t
   :init (setq TeX-engine 'xetex ;; Use XeTeX
 			  latex-run-command "xetex")
@@ -1625,53 +1332,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+begin_src emacs-lisp
 (use-package lua-mode)
 #+end_src
-** Web
-#+begin_src emacs-lisp
-(use-package emmet-mode
-  :config
-  (add-to-list 'auto-mode-alist '("\\.html?\\'" . emmet-mode))
-  (add-to-list 'auto-mode-alist '("\\.phtml\\'" . emmet-mode))
-  (add-to-list 'auto-mode-alist '("\\.css\\'" . emmet-mode)))
-
-;; (use-package haml-mode)
-;; (use-package company-web)
-;; (use-package impatient-mode)
-;; (use-package css-mode)
-;; (use-package com-css-sort)
-;; (use-package less-css-mode)
-;; (use-package sass-mode)
-;; (use-package sws-mode)
-(use-package web-mode
-  :config
-  (add-to-list 'auto-mode-alist '("\\.phtml\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.css\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.tpl\\.php\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.[agj]sp\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.as[cp]x\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.erb\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.mustache\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.djhtml\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.html?\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.ts?\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.js?\\'" . web-mode))
-  (add-to-list 'auto-mode-alist '("\\.vue?\\'" . web-mode))
-  (setq web-mode-enable-auto-pairing t)
-  (setq web-mode-enable-auto-opening t)
-  (setq web-mode-enable-auto-closing t)
-  )
-#+end_src
-** Javascript and its ilk
-#+begin_src emacs-lisp
-(add-to-list 'auto-mode-alist '("\\.ts?\\'" . tsx-ts-mode))
-(use-package npm-mode)
-(use-package rjsx-mode)
-(use-package js2-refactor
-  :hook ((js2-mode rjsx-mode) . js2-refactor-mode))
-#+end_src
-** Yaml
-#+begin_src emacs-lisp
-(use-package yaml-mode)
-#+end_src
 ** JSON
 #+begin_src emacs-lisp
 (use-package json-mode)
@@ -1679,9 +1339,10 @@ Looks for .venv directory in project root and activates the Python interpreter."
 * Org-super-agenda
 #+begin_src emacs-lisp
 (use-package org-super-agenda
-  :after org
+  :after org org-modern-mode
   :config
-  (setq org-super-agenda-header-map nil) 
+  (setq org-super-agenda-header-map nil)
+  (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
   (setq org-super-agenda-groups
 		'((:auto-dir-name t)))
   (org-agenda-list)
@@ -1780,7 +1441,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
   ;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
   ;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
   (set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
-  (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
   (set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
 
   ;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
@@ -1963,6 +1623,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 ** Org-ql
 #+begin_src emacs-lisp
 (use-package org-ql
+  :after general
   :general
   (general-define-key :keymaps 'org-ql-view-map
 					  "q" 'kill-buffer-and-window))
@@ -1985,8 +1646,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+begin_src emacs-lisp
 (use-package org-roam
   :config
-  (org-roam-db-autosync-mode)
-  )
+  (org-roam-db-autosync-mode))
 #+end_src
 ** Org roam ui
 #+begin_src emacs-lisp
@@ -2046,6 +1706,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 ** Org modern
 #+begin_src emacs-lisp
 (use-package org-modern
+   :after org
 	:hook
 	(org-mode . org-modern-mode)
 	(org-agenda-finalize org-modern-agenda)
@@ -2296,6 +1957,7 @@ Debuging adapter protocol for emacs
 * Themes
 #+begin_src emacs-lisp
 (use-package doom-themes
+  :defer nil
   :ensure t
   :config
   ;; Global settings (defaults)
