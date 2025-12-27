@@ -315,10 +315,11 @@
 #+end_src
 * Undo-tree
 #+begin_src emacs-lisp
-(use-package undo-tree)
-(global-undo-tree-mode)
-(evil-set-undo-system 'undo-tree)
-(add-to-list 'undo-tree-history-directory-alist '("." . "~/.undo-tree"))
+(use-package undo-tree
+  :config
+    (global-undo-tree-mode 1)
+    (evil-set-undo-system 'undo-tree)
+    (add-to-list 'undo-tree-history-directory-alist '("." . "~/.undo-tree")))
 #+end_src
 * Recent
 #+begin_src emacs-lisp
@@ -445,12 +446,6 @@ Fd support for dired
   :config
   (global-set-key [remap find-dired] #'fd-dired)
   )
-#+end_src
-** Ranger
-#+begin_src emacs-lisp
-(use-package ranger
-  :config
-  (ranger-override-dired-mode t))
 #+end_src
 * Super-save
 #+begin_src emacs-lisp
@@ -783,15 +778,6 @@ must be non-read-only, empty, and there must be a rule in
 (add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
 (use-package yasnippet-snippets)
 #+end_src
-* mixed-pitch 
-#+begin_src emacs-lisp
-(use-package mixed-pitch
-  :defer t
-  :config
-  (setq mixed-pitch-set-height nil)
-  (dolist (face '(org-date org-priority org-tag org-special-keyword)) ;; Some extra faces I like to be fixed-pitch
-	(add-to-list 'mixed-pitch-fixed-pitch-faces face)))
-#+end_src
 * Hide-mode-line
 #+begin_src emacs-lisp
 (use-package hide-mode-line
@@ -875,8 +861,9 @@ must be non-read-only, empty, and there must be a rule in
   :config
   (setq dash-docs-docsets-path "~/.docsets")
   (setq installed-langs (dash-docs-installed-docsets))
+  (setq dash-docs-common-docsets nil)
   ;;figure out to convert spaces into underscores when installing the docs
-  (setq docset-langs '("Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell"))
+  (setq docset-langs '("Python_3" "Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell"))
   (dolist (lang docset-langs)
 	(when (null (member lang installed-langs))
 	  (dash-docs-install-docset lang))))
@@ -1489,7 +1476,10 @@ Run agda-mode setup first
 (use-package ein
   :config
   (setq ein:output-area-inlined-images t))
-(use-package python-mode)
+(use-package python-mode
+  :dash "Python 3"
+  :config
+  (undo-tree-mode))
 (use-package sphinx-doc
   :hook
   (python-mode . sphinx-doc-mode))
@@ -1714,6 +1704,14 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package js2-refactor
   :hook ((js2-mode rjsx-mode) . js2-refactor-mode))
 #+end_src
+** Yaml
+#+begin_src emacs-lisp
+(use-package yaml-mode)
+#+end_src
+** JSON
+#+begin_src emacs-lisp
+(use-package json-mode)
+#+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
 (use-package org-super-agenda
@@ -1829,6 +1827,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   )
 (use-package org
   :hook (org-mode . a3madkour/org-font-setup)
+  :hook (org-mode . undo-tree-mode)
   :hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
   :hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
   :diminish org-indent-mode
@@ -2639,6 +2638,8 @@ Debuging adapter protocol for emacs
  '(display-fill-column-indicator-mode :which-key "fill column indicator")
  "tm"
  '(hide-mode-line-mode :which-key "hide modeline mode")
+ "tw"
+ '(whitespace-mode :which-key "whitespace-mode")
  "td"
  '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
@@ -2696,21 +2697,21 @@ Debuging adapter protocol for emacs
  '(text-scale-adjust :which-key "text zoom")
  "wH"
  (defhydra hydra-window
-   ()
+   (:color red :hint nil)
    "
 Movement^^        ^Split^         ^Switch^		^Resize^
 ----------------------------------------------------------------
-_h_ ←       	_v_ertical    	_b_uffer		_q_ X←
-_j_ ↓        	_x_ horizontal	_f_ind files	_w_ X↓
-_k_ ↑        	_z_ undo      	_a_ce 1		_e_ X↑
-_l_ →        	_Z_ reset      	_s_wap		_r_ X→
-_F_ollow		_D_lt Other   	_S_ave		max_i_mize
-_SPC_ cancel	_o_nly this   	_d_elete	
+_h_ ←           _v_ertical                            _q_ X←
+_j_ ↓           _x_ horizontal                        _w_ X↓
+_k_ ↑           _z_ undo         _a_ce 1                _e_ X↑
+_l_ →           _Z_ reset        _s_wap                 _r_ X→
+_F_ollow        _D_lt Other      _S_ave
+_SPC_ cancel    _o_nly this      _d_elete
 "
-   ("h" windmove-left )
-   ("j" windmove-down )
-   ("k" windmove-up )
-   ("l" windmove-right )
+   ("h" windmove-left)
+   ("j" windmove-down)
+   ("k" windmove-up)
+   ("l" windmove-right)
    ("q" hydra-move-splitter-left)
    ("w" hydra-move-splitter-down)
    ("e" hydra-move-splitter-up)
@@ -2738,7 +2739,6 @@ _SPC_ cancel	_o_nly this   	_d_elete
       (ace-window 16)
       (add-hook 'ace-window-end-once-hook 'hydra-window/body)))
    ("o" delete-other-windows)
-   ("i" ace-maximize-window)
    ("z" (progn (winner-undo) (setq this-command 'winner-undo)))
    ("Z" winner-redo)
    ("SPC" nil))
