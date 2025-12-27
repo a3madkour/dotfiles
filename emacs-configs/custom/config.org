@@ -334,6 +334,14 @@
 		(append '(abbreviate-file-name) recentf-filename-handlers))
   (recentf-mode))
 #+end_src
+* Ebib
+#+begin_src emacs-lisp
+(use-package ebib)
+#+end_src
+* zotra
+#+begin_src emacs-lisp
+(use-package zotra)
+#+end_src
 * Uniquify
 #+begin_src emacs-lisp
 (require 'uniquify)
@@ -1160,10 +1168,6 @@ Highlight the diffs of the past commit in a file
   :config
   (global-diff-hl-mode))
 #+end_src
-* Unfill
-#+begin_src emacs-lisp
-(use-package unfill :defer t)
-#+end_src
 * Jinx
 #+begin_src emacs-lisp
 (pcase system-type
@@ -1183,13 +1187,6 @@ Highlight the diffs of the past commit in a file
 * Diminish
 #+begin_src emacs-lisp
 (use-package diminish)
-#+end_src
-* mw-Thesaurus
-#+begin_src emacs-lisp
-(use-package mw-thesaurus
-  :defer t
-  :config
-  (add-hook 'mw-thesaurus-mode-hook (lambda () (define-key evil-normal-state-local-map (kbd "q") 'mw-thesaurus--quit))))
 #+end_src
 * EMMS
 #+begin_src emacs-lisp
@@ -1248,32 +1245,6 @@ Highlight the diffs of the past commit in a file
 
   )
 #+end_src
-* Popper
-#+begin_src emacs-lisp
-(use-package popper
-  :bind (("C-`"   . popper-toggle-latest)
-		 ("M-`"   . popper-cycle)
-		 ("C-M-`" . popper-toggle-type))
-  :init
-  (setq popper-reference-buffers
-		'("\\*Messages\\*"
-		  "Output\\*$"
-		  "\\*Warnings\\*"
-		  help-mode
-		  compilation-mode))
-  ;; Match eshell, shell, term and/or vterm buffers
-  (setq popper-reference-buffers
-		(append popper-reference-buffers
-				'("^\\*eshell.*\\*$" eshell-mode ;eshell as a popup
-				  "^\\*shell.*\\*$"  shell-mode  ;shell as a popup
-				  "^\\*term.*\\*$"   term-mode   ;term as a popup
-				  "^\\*vterm.*\\*$"  vterm-mode  ;vterm as a popup
-				  )))
-  ;;setting default size TODO might want to make this dependent on screen resolution
-  (setq popper-window-height 20)
-  
-  (popper-mode +1))
-#+end_src
 * Dumb Jump
 #+begin_src emacs-lisp
 (use-package dumb-jump
@@ -1308,13 +1279,6 @@ Highlight the diffs of the past commit in a file
 		  ("FIXME"  . "#FF4500")
 		  ("DEBUG"  . "#A020F0")
 		  ("WIP"   . "#1E90FF"))))
-#+end_src
-* Eshell-git-prompt
-#+begin_src emacs-lisp
-(use-package eshell-git-prompt
-  :config
-  (eshell-git-prompt-use-theme 'powerline)
-  )
 #+end_src
 * Command-log-mode
 #+begin_src emacs-lisp
@@ -1784,6 +1748,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 
 #+end_src
 * Org-Mode
+** Base
 #+begin_src emacs-lisp
 (defun a3madkour/clear-latex-temp-files ()
   (shell-command "rm -rf *.tex *.prv preview.fmt"))
@@ -1957,18 +1922,17 @@ Looks for .venv directory in project root and activates the Python interpreter."
   		)
   )
 #+end_src
-
-* Org-Babel
-** Ob-Async
+** Org-Babel
+*** Ob-Async
 #+begin_src emacs-lisp
 (use-package ob-async)
 #+end_src
-** Ob-http
+*** Ob-http
 #+begin_src emacs-lisp 
 (use-package ob-http)
 #+end_src
 
-** Final Setup
+*** Final Setup
 #+begin_src emacs-lisp
 (org-babel-do-load-languages
  'org-babel-load-languages
@@ -1996,19 +1960,19 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  ;; Our :lang common-lisp module uses sly, so...
 	  org-babel-lisp-eval-fn #'sly-eval)
 #+end_src
-* Org-ql
+** Org-ql
 #+begin_src emacs-lisp
 (use-package org-ql
   :general
   (general-define-key :keymaps 'org-ql-view-map
 					  "q" 'kill-buffer-and-window))
 #+end_src
-* Org-bullets
+** Org-bullets
 #+begin_src emacs-lisp
 (use-package org-bullets
   :hook (org-mode . org-bullets-mode))
 #+end_src
-* Org-fancy-priorities
+** Org-fancy-priorities
 #+begin_src emacs-lisp
 (use-package org-fancy-priorities
   :ensure t
@@ -2017,14 +1981,14 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :config
   (setq org-fancy-priorities-list '("IDEAL" "DOABLE" "G4N" )))
 #+end_src
-* Org roam
+** Org roam
 #+begin_src emacs-lisp
 (use-package org-roam
   :config
   (org-roam-db-autosync-mode)
   )
 #+end_src
-* Org roam ui
+** Org roam ui
 #+begin_src emacs-lisp
 (use-package org-roam-ui
   :straight
@@ -2037,13 +2001,13 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		org-roam-ui-open-on-start t))
 
 #+end_src
-* Org-auctex
+** Org-auctex
 #+begin_src emacs-lisp
 (use-package org-auctex
   :straight
   (:host github :repo "karthink/org-auctex" :branch "master" :file (".el" "out")))
 #+end_src
-* Org noter
+** Org noter
 #+begin_src emacs-lisp
 (use-package org-noter
   :config
@@ -2051,102 +2015,68 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (setq org-noter-kill-frame-at-session-end nil)
   )
 #+end_src
-* Org-Journal
-#+begin_src emacs-lisp
-(use-package org-journal
-  :config
-  (setq org-journal-dir "~/org/Journal"))
-#+end_src
-* Org-pomodoro
+** Org-pomodoro
 #+begin_src emacs-lisp
 (use-package org-pomodoro)
 #+end_src
-* Org-transclusion
+** Org-transclusion
 #+begin_src emacs-lisp
 (use-package org-transclusion)
 #+end_src
-* Org-book
+** Org-book
 #+begin_src emacs-lisp
 (use-package org-books
   :config
   (setq org-books-file "~/org/reading-list.org")
   )
 #+end_src
-* Org PDFtools
+** Org PDFtools
 #+begin_src emacs-lisp
 (use-package org-pdftools
   :hook (org-load . org-pdftools-setup-link ))
 #+end_src
-* Org appear
+** Org appear
 #+begin_src emacs-lisp
 (use-package org-appear
   :hook
   (org-mode . org-appear-mode)
   :config
-  (setq org-appear-autolinks t)
-  )
+  (setq org-appear-autolinks t))
 #+end_src
-* Org modern
+** Org modern
 #+begin_src emacs-lisp
-;; (use-package org-modern
-;; 	:hook
-;; 	(org-mode . org-modern-mode)
-;; 	(org-agenda-finalize org-modern-agenda)
-;; 	:config
-;; 	(setq
-;; 	 ;; Edit settings
-;; 	 org-auto-align-tags nil
-;; 	 ;; org-tags-column 0
-;; 	 org-catch-invisible-edits 'show-and-error
-;; 	 org-special-ctrl-a/e t
-;; 	 org-insert-heading-respect-content t
+(use-package org-modern
+	:hook
+	(org-mode . org-modern-mode)
+	(org-agenda-finalize org-modern-agenda)
+	:config
+	(setq
+	 ;; Edit settings
+	 org-auto-align-tags nil
+	 ;; org-tags-column 0
+	 org-catch-invisible-edits 'show-and-error
+	 org-special-ctrl-a/e t
+	 org-insert-heading-respect-content t
 
-;; 	 ;; Org styling, hide markup etc.
-;; 	 ;; org-hide-emphasis-markers t
-;; 	 org-pretty-entities t
-;; 	 org-ellipsis "…"
+	 ;; Org styling, hide markup etc.
+	 ;; org-hide-emphasis-markers t
+	 org-pretty-entities t
+	 org-ellipsis "…"
 
-;; 	 ;; Agenda styling
-;; 	 org-agenda-tags-column 0
-;; 	 org-agenda-block-separator ?─
-;; 	 org-agenda-time-grid
-;; 	 '((daily today require-timed)
-;; 	   (800 1000 1200 1400 1600 1800 2000)
-;; 	   " ┄┄┄┄┄ " "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
-;; 	 org-agenda-current-time-string
-;; 	 "⭠ now ─────────────────────────────────────────────────")
+	 ;; Agenda styling
+	 org-agenda-tags-column 0
+	 org-agenda-block-separator ?─
+	 org-agenda-time-grid
+	 '((daily today require-timed)
+	   (800 1000 1200 1400 1600 1800 2000)
+	   " ┄┄┄┄┄ " "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+	 org-agenda-current-time-string
+	 "⭠ now ─────────────────────────────────────────────────")
 
-;; 	(global-org-modern-mode)
-;; 	)
+	(global-org-modern-mode)
+	)
 #+end_src
-* Org Special block extras
-#+begin_src emacs-lisp
-(use-package org-special-block-extras
-  :ensure t
-  :hook (org-mode . org-special-block-extras-mode)
-  ;; All relevant Lisp functions are prefixed ‘o-’; e.g., `o-docs-insert'.
-  :custom
-  (o-docs-libraries
-   '("~/org-special-block-extras/documentation.org")
-   "The places where I keep my ‘#+documentation’"))
-#+end_src
-* Org music
-#+begin_src emacs-lisp
-;; Org-Music Mode
-;; (use-package org-music
-;; 	:straight (:type git :host github :repo "debanjum/org-music")
-;; 	:init (progn
-;; 			(setq
-;; 			 org-music-file "~/org/Music.org"
-;; 			 org-music-media-directory "~/Music/OrgMusic/"
-;; 			 org-music-operating-system "linux")))
-#+end_src
-* Org Chef
-#+begin_src emacs-lisp
-(use-package org-chef
-  :ensure t)
-#+end_src
-* Exporting to website
+** Exporting to website
 Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp 
 (setq website-notes-dir "~/Workspace/website/notes")
@@ -2165,37 +2095,35 @@ Setting the pipeline for exporting the notes to the website dir
 		 :base-directory "~/org/blog"
 		 :publishing-directory ,blog-dir
 		 :recursive t
-		 :publishing-function org-html-publish-to-html
-		 )
-  		))
+		 :publishing-function org-html-publish-to-html)))
 #+end_src
-* Crux
-#+begin_src emacs-lisp
-(use-package crux)
-#+end_src
-* Org web-tools
+** Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
 #+end_src
-* Org-pandoc-import
+** Org-pandoc-import
 #+begin_src emacs-lisp
 (use-package org-pandoc-import
   :straight (:host github
 				   :repo "tecosaur/org-pandoc-import"
 				   :files ("*.el" "filters" "preprocessors")))
 #+end_src
-* Org-glossary
+** Org-glossary
 #+begin_src emacs-lisp
 (use-package org-glossary
   :straight (:host github :repo "tecosaur/org-glossary"))
 #+end_src
-* Ox-pandoc
+** Ox-pandoc
 #+begin_src emacs-lisp
 (use-package ox-pandoc)
 #+end_src
-* Org-clock-csv
+** Org-clock-csv
 #+begin_src emacs-lisp
 (use-package org-clock-csv)
+#+end_src
+* Crux
+#+begin_src emacs-lisp
+(use-package crux)
 #+end_src
 * Lexic
 #+begin_src emacs-lisp
@@ -2311,10 +2239,6 @@ Setting the pipeline for exporting the notes to the website dir
 * Citproc
 #+begin_src emacs-lisp
 (use-package citeproc)
-#+end_src
-* Outshine
-#+begin_src emacs-lisp
-(use-package outshine)
 #+end_src
 * Obisidian
 Heresy
@@ -2547,6 +2471,8 @@ Debuging adapter protocol for emacs
  '(consult-buffer :which-key "switch buffers")
  "bd"
  '(kill-current-buffer :which-key "delete buffer")
+ "bD"
+ '(kill-buffer-and-window :which-key "delete buffer and window")
  "bi"
  '(ibuffer  :which-key "ibuffer")
  "br"
@@ -2570,7 +2496,7 @@ Debuging adapter protocol for emacs
  "fS"
  '(evil-write-all :which-key "save all buffers")
 
- ;; Emms and email
+ ;; Emms 
  "e"
  '(nil :which-key "emms")
  "ee"
@@ -2614,8 +2540,10 @@ Debuging adapter protocol for emacs
  '(vterm :which-key "Open vterm in the same window")
  "oa"
  '(org-agenda :which-key "org-agenda")
+ "od"
+ '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
- ;; Toggles and terminals
+ ;; Toggles 
  "t"
  '(nil :which-key "toggles")
  "tt"
@@ -2624,10 +2552,8 @@ Debuging adapter protocol for emacs
  '(visual-line-mode :which-key "visual line mode")
  "tn"
  '(display-line-numbers-mode :which-key "display line numbers")
- "ta"
- '(mixed-pitch-mode :which-key "variable pitch mode")
  "tc"
- '(visual-fill-column-mode :which-key "visual fill column mode")
+ '(centered-cursor-mode :which-key "centered-cursor-mode")
  "ty"
  '(load-theme :which-key "load theme")
  "tR"
@@ -2640,8 +2566,6 @@ Debuging adapter protocol for emacs
  '(hide-mode-line-mode :which-key "hide modeline mode")
  "tw"
  '(whitespace-mode :which-key "whitespace-mode")
- "td"
- '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
  ;;Search and store
  "s"
@@ -2855,15 +2779,6 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(nil :which-key "notes")
  "ne"
  '(org-noter :which-key "Org Noter")
- ;; journal
- "nj"
- '(nil :which-key "journal")
- "njj"
- '(org-journal-new-entry :which-key "new journal entry")
- "njJ"
- '(org-journal-new-scheduled-entry :which-key "new scheduled journal entry")
-
-
  ;;insert
  "i"
  '(nil :which-key "insert")
