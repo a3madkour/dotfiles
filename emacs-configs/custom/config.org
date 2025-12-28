@@ -102,8 +102,8 @@
 (setq use-short-answers t)
 (setq ns-pop-up-frames nil)
 (setq
- org-roam-node-display-template
- (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
+ ;; org-roam-node-display-template
+ ;; (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
  org-ref-notes "~/org/notes/ref-notes"
  org-roam-dir "~/org/notes"
  zot-bib  "~/org/notes/ref-notes/library.bib"
@@ -232,7 +232,7 @@
   ;; (setq evil-want-Y-yank-to-eol t)
   (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
   (setq evil-want-keybinding nil)
-  
+
   :config
 
   (evil-set-initial-state 'dashboard-mode 'motion)
@@ -246,7 +246,7 @@
   ;; (define-key evil-motion-state-map "/" 'swiper)
   (define-key evil-window-map "\C-q" 'evil-delete-buffer) ;; Maps C-w C-q to evil-delete-buffer (The first C-w puts you into evil-window-map)
   (define-key evil-window-map "\C-w" 'kill-this-buffer)
-  (define-key evil-motion-state-map "\C-u" 'evil-scroll-up) 
+  (define-key evil-motion-state-map "\C-u" 'evil-scroll-up)
 
   (evil-mode 1))
 
@@ -363,7 +363,8 @@
 (use-package evil-anzu
   :defer nil
   :after evil
-  )
+  :config
+  (global-anzu-mode))
 (use-package evil-replace-with-register
   :defer nil
   :after evil
@@ -1353,7 +1354,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 * Citar
 #+begin_src emacs-lisp
-(defun citar-org-format-note-madkour (key entry)
+(defun a3madkour/citar-org-format-note(key entry)
   "Format a note from KEY and ENTRY."
   (let* ((template (citar--get-template 'note))
 		 (note-meta (when template
@@ -1396,7 +1397,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (org-cite-global-bibliography (list zot-bib))
   (org-cite-insert-processor 'citar)
   (org-cite-follow-processor 'citar)
-  (citar-note-format-function 'citar-org-format-note-madkour)
+  (citar-note-format-function 'a3madkour/citar-org-format-note)
   (org-cite-activate-processor 'citar)
   (citar-bibliography org-cite-global-bibliography)
   (citar-notes-paths (list org-ref-notes))
@@ -1979,6 +1980,15 @@ Debuging adapter protocol for emacs
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/org-roam-node-find-no-refs ()
+  "Find an Org-roam node, excluding those that have associated refs."
+  (interactive)
+  (org-roam-node-find 
+   nil ;; OTHER-WINDOW
+   nil ;; INITIAL-INPUT
+   (lambda (node)
+     ;; Only include nodes where the refs list is empty
+     (null (org-roam-node-refs node)))))
 ;;ripped off from karthinks
 (defun latex-math-from-calc ()
   "Evaluate `calc' on the contents of line at point."
@@ -2346,7 +2356,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  "r"
  '(nil :which-key "org-roam")
  "rD" #'org-roam-demote-entire-buffer
- "rf" #'org-roam-node-find
+ "rf" '(a3madkour/org-roam-node-find-no-refs :which-key "org roam find nodes no refs")
+ "rn" #'org-roam-node-find
  "rt"
  '(org-roam-dailies-goto-today :which-key "Goto today")
  "rr" #'org-roam-ref-find
@@ -2357,7 +2368,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "rI" #'org-id-get-create
  "rm" #'org-roam-buffer-toggle
  "rM" #'org-roam-buffer-display-dedicated
- "rn" #'org-roam-capture
+ "rc" #'org-roam-capture
  "rF" #'org-roam-refile
  "rR" #'org-roam-link-replace-all
  "rd"
