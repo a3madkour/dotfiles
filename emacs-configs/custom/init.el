@@ -39,21 +39,24 @@
 	  '(emacs nadvice python image-mode project flymake xref))
 
 ;; Byte-compile if elisp file is new than compiled file
-(let* ((config-dir (file-name-directory (or load-file-name buffer-file-name)))
-       (org-file   (expand-file-name "config.org" config-dir))
-       (el-file    (expand-file-name "config.el" config-dir))
-       (elc-file   (expand-file-name "config.elc" config-dir)))
+(let* ((config-dir
+		(file-name-directory (or load-file-name buffer-file-name)))
+       (org-file (expand-file-name "config.org" config-dir))
+       (el-file (expand-file-name "config.el" config-dir))
+       (elc-file (expand-file-name "config.elc" config-dir)))
 
   ;; 1. Tangle if the Org file is newer than the Elisp file
-  (when (or (not (file-exists-p el-file))
-            (file-newer-than-file-p org-file el-file))
+  (when (or
+		 (not (file-exists-p el-file))
+		 (file-newer-than-file-p org-file el-file))
     (message "Tangling config.org...")
-    (require 'org)
+    (use-package org)
     (org-babel-tangle-file org-file el-file "emacs-lisp"))
 
   ;; 2. Byte-compile if the Elisp file is newer than the Compiled file
-  (when (or (not (file-exists-p elc-file))
-            (file-newer-than-file-p el-file elc-file))
+  (when (or
+		 (not (file-exists-p elc-file))
+		 (file-newer-than-file-p el-file elc-file))
     (message "Byte-compiling config.el...")
     (load-file el-file)
     (byte-compile-file el-file))
