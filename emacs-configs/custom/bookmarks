@@ -2,7 +2,13 @@
 ;;; This format is meant to be slightly human-readable;
 ;;; nevertheless, you probably don't want to edit it.
 ;;; -*- End Of Bookmark File Format Version Stamp -*-
-(("Meeting"
+(("org-refile-last-stored"
+ (filename . "~/org/CS/habits.org")
+ (front-context-string . "**** TODO Watch ")
+ (rear-context-string . "-01-03 Saturday\n")
+ (position . 9239)
+ (last-modified 26959 40113 538057 915000))
+("Meeting"
  (filename . "~/org/meetings.org")
  (front-context-string . ")\n(bookmark-prop")
  (rear-context-string . "rk-set \"Meeting\"")
@@ -25,8 +31,9 @@
 ("Goals"
  (filename . "~/org/goals.org"))
 ("org-capture-last-stored"
- (filename . "~/org/notes/egg_fast_and_extensible_equality_saturation.org")
- (front-context-string . "\n* Egg: Fast and")
- (rear-context-string . "\n- keywords :: \n")
- (position . 270))
+ (filename . "~/org/CS/todo.org")
+ (front-context-string . "** TODO Find a w")
+ (rear-context-string . "ort:   4h\n:END:\n")
+ (position . 11285)
+ (last-modified 26959 24684 719270 921000))
 )

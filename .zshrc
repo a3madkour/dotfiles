@@ -10,8 +10,12 @@ source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/powerlevel10k/powerlevel10k.zsh-theme
 # source ~/Workspace/emsdk/emsdk_env.sh > /dev/null 2> /dev/null
 
+emacsclient_call()
+{
+	emacsclient -r "$1" &> /dev/null 
+}
 alias enf="emacsclient -c"
-alias e="emacsclient -r"
+alias e="emacsclient_call"
 alias eda="emacs --daemon &"
 alias xppen="/usr/lib/pentablet/PenTablet.sh"
 
