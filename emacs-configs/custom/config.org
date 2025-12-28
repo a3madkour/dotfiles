@@ -252,11 +252,13 @@
 
 (use-package evil-textobj-tree-sitter
   :after evil
+  :defer nil
   :ensure t)
 
 
 (use-package evil-goggles
   :after evil
+  :defer nil
   :ensure t
   :config
   (evil-goggles-mode)
@@ -264,10 +266,10 @@
 ;;other evil packages
 (use-package evil-nerd-commenter
   :after evil
-  )
+  :defer nil)
 (use-package evil-surround
   :after evil
-  :defer 2
+  :defer nil
   :config
   (global-evil-surround-mode 1))
 
@@ -279,42 +281,74 @@
   (evil-collection-init))
 
 (use-package evil-easymotion
+  :defer nil
   :config
   (setq avy-background t))
 
 (use-package evil-args
-  :after evil)
+  :after evil
+  :defer nil
+  )
 (use-package evil-visualstar
-  :after evil)
+  :after evil
+  :defer nil
+  )
 (use-package evil-quick-diff
   :straight (evil-quick-diff
   			 :type git
   			 :host github
   			 :repo "rgrinberg/evil-quick-diff"
   			 )
+  :defer nil
+  :after evil
   :init
   (setq evil-quick-diff-key (kbd "zx"))
   (evil-quick-diff-install))
-(use-package exato :ensure t)
-(use-package evil-vimish-fold)
-(use-package evil-escape)
-(use-package evil-numbers)
-(use-package evil-exchange)
+(use-package exato
+  :defer nil
+  :after evil
+  :ensure t)
+(use-package evil-vimish-fold
+  :defer nil
+  :after evil
+  )
+(use-package evil-escape
+  :defer nil
+  :after evil
+  )
+(use-package evil-numbers
+  :defer nil
+  :after evil
+  )
+(use-package evil-exchange
+  :defer nil
+  :after evil
+  )
 (use-package evil-lion
+  :defer nil
+  :after evil
   :ensure t
   :config
   (evil-lion-mode))
-(use-package evil-indent-plus)
-(use-package evil-embrace)
+(use-package evil-indent-plus
+  :defer nil
+  :after evil
+  )
+(use-package evil-embrace
+  :defer nil
+  :after evil
+  )
 (use-package evil-snipe
   :diminish evil-snipe-mode
   :diminish evil-snipe-local-mode
   :after evil
+  :defer nil
   :config
   (evil-snipe-mode +1))
 (use-package evil-org
   :diminish evil-org-mode
-  :after org
+  :after org evil
+  :defer nil
   :config
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
@@ -326,8 +360,13 @@
 (evil-org-agenda-set-keys)
 (eval-after-load 'org
   '(org-load-modules-maybe t))
-(use-package evil-anzu :defer t)
+(use-package evil-anzu
+  :defer nil
+  :after evil
+  )
 (use-package evil-replace-with-register
+  :defer nil
+  :after evil
   :config
   (require 'evil-replace-with-register)
   (evil-replace-with-register-install)
@@ -372,6 +411,7 @@
 * Undo-tree
 #+begin_src emacs-lisp
 (use-package undo-tree
+  :hook (prog-mode . undo-tree-mode)
   :config
     (global-undo-tree-mode 1)
     (evil-set-undo-system 'undo-tree)
