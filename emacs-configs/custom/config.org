@@ -221,6 +221,207 @@
                             :isolateEnglish :json-false
                             :dialect "American")))
 #+end_src
+* My functions
+#+NAME: my_funcs
+#+begin_src emacs-lisp
+(defun a3madkour/clear-latex-temp-files ()
+  (shell-command "rm -rf *.tex *.prv preview.fmt"))
+
+(defun a3madkour/org-noter-insert-subheading-note()
+  (interactive)
+  (org-noter-insert-note)
+  (org-insert-subheading t)
+  (let* ((location (org-noter--doc-approx-location (or nil 'interactive) (gv-ref force-new))))
+    (org-entry-put nil org-noter-property-note-location (org-noter--pretty-print-location location))
+  	)
+  )
+
+(defun a3madkour/export-to-latex-on-save (filename)
+  (when (string= (buffer-name) filename)
+  	;; (org-open-file (org-latex-export-to-pdf))
+  	(org-latex-export-to-pdf)
+  	(a3madkour/clear-latex-temp-files)))
+
+(defun a3madkour/export-to-latex-on-save-and-open (filename)
+  (when (string= (buffer-name) filename)
+  	(org-open-file (org-latex-export-to-pdf))
+  	(a3madkour/clear-latex-temp-files)))
+(defun a3madkour/org-font-setup ()
+  (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") 
+  (set-face-attribute 'org-scheduled-today nil :weight 'normal) 
+  (set-face-attribute 'org-scheduled-previously nil :background "red"))
+
+(defun a3madkour/force-time-after-todo ()
+  (interactive)
+  (when (equal org-state "DONE")
+	  (unless (equal (org-entry-get (org-element-at-point) "STYLE") "habit")
+		(let ((duration-str (read-string "Time taken (HH:MM or minutes):  ")))
+		  (unless (string-empty-p duration-str)
+			(let* ((minutes (org-duration-to-minutes duration-str))
+				   (now (current-time))
+				   (start-time (time-subtract now (seconds-to-time (* minutes 60)))))
+			  (org-clock-in 0 start-time)
+			  (org-clock-out)))))))
+
+(defun a3madkour/org-roam-node-find-no-refs ()
+  "Find an Org-roam node, excluding those that have associated refs."
+  (interactive)
+  (org-roam-node-find 
+   nil ;; OTHER-WINDOW
+   nil ;; INITIAL-INPUT
+   (lambda (node)
+     ;; Only include nodes where the refs list is empty
+     (null (org-roam-node-refs node)))))
+;;ripped off from karthinks
+(defun latex-math-from-calc ()
+  "Evaluate `calc' on the contents of line at point."
+  (interactive)
+  (cond ((region-active-p)
+         (let* ((beg (region-beginning))
+                (end (region-end))
+                (string (buffer-substring-no-properties beg end)))
+           (kill-region beg end)
+           (insert (calc-eval `(,string calc-language latex
+                                        calc-prefer-frac t
+                                        calc-angle-mode rad)))))
+        (t (let ((l (thing-at-point 'line)))
+             (end-of-line 1) (kill-line 0)
+             (insert (calc-eval `(,l
+                                  calc-language latex
+                                  calc-prefer-frac t
+                                  calc-angle-mode rad)))))))
+(defun a3madkour/store-region-lines-to-register()
+  (interactive)
+  (let* ((start (line-number-at-pos (region-beginning)))
+		 (end (line-number-at-pos (region-end))))
+	(set-register 1 (format " :lines %d-%d" start end))))
+
+(defun a3madkour/persp-org-roam-dailies-go-to-today ()
+  (save-excursion
+  	(org-roam-dailies-goto-today)
+  	(buffer-file-name)))
+
+(defun a3madkour/add-transclusion-from-link (&optional arg)
+  (interactive "P")
+  (let* ((
+  		  auto-transclude-p (if (or (not arg) (numberp arg)) org-transclusion-mode
+  							  ;; if `universal-argument' is passed,
+  							  ;; reverse nil/t when
+                              (if org-transclusion-mode nil t))))
+  	(insert (format "#+transclude: "))
+  	(org-insert-link)
+  	(when (and (numberp arg)
+               (> arg 0)
+               (<= arg 9))
+      (end-of-line)
+      (insert (format " :level %d" arg)))
+    (when auto-transclude-p (org-transclusion-add))))
+
+
+(defun a3madkour/make-project (&optional dir)
+  (interactive)
+  (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
+      	 )
+  	(message dir-path)
+    (magit-init dir-path)
+    (make-empty-file (concat dir-path "/README.org"))))
+
+
+(defun a3madkour/make-ws-project ()
+  (interactive)
+  (let ((dir-path "~/Workspace/"))
+    (a3madkour/make-project dir-path)
+    ))
+
+
+(defun a3madkour/project-recentf ()
+  "Filter 'recentf-list' to show only files within the current project"
+  (interactive)
+  (let* ((proj (project-current t))
+		 (root (project-root proj))
+		 (recent-files (seq-filter (lambda(f) (string-prefix-p root f))
+								   recentf-list)))
+	(if recent-files
+		(find-file (completing-read "Project recent files: " recent-files))
+	  (message "No recent files found in this project."))))
+
+(defun a3madkour/project-find-file-other-window ()
+  "Open the file in find-file in another window"
+  (interactive)
+  (require 'find-file)
+  (let ((default-directory (project-root (project-current t))))
+	(call-interactively 'find-file-other-window)))
+(defun a3madkour/org-set-effort ()
+  (org-set-effort)
+  ())
+
+(defun a3madkour/add-scheduled-todo ()
+  (interactive)
+  (let ((selected-date (org-read-date)))
+  	(org-insert-todo-heading-respect-content nil)
+  	(call-interactively 'org-set-effort)
+  	(org-schedule nil selected-date)))
+
+(defun a3madkour/org-insert-subheading-respect-content (&optional)
+  (interactive)
+  (let ((org-insert-heading-respect-content t))
+  	(org-insert-todo-subheading t)))
+
+(defun a3madkour/add-new-org-datetree-headline (selected-date)
+  (save-excursion
+  	(let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
+  		   (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
+  	  (org-datetree-find-date-create new-date)
+  	  (nth 4 (org-heading-components)))))
+
+(defun a3madkour/add-scheduled-headline-todo ()
+  (interactive)
+  (let* ((selected-date (org-read-date))
+  		 (headline (a3madkour/add-new-org-datetree-headline selected-date))
+  		 (new_pos (org-find-exact-headline-in-buffer headline)))
+  	(goto-char (+ 1 new_pos))
+  	(a3madkour/org-insert-subheading-respect-content )
+  	(call-interactively 'org-set-effort)
+  	(org-schedule nil selected-date)
+  	))
+
+
+(defun a3madkour/refile-to (file headline selected-date)
+  "Move current headline to specified location"
+  (let ((pos (save-excursion
+  			   (find-file file)
+  			   (let ((new_pos (org-find-exact-headline-in-buffer headline)))
+  				 (org-schedule nil selected-date)
+  				 new_pos)
+  			   )))
+  	(org-refile nil nil (list headline file nil pos))))
+
+(defun a3madkour/refile-and-schedule ()
+  (interactive)
+  (let ((selected-date (org-read-date)))
+  	(a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
+
+(defun a3madkour/file-with-current-date (path)
+  (expand-file-name (format "%s.org" (format-time-string "%Y-%m-%d")) path))
+#+end_src
+** Adapted from doom
+#+begin_src emacs-lisp
+	;;;###autoload
+(defun +default/insert-file-path (arg)
+  "Insert the file name (absolute path if prefix ARG).
+	If `buffer-file-name' isn't set, uses `default-directory'."
+  (interactive "P")
+  (let ((path (or buffer-file-name default-directory)))
+	(insert
+	 (if arg
+		 (abbreviate-file-name path)
+	   (file-name-nondirectory path)))))
+	;;;###autoload
+(defun +default/insert-all-path (arg)
+  (interactive "P")
+  (+default/insert-file-path 1))
+#+end_src
+
 * Evil
 #+begin_src emacs-lisp
 (use-package evil
@@ -391,7 +592,15 @@
   )
 
 #+end_src
-
+* Treesit-auto
+#+begin_src emacs-lisp
+(use-package treesit-auto
+  :custom
+  (treesit-auto-install 'prompt)
+  :config
+  (treesit-auto-add-to-auto-mode-alist 'all)
+  (global-treesit-auto-mode))
+#+end_src
 * Vterm
 #+begin_src emacs-lisp
 (use-package vterm
@@ -1241,6 +1450,10 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (elfmt-global-mode)
   )
 #+end_src
+** Yaml
+#+begin_src emacs-lisp
+(use-package yaml-mode)
+#+end_src
 ** ESS
 #+begin_src emacs-lisp
 (use-package ess)
@@ -1415,45 +1628,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 * Org-Mode
 ** Base
 #+begin_src emacs-lisp
-(defun a3madkour/clear-latex-temp-files ()
-  (shell-command "rm -rf *.tex *.prv preview.fmt"))
-
-(defun a3madkour/org-noter-insert-subheading-note()
-  (interactive)
-  (org-noter-insert-note)
-  (org-insert-subheading t)
-  (let* ((location (org-noter--doc-approx-location (or nil 'interactive) (gv-ref force-new))))
-    (org-entry-put nil org-noter-property-note-location (org-noter--pretty-print-location location))
-  	)
-  )
-
-(defun a3madkour/export-to-latex-on-save (filename)
-  (when (string= (buffer-name) filename)
-  	;; (org-open-file (org-latex-export-to-pdf))
-  	(org-latex-export-to-pdf)
-  	(a3madkour/clear-latex-temp-files)))
-
-(defun a3madkour/export-to-latex-on-save-and-open (filename)
-  (when (string= (buffer-name) filename)
-  	(org-open-file (org-latex-export-to-pdf))
-  	(a3madkour/clear-latex-temp-files)))
-
-
-(defun a3madkour/org-font-setup ()
-  ;; (set-face-attribute 'org-document-title nil :height 1.1) ;; Bigger titles, smaller drawers
-  (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") ;; Makes org done checkboxes green
-  ;; (set-face-attribute 'org-drawer nil :inherit 'fixed-pitch :inherit 'shadow :height 0.6 :foreground nil) ;; Makes org-drawer way smaller
-  ;; (set-face-attribute 'org-ellipsis nil :inherit 'shadow :height 0.8) ;; Makes org-ellipsis shadow (blends in better)
-  (set-face-attribute 'org-scheduled-today nil :weight 'normal) ;; Removes bold from org-scheduled-today
-  (set-face-attribute 'org-scheduled-previously nil :background "red") ;; Bolds org-super-agenda headers
-
-  ;; Here I set things that need it to be fixed-pitch, just in case the font I am using isn't monospace.
-  ;; (dolist (face '(org-list-dt org-tag org-todo org-table org-checkbox org-priority org-date org-verbatim org-special-keyword))
-  ;;   (set-face-attribute `,face nil :inherit 'fixed-pitch))
-
-  ;; (dolist (face '(org-code org-verbatim org-meta-line))
-  ;;   (set-face-attribute `,face nil :inherit 'shadow :inherit 'fixed-pitch))
-  )
 (use-package org
   :hook (org-mode . a3madkour/org-font-setup)
   :hook (org-mode . undo-tree-mode)
@@ -1470,62 +1644,10 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-to-list 'org-structure-template-alist '("py" . "src python"))
   (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
   (add-to-list 'org-structure-template-alist '("json" . "src json"))
+  (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
-  (defun a3madkour/org-set-effort ()
-  	(org-set-effort)
-  	())
-
-  (defun a3madkour/add-scheduled-todo ()
-  	(interactive)
-  	(let ((selected-date (org-read-date)))
-  	  (org-insert-todo-heading-respect-content nil)
-  	  (call-interactively 'org-set-effort)
-  	  (org-schedule nil selected-date)))
-
-  (defun a3madkour/org-insert-subheading-respect-content (&optional)
-  	(interactive)
-  	(let ((org-insert-heading-respect-content t))
-  	  (org-insert-todo-subheading t)))
-
-  (defun a3madkour/add-new-org-datetree-headline (selected-date)
-  	(save-excursion
-  	  (let* ((parsed-string (nthcdr 3 (org-parse-time-string selected-date)))
-  			 (new-date (list (nth 1 parsed-string) (car parsed-string) (nth 2 parsed-string))))
-  		(org-datetree-find-date-create new-date)
-  		(nth 4 (org-heading-components)))))
-
-  (defun a3madkour/add-scheduled-headline-todo ()
-  	(interactive)
-  	(let* ((selected-date (org-read-date))
-  		   (headline (a3madkour/add-new-org-datetree-headline selected-date))
-  		   (new_pos (org-find-exact-headline-in-buffer headline)))
-  	  (goto-char (+ 1 new_pos))
-  	  (a3madkour/org-insert-subheading-respect-content )
-  	  (call-interactively 'org-set-effort)
-  	  (org-schedule nil selected-date)
-  	  ))
-
-
-  (defun a3madkour/refile-to (file headline selected-date)
-  	"Move current headline to specified location"
-  	(let ((pos (save-excursion
-  				 (find-file file)
-  				 (let ((new_pos (org-find-exact-headline-in-buffer headline)))
-  				   (org-schedule nil selected-date)
-  				   new_pos)
-  				 )))
-  	  (org-refile nil nil (list headline file nil pos))))
-
-  (defun a3madkour/refile-and-schedule ()
-  	(interactive)
-  	(let ((selected-date (org-read-date)))
-  	  (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
-
-  (defun a3madkour/file-with-current-date (path)
-  	(expand-file-name (format "%s.org"
-  							  (format-time-string "%Y-%m-%d")) path))
-
   ;;agenda dir
+  
   (setq org-agenda-files
 		(append
 		(directory-files-recursively "~/org/" "\\todo.org$")
@@ -1782,6 +1904,15 @@ Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp
 (use-package ox-pandoc)
 #+end_src
+** Ox-hugo
+#+begin_src emacs-lisp
+(use-package ox-hugo
+  :ensure t
+  :after ox
+  :config
+  (with-eval-after-load 'ox
+  (require 'ox-hugo)))
+#+end_src
 ** Org-clock-csv
 #+begin_src emacs-lisp
 (use-package org-clock-csv)
@@ -1824,75 +1955,6 @@ Setting the pipeline for exporting the notes to the website dir
 (use-package elfeed)
 (use-package elfeed-goodies)
 (use-package elfeed-org)
-#+end_src
-* Combobulate
-#+begin_src emacs-lisp
-;; `M-x combobulate' (default: `C-c o o') to start using Combobulate
-;; (use-package treesit
-;;   :straight nil
-;;   :preface
-;;   (defun mp-setup-install-grammars ()
-;;     "Install Tree-sitter grammars if they are absent."
-;;     (interactive)
-;;     (dolist (grammar
-;;              '((css "https://github.com/tree-sitter/tree-sitter-css")
-;;                (javascript . ("https://github.com/tree-sitter/tree-sitter-javascript" "master" "src"))
-;;                (python "https://github.com/tree-sitter/tree-sitter-python")
-;;                (rust "https://github.com/tree-sitter/tree-sitter-rust")
-;;                (tsx . ("https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src"))
-;;                (yaml "https://github.com/ikatyang/tree-sitter-yaml")))
-;;       (add-to-list 'treesit-language-source-alist grammar)
-;;       ;; Only install `grammar' if we don't already have it
-;;       ;; installed. However, if you want to *update* a grammar then
-;;       ;; this obviously prevents that from happening.
-;;       (unless (treesit-language-available-p (car grammar))
-;;         (treesit-install-language-grammar (car grammar)))))
-
-;;   ;; Optional, but recommended. Tree-sitter enabled major modes are
-;;   ;; distinct from their ordinary counterparts.
-;;   ;;
-;;   ;; You can remap major modes with `major-mode-remap-alist'. Note
-;;   ;; that this does *not* extend to hooks! Make sure you migrate them
-;;   ;; also
-;;   (dolist (mapping '((python-mode . python-ts-mode)
-;;                      (css-mode . css-ts-mode)
-;;                      (typescript-mode . tsx-ts-mode)
-;;                      (js-mode . js-ts-mode)
-;;                      (css-mode . css-ts-mode)
-;;                      (yaml-mode . yaml-ts-mode)))
-;;     (add-to-list 'major-mode-remap-alist mapping))
-
-;;   :config
-;;   (mp-setup-install-grammars)
-;;   )
-;;   ;; Do not forget to customize Combobulate to your liking:
-;;   ;;
-;;   ;;  M-x customize-group RET combobulate RET
-;;   ;;
-;;   (use-package combobulate
-;; 	:straight (combobulate
-;; 			   :type git
-;; 			   :host github
-;; 			   :repo "mickeynp/combobulate"
-;; 			   )
-;;     :preface
-;;     ;; You can customize Combobulate's key prefix here.
-;;     ;; Note that you may have to restart Emacs for this to take effect!
-;;     (setq combobulate-key-prefix "C-c o")
-
-;;     ;; Optional, but recommended.
-;;     ;;
-;;     ;; You can manually enable Combobulate with `M-x
-;;     ;; combobulate-mode'.
-;;     :hook ((python-ts-mode . combobulate-mode)
-;;            (js-ts-mode . combobulate-mode)
-;;            (css-ts-mode . combobulate-mode)
-;;            (yaml-ts-mode . combobulate-mode)
-;;            (typescript-ts-mode . combobulate-mode)
-;;            (tsx-ts-mode . combobulate-mode))
-;;     ;; Amend this to the directory where you keep Combobulate's source
-;;     ;; code.
-;; )
 #+end_src
 * EditorConfig
 #+begin_src emacs-lisp
@@ -1977,117 +2039,6 @@ Debuging adapter protocol for emacs
   ;; Corrects (and improves) org-mode's native fontification.
   (doom-themes-org-config))
 #+end_src
-* My functions
-#+NAME: my_funcs
-#+begin_src emacs-lisp
-(defun a3madkour/org-roam-node-find-no-refs ()
-  "Find an Org-roam node, excluding those that have associated refs."
-  (interactive)
-  (org-roam-node-find 
-   nil ;; OTHER-WINDOW
-   nil ;; INITIAL-INPUT
-   (lambda (node)
-     ;; Only include nodes where the refs list is empty
-     (null (org-roam-node-refs node)))))
-;;ripped off from karthinks
-(defun latex-math-from-calc ()
-  "Evaluate `calc' on the contents of line at point."
-  (interactive)
-  (cond ((region-active-p)
-         (let* ((beg (region-beginning))
-                (end (region-end))
-                (string (buffer-substring-no-properties beg end)))
-           (kill-region beg end)
-           (insert (calc-eval `(,string calc-language latex
-                                        calc-prefer-frac t
-                                        calc-angle-mode rad)))))
-        (t (let ((l (thing-at-point 'line)))
-             (end-of-line 1) (kill-line 0)
-             (insert (calc-eval `(,l
-                                  calc-language latex
-                                  calc-prefer-frac t
-                                  calc-angle-mode rad)))))))
-(defun a3madkour/store-region-lines-to-register()
-  (interactive)
-  (let* ((start (line-number-at-pos (region-beginning)))
-		 (end (line-number-at-pos (region-end))))
-	(set-register 1 (format " :lines %d-%d" start end))))
-
-(defun a3madkour/persp-org-roam-dailies-go-to-today ()
-  (save-excursion
-  	(org-roam-dailies-goto-today)
-  	(buffer-file-name)))
-
-(defun a3madkour/add-transclusion-from-link (&optional arg)
-  (interactive "P")
-  (let* ((
-  		  auto-transclude-p (if (or (not arg) (numberp arg)) org-transclusion-mode
-  							  ;; if `universal-argument' is passed,
-  							  ;; reverse nil/t when
-                              (if org-transclusion-mode nil t))))
-  	(insert (format "#+transclude: "))
-  	(org-insert-link)
-  	(when (and (numberp arg)
-               (> arg 0)
-               (<= arg 9))
-      (end-of-line)
-      (insert (format " :level %d" arg)))
-    (when auto-transclude-p (org-transclusion-add))))
-
-
-(defun a3madkour/make-project (&optional dir)
-  (interactive)
-  (let* ((dir-path (if dir (read-directory-name "Select Project Directory" dir) (read-directory-name "Select Project Directory") ))
-      	 )
-  	(message dir-path)
-    (magit-init dir-path)
-    (make-empty-file (concat dir-path "/README.org"))))
-
-
-(defun a3madkour/make-ws-project ()
-  (interactive)
-  (let ((dir-path "~/Workspace/"))
-    (a3madkour/make-project dir-path)
-    ))
-
-
-(defun a3madkour/project-recentf ()
-  "Filter 'recentf-list' to show only files within the current project"
-  (interactive)
-  (let* ((proj (project-current t))
-		 (root (project-root proj))
-		 (recent-files (seq-filter (lambda(f) (string-prefix-p root f))
-								  recentf-list)))
-	(if recent-files
-		(find-file (completing-read "Project recent files: " recent-files))
-	  (message "No recent files found in this project."))))
-
-(defun a3madkour/project-find-file-other-window ()
-  "Open the file in find-file in another window"
-  (interactive)
-  (require 'find-file)
-  (let ((default-directory (project-root (project-current t))))
-	(call-interactively 'find-file-other-window)))
-
-#+end_src
-** Adapted from doom
-#+begin_src emacs-lisp
-	;;;###autoload
-(defun +default/insert-file-path (arg)
-  "Insert the file name (absolute path if prefix ARG).
-	If `buffer-file-name' isn't set, uses `default-directory'."
-  (interactive "P")
-  (let ((path (or buffer-file-name default-directory)))
-	(insert
-	 (if arg
-		 (abbreviate-file-name path)
-	   (file-name-nondirectory path)))))
-	;;;###autoload
-(defun +default/insert-all-path (arg)
-  (interactive "P")
-  (+default/insert-file-path 1))
-#+end_src
-
 * Keybindings
 #+begin_src emacs-lisp
 (general-define-key
