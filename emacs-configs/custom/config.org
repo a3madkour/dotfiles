@@ -247,8 +247,8 @@
   	(org-open-file (org-latex-export-to-pdf))
   	(a3madkour/clear-latex-temp-files)))
 (defun a3madkour/org-font-setup ()
-  (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3") 
-  (set-face-attribute 'org-scheduled-today nil :weight 'normal) 
+  (set-face-attribute 'org-checkbox-statistics-done nil :inherit 'org-done :foreground "green3")
+  (set-face-attribute 'org-scheduled-today nil :weight 'normal)
   (set-face-attribute 'org-scheduled-previously nil :background "red"))
 
 (defun a3madkour/force-time-after-todo ()
@@ -266,7 +266,7 @@
 (defun a3madkour/org-roam-node-find-no-refs ()
   "Find an Org-roam node, excluding those that have associated refs."
   (interactive)
-  (org-roam-node-find 
+  (org-roam-node-find
    nil ;; OTHER-WINDOW
    nil ;; INITIAL-INPUT
    (lambda (node)
@@ -403,6 +403,50 @@
 
 (defun a3madkour/file-with-current-date (path)
   (expand-file-name (format "%s.org" (format-time-string "%Y-%m-%d")) path))
+
+(defun a3madkour/vulpea-project-p ()
+  "Return non-nil if current buffer has any active TODO state."
+  (seq-find
+   (lambda (type) (eq type 'todo))
+   (org-element-map (org-element-parse-buffer 'headline) 'headline
+     (lambda (h) (org-element-property :todo-type h)))))
+
+(defun a3madkour/vulpea-project-update-tag ()
+  "Update the 'project' tag in the current buffer based on TODO presence."
+  (when (and (not (active-minibuffer-window))
+             (org-roam-buffer-p))
+    (save-excursion
+      (goto-char (point-min))
+      (let* ((tags (vulpea-buffer-tags-get))
+             (original-tags tags))
+        (if (a3madkour/vulpea-project-p)
+            (setq tags (cons "project" tags))
+          (setq tags (remove "project" tags)))
+        (setq tags (seq-uniq tags))
+        (unless (equal tags original-tags)
+          (apply #'vulpea-buffer-tags-set tags))))))
+
+;; Run this every time you save a note
+(add-hook 'find-file-hook #'a3madkour/vulpea-project-update-tag)
+(add-hook 'before-save-hook #'a3madkour/vulpea-project-update-tag)
+
+(defun a3madkour/vulpea-project-files ()
+  "Return a list of note files containing the 'project' tag."
+  (seq-uniq
+   (seq-map #'car
+            (org-roam-db-query
+             [:select [nodes:file]
+              :from tags
+              :left-join nodes :on (= tags:node-id nodes:id)
+              :where (like tag (quote "%\"project\"%"))]))))
+
+(defun a3madkour/vulpea-agenda-files-update (&rest _)
+  "Update the value of `org-agenda-files` with active project notes."
+  (setq org-agenda-files (append (a3madkour/vulpea-project-files) org-agenda-files)))
+
+;; Tell Emacs to update the list right before opening the agenda
+(advice-add 'org-agenda :before #'a3madkour/vulpea-agenda-files-update)
+(advice-add 'org-todo-list :before #'a3madkour/vulpea-agenda-files-update)
 #+end_src
 ** Adapted from doom
 #+begin_src emacs-lisp
@@ -574,7 +618,7 @@
   (evil-replace-with-register-install)
   )
 #+end_src
-* General 
+* General
 #+begin_src emacs-lisp
 (use-package general
   :defer nil
@@ -637,7 +681,7 @@
    ;; recentf-max-menu-items 0
    recentf-max-saved-items 200)
   ;; Show home folder path as a ~
-  (setq recentf-filename-handlers  
+  (setq recentf-filename-handlers
 		(append '(abbreviate-file-name) recentf-filename-handlers))
   (recentf-mode))
 #+end_src
@@ -792,7 +836,7 @@ Fd support for dired
   (yas-global-mode 1)
   (yas-reload-all)) ;; or M-x yas-reload-all if you've started YASnippet already.
 (require 'warnings)
-(add-to-list 'warning-suppress-types '(yasnippet backquote-change)) 
+(add-to-list 'warning-suppress-types '(yasnippet backquote-change))
 (use-package yasnippet-snippets)
 #+end_src
 * Hide-mode-line
@@ -1112,7 +1156,7 @@ Highlight the diffs of the past commit in a file
 * Jinx
 #+begin_src emacs-lisp
 (pcase system-type
-	('gnu/linux 
+	('gnu/linux
 	(use-package jinx
 	  :hook (emacs-startup . global-jinx-mode)
 	  :bind ([remap ispell-word] . jinx-correct))))
@@ -1209,7 +1253,7 @@ Highlight the diffs of the past commit in a file
   :ensure t
   :config
   (editorconfig-mode 1))
-#+end_src 
+#+end_src
 * Hl-todo
 #+begin_src emacs-lisp
 (use-package hl-todo
@@ -1647,7 +1691,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
-  
+
   (setq org-agenda-files
 		(append
 		(directory-files-recursively "~/org/" "\\todo.org$")
@@ -1714,7 +1758,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package ob-async)
 #+end_src
 *** Ob-http
-#+begin_src emacs-lisp 
+#+begin_src emacs-lisp
 (use-package ob-http)
 #+end_src
 
@@ -1773,6 +1817,12 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package org-roam
   :config
   (org-roam-db-autosync-mode))
+#+end_src
+** Vulpea
+#+begin_src emacs-lisp
+(use-package vulpea
+  :ensure t
+  :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
 #+end_src
 ** Org roam ui
 #+begin_src emacs-lisp
@@ -1865,7 +1915,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 ** Exporting to website
 Setting the pipeline for exporting the notes to the website dir
-#+begin_src emacs-lisp 
+#+begin_src emacs-lisp
 (setq website-notes-dir "~/Workspace/website/notes")
 (setq blog-dir "~/Workspace/website/blog")
 (require 'ox-publish)
@@ -2133,7 +2183,7 @@ Debuging adapter protocol for emacs
  "fS"
  '(evil-write-all :which-key "save all buffers")
 
- ;; Emms 
+ ;; Emms
  "e"
  '(nil :which-key "emms")
  "ee"
@@ -2142,7 +2192,7 @@ Debuging adapter protocol for emacs
  '(emms-pause :which-key "emms pause")
  "ef"
  '(emms-play-find :which-key "emms play find")
- 
+
  ;; Help/emacs
  "h"
  '(nil :which-key "help/emacs")
@@ -2180,7 +2230,7 @@ Debuging adapter protocol for emacs
  "od"
  '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
 
- ;; Toggles 
+ ;; Toggles
  "t"
  '(nil :which-key "toggles")
  "tt"
@@ -2356,7 +2406,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "roT" #'org-roam-tag-remove
  "ror" #'org-roam-ref-add
  "roR" #'org-roam-ref-remove
- 
+
  ;; Project
  "p"
  '(nil :which-key "project")
