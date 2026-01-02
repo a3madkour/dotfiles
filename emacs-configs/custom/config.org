@@ -447,6 +447,26 @@
 ;; Tell Emacs to update the list right before opening the agenda
 (advice-add 'org-agenda :before #'a3madkour/vulpea-agenda-files-update)
 (advice-add 'org-todo-list :before #'a3madkour/vulpea-agenda-files-update)
+
+(defun a3madkour/vterm-cd ()
+  (interactive)
+  (progn (vterm-toggle-insert-cd)
+		 (vterm-toggle-insert-cd)))
+
+(defun a3madkour/vterm-toggle-project-root ()
+  "Toggle vterm and cd to the current project root."
+  (interactive)
+  (let* ((root (project-root (project-current t))) ;; Get project root
+         (default-directory root))                 ;; Set context for new buffer
+	
+  (if (eq major-mode 'vterm-mode)
+      (when vterm-toggle--cd-cmd
+        (vterm-send-string vterm-toggle--cd-cmd t)
+        (vterm-send-return))
+      (progn
+        (vterm-toggle-cd-show)
+        (vterm-send-string (concat "cd " root))
+        (vterm-send-return)))))
 #+end_src
 ** Adapted from doom
 #+begin_src emacs-lisp
@@ -656,11 +676,8 @@
 (use-package vterm-toggle
   :config
   (setq vtrm-toggle-cd-auto-create-buffer nil))
-(defun a3madkour/vterm-cd ()
-  (interactive)
-  (progn (vterm-toggle-insert-cd)
-		 (vterm-toggle-insert-cd)))
-(use-package multi-vterm :ensure t)
+;; Bind this custom function to your preferred key
+  (use-package multi-vterm :ensure t)
 #+end_src
 * Undo-tree
 #+begin_src emacs-lisp
@@ -1827,12 +1844,14 @@ Looks for .venv directory in project root and activates the Python interpreter."
 ** Org roam
 #+begin_src emacs-lisp
 (use-package org-roam
+  :defer nil
   :config
   (org-roam-db-autosync-mode))
 #+end_src
 ** Vulpea
 #+begin_src emacs-lisp
 (use-package vulpea
+  :defer nil
   :ensure t
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
 #+end_src
@@ -2241,6 +2260,8 @@ Debuging adapter protocol for emacs
  '(org-agenda :which-key "org-agenda")
  "od"
  '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
+ "op"
+ '(a3madkour/vterm-toggle-project-root :which-key "cd to the project root in vterm")
 
  ;; Toggles
  "t"
