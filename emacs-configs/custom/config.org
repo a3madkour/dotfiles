@@ -1553,6 +1553,18 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+begin_src emacs-lisp
 (use-package json-mode)
 #+end_src
+* Emmet
+#+begin_src emacs-lisp
+(use-package emmet-mode
+  :config
+  (add-hook 'web-mode-hook 'emmet-mode)
+  (add-hook 'html-mode-hook 'emmet-mode)
+  (add-hook 'css-mode-hook 'emmet-mode)
+  (add-hook 'scss-mode-hook 'emmet-mode)
+  (add-hook 'js2-mode-hook 'emmet-mode)
+  (add-hook 'typescript-mode-hook 'emmet-mode)
+  (add-hook 'rjsx-mode-hook 'emmet-mode))
+#+end_src
 * Org-super-agenda
 #+begin_src emacs-lisp
 (use-package org-super-agenda
