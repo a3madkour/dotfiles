@@ -682,6 +682,7 @@
 * Undo-tree
 #+begin_src emacs-lisp
 (use-package undo-tree
+  :defer nil
   :hook (prog-mode . undo-tree-mode)
   :config
     (global-undo-tree-mode 1)
