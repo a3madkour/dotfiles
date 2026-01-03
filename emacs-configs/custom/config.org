@@ -2537,6 +2537,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "c"
  '(nil :which-key "code")
  "cc" 'compile
+ "cp" 'project-compile
  "cC" 'recompile
  "ce" 'eval-buffer
  "cf"
