@@ -467,6 +467,27 @@
         (vterm-toggle-cd-show)
         (vterm-send-string (concat "cd " root))
         (vterm-send-return)))))
+
+
+(defun a3madkour/create-weekly-summary ()
+  "Create or open a weekly summary file in ~/org/weekly_summary/ named by the current week."
+  (interactive)
+  (let* ((directory "~/org/weekly_summary/")
+         ;; Format: Year-Week (e.g., 2026-W01.org)
+         (filename (format-time-string "%G-W%V.org"))
+         (full-path (expand-file-name filename directory)))
+    
+    ;; Create directory if it doesn't exist
+    (unless (file-exists-p directory)
+      (make-directory directory t))
+    
+    ;; Open the file
+    (find-file full-path)
+    
+    ;; If it's a new file, insert a title header
+    (when (= (buffer-size) 0)
+      (insert (format "#+TITLE: Weekly Summary: %s\n\n" (format-time-string "%G-W%V")))
+      (save-buffer))))
 #+end_src
 ** Adapted from doom
 #+begin_src emacs-lisp
@@ -2395,6 +2416,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  "rn" #'org-roam-node-find
  "rt"
  '(org-roam-dailies-goto-today :which-key "Goto today")
+ "rw"
+ '(a3madkour/create-weekly-summary :which-key "Create weekly summary")
  "rr" #'org-roam-ref-find
  "rt"
  '(org-roam-dailies-goto-today :which-key "Goto today")
