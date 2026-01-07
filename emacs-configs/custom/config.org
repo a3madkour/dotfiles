@@ -547,8 +547,7 @@
   :defer nil
   :ensure t
   :config
-  (evil-goggles-mode)
-  )
+  (evil-goggles-mode))
 ;;other evil packages
 (use-package evil-nerd-commenter
   :after evil
@@ -1889,6 +1888,13 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		org-roam-ui-update-on-save t
 		org-roam-ui-open-on-start t))
 
+#+end_src
+** Org-superstar-mode
+#+begin_src emacs-lisp
+(use-package org-superstar
+  :defer nil
+  :hook (org-mode . org-superstar)
+  :after org)
 #+end_src
 ** Org-auctex
 #+begin_src emacs-lisp
