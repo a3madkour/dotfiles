@@ -1889,13 +1889,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		org-roam-ui-open-on-start t))
 
 #+end_src
-** Org-superstar-mode
-#+begin_src emacs-lisp
-(use-package org-superstar
-  :defer nil
-  :hook (org-mode . org-superstar)
-  :after org)
-#+end_src
 ** Org-auctex
 #+begin_src emacs-lisp
 (use-package org-auctex
