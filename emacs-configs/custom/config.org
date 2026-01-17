@@ -1889,13 +1889,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		org-roam-ui-open-on-start t))
 
 #+end_src
-** Org-superstar-mode
-#+begin_src emacs-lisp
-(use-package org-superstar
-  :defer nil
-  :hook (org-mode . org-superstar)
-  :after org)
-#+end_src
 ** Org-auctex
 #+begin_src emacs-lisp
 (use-package org-auctex
@@ -1949,6 +1942,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	(setq
 	 ;; Edit settings
 	 org-auto-align-tags nil
+	 org-modern-star nil
 	 ;; org-tags-column 0
 	 org-catch-invisible-edits 'show-and-error
 	 org-special-ctrl-a/e t
@@ -1969,8 +1963,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	 org-agenda-current-time-string
 	 "⭠ now ─────────────────────────────────────────────────")
 
-	(global-org-modern-mode)
-	)
+	(global-org-modern-mode))
 #+end_src
 ** Exporting to website
 Setting the pipeline for exporting the notes to the website dir
