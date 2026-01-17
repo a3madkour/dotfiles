@@ -1797,10 +1797,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   		  ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
   		   "* %?\n")
   		  ("f" "Fleeting note" entry (file (lambda () (a3madkour/file-with-current-date "~/org/fleeting-notes")) )
-  		   "* %?\n")
-  		  )
-  		)
-  )
+  		   "* %?\n"))))
 #+end_src
 ** Org-Babel
 *** Ob-Async
