@@ -197,9 +197,6 @@
 
 (with-eval-after-load 'eglot
   (add-to-list 'eglot-server-programs
-               '(text-mode . ("harper-ls" "--stdio"))))
-(with-eval-after-load 'eglot
-  (add-to-list 'eglot-server-programs
 			   '(org-mode . ("harper-ls" "--stdio"))))
 (setq-default eglot-workspace-configuration
               '(:harper-ls (:userDictPath ""
@@ -1388,7 +1385,19 @@ Highlight the diffs of the past commit in a file
   :after eglot
   :config (eglot-booster-mode))
 (use-package eglot
-  :hook (prog-mode . eglot-ensure))
+  :ensure t
+  :hook (prog-mode . eglot-ensure)
+  :config
+  (setq eglot-events-buffer-size 0)
+  (setq eglot-sync-connect nil)
+
+  (setq eglot-connect-timeout 120))
+
+(use-package eldoc
+  :ensure nil
+  :config
+  (setq eldoc-echo-area-use-multiline-p nil)
+  (setq eldoc-idle-delay 0.5))
 #+end_src
 * Perspective
 #+begin_src emacs-lisp
