@@ -1637,9 +1637,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package auctex-latexmk
   :config (setq auctex-latexmk-inherit-TeX-PDF-mode t)
   (auctex-latexmk-setup))
-;; (use-package xenops
-;;   :hook (LaTeX-mode . xenops-mode)
-;; :hook (org-mode . xenops-mode))
 #+end_src
 ** Lua
 #+begin_src emacs-lisp
@@ -1900,12 +1897,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		org-roam-ui-open-on-start t))
 
 #+end_src
-** Org-auctex
-#+begin_src emacs-lisp
-(use-package org-auctex
-  :straight
-  (:host github :repo "karthink/org-auctex" :branch "master" :file (".el" "out")))
-#+end_src
 ** Org noter
 #+begin_src emacs-lisp
 (use-package org-noter
@@ -1961,7 +1952,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 
 	 ;; Org styling, hide markup etc.
 	 ;; org-hide-emphasis-markers t
-	 org-pretty-entities t
 	 org-ellipsis "…"
 
 	 ;; Agenda styling
