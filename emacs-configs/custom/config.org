@@ -654,6 +654,11 @@
   (require 'evil-replace-with-register)
   (evil-replace-with-register-install)
   )
+(use-package evil-matchit
+  :defer nil
+  :after evil
+  :config
+  (global-evil-matchit-mode 1))
 #+end_src
 * General
 #+begin_src emacs-lisp
