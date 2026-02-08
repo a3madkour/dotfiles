@@ -2743,7 +2743,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "H"
  '(org-html-convert-region-to-html :which-key "convert region to html")
  "r" 'a3madkour/refile-and-schedule
-
+ "-" 'org-cycle-list-bullet
  "1"
  '(org-toggle-link-display :which-key "toggle link display")
  "2"
