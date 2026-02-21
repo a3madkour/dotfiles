@@ -1447,11 +1447,7 @@ Highlight the diffs of the past commit in a file
 ** GDScript
 #+begin_src emacs-lisp
 (use-package gdscript-mode
-  :hook (gdscript-mode . eglot-ensure)
-  :custom (gdscript-eglot-version 3)
-  :config
-  ;; (setq treesit-extra-load-path '("~/emacs-configs/custom/tree-sitter-gdscript/src/"))
-  )
+  :ensure t)
 #+end_src
 ** Haskell
 #+begin_src emacs-lisp
