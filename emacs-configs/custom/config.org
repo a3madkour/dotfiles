@@ -2557,6 +2557,108 @@ _SPC_ cancel    _o_nly this      _d_elete
  "lp" #'langtool-goto-previous-error
  ) ;; End SPC prefix block
 
+
+
+;; EIN (Emacs IPython Notebook) keybindings
+(general-define-key
+ :prefix "SPC m"
+ :states 'normal
+ :keymaps 'ein:notebook-mode-map
+ "" nil
+
+ ;; Execution
+ "e"
+ '(nil :which-key "execute")
+ "ee"
+ '(ein:worksheet-execute-cell :which-key "execute cell")
+ "ea"
+ '(ein:worksheet-execute-all-cells :which-key "execute all cells")
+ "en"
+ '(ein:worksheet-execute-cell-and-goto-next :which-key "execute and next")
+ "eA"
+ '(ein:worksheet-execute-all-cells-above :which-key "execute all above")
+ "eB"
+ '(ein:worksheet-execute-all-cells-below :which-key "execute all below")
+
+ ;; Cell operations
+ "c"
+ '(nil :which-key "cell")
+ "cN"
+ '(ein:worksheet-insert-cell-above :which-key "insert cell above")
+ "cn"
+ '(ein:worksheet-insert-cell-below :which-key "insert cell below")
+ "ct"
+ '(ein:worksheet-toggle-cell-type :which-key "toggle cell type")
+ "cd"
+ '(ein:worksheet-kill-cell :which-key "kill cell")
+ "cp"
+ '(ein:worksheet-yank-cell :which-key "yank cell")
+ "cy"
+ '(ein:worksheet-copy-cell :which-key "copy cell")
+ "cm"
+ '(ein:worksheet-merge-cell :which-key "merge cell")
+ "cs"
+ '(ein:worksheet-split-cell-at-point :which-key "split cell at point")
+ "cj"
+ '(ein:worksheet-move-cell-down :which-key "move cell down")
+ "ck"
+ '(ein:worksheet-move-cell-up :which-key "move cell up")
+
+ ;; Output
+ "o"
+ '(nil :which-key "output")
+ "ol"
+ '(ein:worksheet-clear-output :which-key "clear output")
+ "oa"
+ '(ein:worksheet-clear-all-output :which-key "clear all output")
+ "ot"
+ '(ein:worksheet-toggle-output :which-key "toggle output")
+
+ ;; Notebook
+ "n"
+ '(nil :which-key "notebook")
+ "ns"
+ '(ein:notebook-save-notebook-command :which-key "save notebook")
+ "nr"
+ '(ein:notebook-restart-session-command :which-key "restart kernel")
+ "ni"
+ '(ein:notebook-kernel-interrupt-command :which-key "interrupt kernel")
+ "nc"
+ '(ein:notebook-reconnect-session-command :which-key "reconnect session")
+ "nn"
+ '(ein:notebook-rename-command :which-key "rename notebook")
+
+ ;; Navigation
+ "j"
+ '(ein:worksheet-goto-next-input :which-key "next cell")
+ "k"
+ '(ein:worksheet-goto-prev-input :which-key "prev cell")
+
+ ;; Help / completion
+ "h"
+ '(ein:pytools-request-tooltip-or-help :which-key "help at point")
+ "TAB"
+ '(ein:completer-complete :which-key "complete"))
+
+;; Normal state convenience bindings in ein notebooks
+(general-def
+  :states '(normal visual motion)
+  :keymaps 'ein:notebook-mode-map
+  "C-<return>" 'ein:worksheet-execute-cell-and-goto-next
+  "S-<return>" 'ein:worksheet-execute-cell
+  "M-j" 'ein:worksheet-move-cell-down
+  "M-k" 'ein:worksheet-move-cell-up
+  "gj"  'ein:worksheet-goto-next-input
+  "gk"  'ein:worksheet-goto-prev-input)
+
+;; Insert state bindings in ein notebooks
+(general-def
+  :states 'insert
+  :keymaps 'ein:notebook-mode-map
+  "C-<return>" 'ein:worksheet-execute-cell-and-goto-next
+  "S-<return>" 'ein:worksheet-execute-cell)
+
+
 ;; All-mode keymaps
 (general-def
   :keymaps 'override
