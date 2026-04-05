@@ -101,6 +101,12 @@
 (setq revert-without-query '("pdf"))
 (setq use-short-answers t)
 (setq ns-pop-up-frames nil)
+(setq org-roam-capture-templates
+      '(("d" "default" plain "%?"
+         :target (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+                            "#+title: ${title}\n#+filetags: \n#+status:\n* References:\n"
+							)
+         :unnarrowed t)))
 (setq
  ;; org-roam-node-display-template
  ;; (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
@@ -1676,7 +1682,14 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		 (template-path (citar--get-template 'note-file))
 		 (note-path (when template-path
 					  (citar-format--entry template-path entry)))
+		 (note-path-clean (when note-path
+                   (car (seq-filter (lambda (p) (string-match-p "\\.pdf$" (string-trim p)))
+                                    (split-string note-path ";")))))
 		 (note-tags (cdr (citar-get-field-with-value '("keywords") key)))
+		 (formatted-tags (when note-tags
+                  (mapconcat (lambda (tag) (concat ":" (replace-regexp-in-string "\\s-+" "" (string-trim tag))))
+                             (split-string note-tags "[,;]+")
+                             "")))
 		 (filepath (expand-file-name
 					(concat key ".org")
 					(car citar-notes-paths)))
@@ -1685,19 +1698,25 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  ;; This just overrides other template insertion.
 	  (erase-buffer)
 	  (citar-org-roam-make-preamble key)
+	  ;; hacky way to insert NOTER_DOCUMENT
+	  (goto-char (point-min))
+	  (when (search-forward ":END:" nil t)
+		(beginning-of-line)
+		(insert ":NOTER_DOCUMENT: ")
+		(when note-path-clean (insert note-path-clean))
+		(insert "\n"))
+	  (goto-char (point-max))
 	  (insert "#+title: ")
 	  (when template (insert note-meta))
-	  (insert "\n#+filetags::")
-	  (insert note-tags)
-	  (insert "\n* Notes\n:PROPERTIES:\n:NOTER_DOCUMENT: ")
-	  (when template-path (insert note-path))
+	  (insert "\n#+filetags: :Ref")
+	  (when formatted-tags (insert formatted-tags))
+	  (insert ":\n")
 	  (insert "\n:END:\n")
 	  (insert "\n\n|\n\n#+print_bibliography:")
 	  (search-backward "|")
 	  (delete-char 1)
 	  (when (fboundp 'evil-insert)
 		(evil-insert 1)))))
-
 
 (use-package citar
   :no-require
@@ -1706,7 +1725,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
    '((main . "${author editor:30}     ${date year issued:4}     ${title:48}")
 	 (suffix . "          ${=key= id:15}    ${=type=:12}    ${tags keywords:*}")
 	 (preview . "${author editor} (${year issued date}) ${title}, ${journal journaltitle publisher container-title collection-title}.\n")
-	 (note . "Notes on ${author editor}, ${title}")
+	 (note . "${author editor}, ${title}")
 	 (note-file . "${file}")))
   (org-cite-global-bibliography (list zot-bib))
   (org-cite-insert-processor 'citar)
@@ -1872,6 +1891,107 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :defer nil
   :config
   (org-roam-db-autosync-mode))
+
+(defvar org-roam-typed-link-types
+  '(("supports"    . "green")
+    ("contradicts"  . "red")
+    ("extends"      . "cornflower blue")
+    ("example-of"   . "orange")
+    ("causes"       . "magenta"))
+  "Alist of custom link types and their colors for org-roam.
+Each entry is (TYPE . COLOR). TYPE becomes a valid org link type
+that org-roam will store in the database. COLOR is used for
+fontification in org buffers.")
+(defun org-roam-typed-link--follow-generic (id)
+  "Follow a typed link to the node with ID."
+  (let ((node (org-roam-node-from-id id)))
+    (if node
+        (org-roam-node-visit node)
+      (message "No org-roam node found with id: %s" id))))
+
+(defun org-roam-typed-link--register-types ()
+  "Register all types in `org-roam-typed-link-types' with org's link system."
+  (dolist (entry org-roam-typed-link-types)
+    (org-link-set-parameters (car entry)
+      :follow #'org-roam-typed-link--follow-generic
+      :face 'org-link)))
+
+(defun org-roam-typed-link-insert ()
+  "Insert a typed org-roam link.
+Prompts for link type, then for the target node."
+  (interactive)
+  (let* ((types (mapcar #'car org-roam-typed-link-types))
+         (type (completing-read "Link type: " types nil t))
+         (node (org-roam-node-read)))
+    (insert (format "[[%s:%s][%s]]"
+                    type
+                    (org-roam-node-id node)
+                    (org-roam-node-title node)))))
+
+(defun org-roam-typed-link-query (type &optional node-id)
+  "Query all links of TYPE.
+If NODE-ID is provided, only return links from that node.
+Returns a list of (source dest) pairs."
+  (if node-id
+      (org-roam-db-query
+       [:select [source dest]
+        :from links
+        :where (and (= type $s1)
+                    (or (= source $s2)
+                        (= dest $s2)))]
+       type node-id)
+    (org-roam-db-query
+     [:select [source dest]
+      :from links
+      :where (= type $s1)]
+     type)))
+
+(defun org-roam-typed-link-show (type)
+  "Display all links of TYPE in a buffer.
+Prompts for the link type interactively."
+  (interactive
+   (list (completing-read "Link type: "
+                          (mapcar #'car org-roam-typed-link-types) nil t)))
+  (let ((links (org-roam-typed-link-query type)))
+    (with-current-buffer (get-buffer-create "*org-roam-typed-links*")
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert (format "Links of type: %s\n" type)
+              (make-string 40 ?-) "\n\n")
+      (if (null links)
+          (insert "No links found.\n")
+        (dolist (link links)
+          (let* ((src-id (car link))
+                 (dst-id (cadr link))
+                 (src-node (org-roam-node-from-id src-id))
+                 (dst-node (org-roam-node-from-id dst-id))
+                 (src-title (if src-node
+                                (org-roam-node-title src-node)
+                              src-id))
+                 (dst-title (if dst-node
+                                (org-roam-node-title dst-node)
+                              dst-id)))
+            (insert (format "  %s  --%s-->  %s\n"
+                            src-title type dst-title)))))
+      (read-only-mode 1)
+      (goto-char (point-min))
+      (display-buffer (current-buffer)))))
+
+(defun org-roam-typed-link--fontify ()
+  "Add font-lock rules to color typed links by type."
+  (dolist (entry org-roam-typed-link-types)
+    (let ((type (car entry))
+          (color (cdr entry)))
+      (font-lock-add-keywords nil
+        `((,(format "\\[\\[%s:[^]]+\\]\\[\\([^]]+\\)\\]\\]" type)
+           0 '(:foreground ,color :underline t) prepend))
+        'append))))
+
+(add-hook 'org-mode-hook #'org-roam-typed-link--fontify)
+
+;; Register types on load
+(org-roam-typed-link--register-types)
+
 #+end_src
 ** Vulpea
 #+begin_src emacs-lisp
