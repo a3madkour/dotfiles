@@ -228,6 +228,20 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/org-roam-add-date-created ()
+  "Add DATE_CREATED to the file-level property drawer after org-roam capture."
+  (save-excursion
+    (goto-char (point-min))
+    (when (and (re-search-forward "^:END:" nil t)
+               (not (save-excursion
+                      (goto-char (point-min))
+                      (re-search-forward "^:DATE_CREATED:" nil t))))
+      (beginning-of-line)
+      (insert ":DATE_CREATED: "
+              (format-time-string "[%Y-%m-%d %a]")
+              "\n"))))
+
+(add-hook 'org-roam-capture-new-node-hook #'a3madkour/org-roam-add-date-created)
   (defun a3madkour/update-org-files-date ()
     "Update LAST_MODIFIED property in org-roam files, adding it if missing."
     (when (derived-mode-p 'org-mode)
