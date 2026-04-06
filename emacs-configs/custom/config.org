@@ -228,7 +228,7 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
-  (defun a3madkour/update-org-roam-files-date ()
+  (defun a3madkour/update-org-files-date ()
     "Update LAST_MODIFIED property in org-roam files, adding it if missing."
     (when (derived-mode-p 'org-mode)
       (save-excursion
@@ -253,7 +253,7 @@
                   (format-time-string "[%Y-%m-%d %a]")
                   "\n:END:\n"))))))
   
-  (add-hook 'before-save-hook #'a3madkour/update-org-roam-files-date)
+  (add-hook 'before-save-hook #'a3madkour/update-org-files-date)
 
   (defun a3madkour/clear-latex-temp-files ()
     (shell-command "rm -rf *.tex *.prv preview.fmt"))
