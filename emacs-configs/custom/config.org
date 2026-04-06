@@ -228,6 +228,65 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/org-roam-nodes-by-tag (tag)
+  "Return a list of org-roam nodes that have TAG."
+  (cl-remove-if-not
+   (lambda (node)
+     (member tag (org-roam-node-tags node)))
+   (org-roam-node-list)))
+
+(defun a3madkour/org-roam-create-tag-index (tag)
+  "Create or update an index note for TAG.
+The note will have TAG as its title and contain links to all
+notes that carry that tag, sorted alphabetically."
+  (interactive
+   (list (completing-read
+          "Tag: "
+          (seq-uniq
+           (seq-mapcat #'org-roam-node-tags (org-roam-node-list))))))
+  (let* ((nodes (sort (a3madkour/org-roam-nodes-by-tag tag)
+                      (lambda (a b)
+                        (string-lessp (org-roam-node-title a)
+                                      (org-roam-node-title b)))))
+         (index-node (org-roam-node-from-title-or-alias tag))
+         (links-section
+          (concat "* Notes\n"
+                  (mapconcat
+                   (lambda (node)
+                     (format "- [[id:%s][%s]]"
+                             (org-roam-node-id node)
+                             (org-roam-node-title node)))
+                   nodes
+                   "\n"))))
+    (if index-node
+        ;; Update existing index note
+        (let ((file (org-roam-node-file index-node)))
+          (find-file file)
+          (goto-char (point-min))
+          ;; Remove old Notes section if it exists
+          (when (re-search-forward "^\\* Notes$" nil t)
+            (beginning-of-line)
+            (let ((start (point)))
+              (goto-char (point-max))
+              (delete-region start (point))))
+          (goto-char (point-max))
+          (unless (bolp) (insert "\n"))
+          (insert links-section)
+          (save-buffer)
+          (message "Updated index for tag: %s (%d notes)" tag (length nodes)))
+      ;; Create new index note via org-roam capture
+      (org-roam-capture-
+       :node (org-roam-node-create :title tag)
+       :templates
+       `(("i" "index" plain
+          ,(concat "%?\n" links-section)
+          :target (file+head
+                   ,(concat "${slug}.org")
+                   ,(concat "#+title: ${title}\n"
+                            "#+filetags: :index:\n"))
+          :unnarrowed t
+          :immediate-finish t))))))
+
 (defun a3madkour/org-roam-rename-file-to-title ()
   "Rename the current org-roam file to match its #+title, but
 only if the filename doesn't already match. Does nothing if
