@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-05 Sun]
+:LAST_MODIFIED: [2026-04-06 Mon]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -228,6 +228,30 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/org-roam-rename-file-to-title ()
+  "Rename the current org-roam file to match its #+title, but
+only if the filename doesn't already match. Does nothing if
+the file is not in `org-roam-directory' or has no title."
+  (when (and (org-roam-file-p)
+             (not (org-roam-dailies--daily-note-p)))
+    (let* ((title (org-roam-get-keyword "title"))
+           (node (org-roam-node-at-point))
+           (slug (when node (org-roam-node-slug node)))
+           (current-file (buffer-file-name))
+           (current-dir (file-name-directory current-file))
+           (current-name (file-name-nondirectory current-file))
+           (new-name (when slug (concat slug ".org"))))
+      (when (and title slug new-name
+                 (not (string-equal current-name new-name)))
+        (let ((new-path (expand-file-name new-name current-dir)))
+          (if (file-exists-p new-path)
+              (message "Org-roam: cannot rename, %s already exists" new-name)
+            (rename-file current-file new-path)
+            (set-visited-file-name new-path t t)
+            (message "Org-roam: renamed to %s" new-name)))))))
+
+(add-hook 'after-save-hook #'a3madkour/org-roam-rename-file-to-title)
+
 (defun a3madkour/org-roam-add-date-created ()
   "Add DATE_CREATED to the file-level property drawer after org-roam capture."
   (save-excursion
