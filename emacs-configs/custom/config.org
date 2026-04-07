@@ -997,6 +997,71 @@ Fd support for dired
   :init (setq save-place-limit 100)
   :config (save-place-mode))
 #+end_src
+* Auto activating snippets
+#+begin_src emacs-lisp
+(defun a3madkour/org-in-math-p ()
+  "Return non-nil if point is inside a LaTeX math context in org-mode."
+  (or (texmathp)
+      (org-inside-LaTeX-fragment-p)))
+
+(use-package aas
+  :hook (LaTeX-mode . aas-activate-for-major-mode)
+  :hook (org-mode . aas-activate-for-major-mode)
+  :config
+  (aas-set-snippets 'text-mode
+    ;; expand unconditionally
+    ";o-" "ō"
+    ";i-" "ī"
+    ";a-" "ā"
+    ";u-" "ū"
+    ";e-" "ē")
+  (aas-set-snippets 'latex-mode
+    ;; set condition!
+    :cond #'texmathp ; expand only while in math
+    "supp" "\\supp"
+    "On" "O(n)"
+    "O1" "O(1)"
+    "Olog" "O(\\log n)"
+    "Olon" "O(n \\log n)"
+    ;; Use YAS/Tempel snippets with ease!
+    "amin" '(yas "\\argmin_{$1}") ; YASnippet snippet shorthand form
+    "amax" '(tempel "\\argmax_{" p "}") ; Tempel snippet shorthand form
+    ;; bind to functions!
+    ";ig" #'insert-register
+    ";call-sin"
+    (lambda (angle) ; Get as fancy as you like
+      (interactive "sAngle: ")
+      (insert (format "%s" (sin (string-to-number angle))))))
+  ;; disable snippets by redefining them with a nil expansion
+  (aas-set-snippets 'latex-mode
+    "supp" nil))
+(use-package laas
+  :hook (LaTeX-mode . laas-mode)
+  :hook (org-mode . laas-mode)
+  :config ; do whatever here
+  (defun a3madkour/laas-set-org-cond ()
+    "Use org-aware math detection when in org-mode."
+    (when (derived-mode-p 'org-mode)
+      (aas-set-snippets 'laas-mode
+        :cond #'a3madkour/org-in-math-p)))
+  (add-hook 'org-mode-hook #'a3madkour/laas-set-org-cond)
+  (aas-set-snippets 'laas-mode
+                    ;; set condition!
+                    :cond #'texmathp ; expand only while in math
+                    "supp" "\\supp"
+                    "On" "O(n)"
+                    "O1" "O(1)"
+                    "Olog" "O(\\log n)"
+                    "Olon" "O(n \\log n)"
+                    ;; bind to functions!
+                    "Sum" (lambda () (interactive)
+                            (yas-expand-snippet "\\sum_{$1}^{$2} $0"))
+                    "Span" (lambda () (interactive)
+                             (yas-expand-snippet "\\Span($1)$0"))
+                    ;; add accent snippets
+                    :cond #'laas-object-on-left-condition
+                    "qq" (lambda () (interactive) (laas-wrap-previous-object "sqrt"))))
+#+end_src
 * Yasnippet
 ** Regular Yasnippet
 #+begin_src emacs-lisp
@@ -1901,6 +1966,9 @@ Looks for .venv directory in project root and activates the Python interpreter."
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
 
+  
+
+  (setq org-preview-latex-default-process 'dvisvgm)
   (setq org-global-properties
       '(("LAST_MODIFIED_ALL" . "")))
 
