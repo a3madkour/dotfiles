@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-06 Mon]
+:LAST_MODIFIED: [2026-04-07 Tue]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -2023,6 +2023,19 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  ;; Our :lang common-lisp module uses sly, so...
 	  org-babel-lisp-eval-fn #'sly-eval)
 #+end_src
+** Org media note
+#+begin_src emacs-lisp
+(use-package org-media-note
+  :straight
+  (:host github :repo "yuchen-lea/org-media-note" :branch "master" :file (".el" "out"))
+  :init (setq  org-media-note-use-cite t)
+  :hook (org-mode .  org-media-note-mode)
+  :bind (
+	 ("H-v" . org-media-note-show-interface))  ;; Main entrance
+  :config
+  (setq org-media-note-screenshot-image-dir "~/org/notes/imgs/")  ;; Folder to save screenshot
+  (setq org-media-note-use-refcite-first t))
+#+end_src
 ** Org-ql
 #+begin_src emacs-lisp
 (use-package org-ql
@@ -2475,11 +2488,16 @@ Debuging adapter protocol for emacs
  '(dape-breakpoint-expression :which-key "dape breakpoints expression")
  "di"
  '(dape-info :which-key "dape info")
- ;; Quit
+ ;; Quit and org ql
  "q"
  '(nil :which-key "quit")
  "qq"
  '(save-buffers-kill-terminal :which-key "quit emacs")
+ "qv"
+ '(org-ql-view :which-key "org ql views")
+ "qs"
+ '(org-ql-view-sidebar :which-key "org ql view sidebar")
+ 
  ;; Buffers
  "b"
  '(nil :which-key "buffer")
@@ -2606,13 +2624,13 @@ Debuging adapter protocol for emacs
  '(org-ql-search :which-key "org-ql search")
  "sq"
  '(query-replace-regexp :which-key "query-replace-regexp")
- ;; org ql views
+ ;; video
  "v"
- '(nil :which-key "ql views")
+ '(nil :which-key "video")
  "vv"
- '(org-ql-view :which-key "org ql views")
- "vs"
- '(org-ql-view-sidebar :which-key "org ql view sidebar")
+ '(org-media-note-show-interface :which-key "org media note interface")
+ 
+
  ;; Windows
  "w"
  '(nil :which-key "window")
@@ -3283,5 +3301,4 @@ _SPC_ cancel    _o_nly this      _d_elete
 #+begin_src emacs-lisp
 (use-package plz)
 #+end_src
-
 
