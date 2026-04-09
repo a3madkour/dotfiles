@@ -234,6 +234,72 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/create-project-notes ()
+  "Create an org-roam note for the project at point and link it."
+  (interactive)
+  (unless (member "project" (org-get-tags))
+    (user-error "Not on a project heading"))
+  (let* ((title (org-get-heading t t t t))
+         (note-title (read-string "Note title: " (concat title " Notes")))
+         (slug (org-roam-node-slug (org-roam-node-create :title note-title)))
+         (dir (expand-file-name "projects" org-roam-directory))
+         (filepath (expand-file-name (concat slug ".org") dir))
+         (id (org-id-new)))
+    (make-directory dir t)
+    (with-current-buffer (find-file-noselect filepath)
+      (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: %s\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n"
+                      id note-title))
+      (save-buffer))
+    ;; Update org-roam db
+    (org-roam-db-update-file filepath)
+    ;; Link from project heading
+    (org-end-of-meta-data t)
+    (insert (format "Context: [[id:%s][%s]]\n" id note-title))
+    (save-buffer)
+    ;; Open the note
+    (find-file filepath)
+    (message "Created and linked: %s" note-title)))
+
+
+(defun a3madkour/create-project ()
+  "Create a new project heading in projects.org with required properties."
+  (interactive)
+  (let* ((name (read-string "Project name: "))
+         (done-enough (read-string "Done enough (what does finished look like?): "))
+         (area (completing-read "Life area: "
+                                '("artistic" "intellectual" "health" "career" "social")
+                                nil t))
+         (status (completing-read "Status: " '("active" "resting") nil t))
+         (has-repo (yes-or-no-p "Does this project have a git repo? "))
+         (repo (when has-repo (read-directory-name "Repo path: ")))
+         (heading (format "* %s %s%s\n:PROPERTIES:\n:TRIGGER: next-sibling todo!(NEXT)\n:ORDERED: t\n:DONE_ENOUGH: %s\n%s:END:\n\n** TODO \n"
+                          name
+                          (format ":%s:%s:project:" area status)
+                          ""
+                          done-enough
+                          (if repo (format ":REPO: %s\n" (abbreviate-file-name repo)) ""))))
+    ;; Check WIP limit if activating
+    (when (string= status "active")
+      (let ((active-count 0))
+        (with-current-buffer (find-file-noselect "~/org/projects.org")
+          (org-map-entries
+           (lambda () (cl-incf active-count))
+           "+project+active"))
+        (when (>= active-count 3)
+          (unless (yes-or-no-p
+                   (format "You already have %d active projects. Continue? " active-count))
+            (setq heading (replace-regexp-in-string ":active:" ":resting:" heading))
+            (message "Set to resting instead")))))
+    (with-current-buffer (find-file-noselect "~/org/projects.org")
+      (goto-char (point-max))
+      (insert heading)
+      (save-buffer)
+      ;; Put cursor on the first TODO so you can type the first task
+      (search-backward "** TODO ")
+      (end-of-line))
+    (switch-to-buffer (find-file-noselect "~/org/projects.org"))
+    (message "Created project: %s" name)))
+
 ;; Show current season in the dashboard
 (defun a3madkour/get-current-season ()
   "Get the current season heading from projects.org."
