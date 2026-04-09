@@ -234,6 +234,116 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+;; Show current season in the dashboard
+(defun a3madkour/get-current-season ()
+  "Get the current season heading from projects.org."
+  (with-current-buffer (find-file-noselect "~/org/projects.org")
+    (save-excursion
+      (goto-char (point-min))
+      (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
+          (match-string 1)
+        "No season set"))))
+
+;; Start a new season, archiving the old one
+(defun a3madkour/rotate-season ()
+  "Archive the current season and start a new one."
+  (interactive)
+  (let ((name (read-string "New season name: "))
+        (weeks (read-number "How many weeks: " 6)))
+    (with-current-buffer (find-file-noselect "~/org/projects.org")
+      (save-excursion
+        (goto-char (point-min))
+        ;; Archive old season if it exists
+        (when (re-search-forward "^\\* Current Season:" nil t)
+          (beginning-of-line)
+          (let ((accomplished (read-string "What did you accomplish this season? ")))
+            ;; Rename to ARCHIVE
+            (re-search-forward "Current Season:" nil t)
+            (replace-match "ARCHIVE Season:")
+            ;; Add accomplishments before the next heading
+            (if (re-search-forward "^\\*" nil t)
+                (progn (beginning-of-line) (forward-line -1))
+              (goto-char (point-max)))
+            (end-of-line)
+            (insert "\n  Accomplished: " accomplished)))
+        ;; Insert new season at top, after any #+TITLE/#+CATEGORY lines
+        (goto-char (point-min))
+        (while (looking-at "^[#]")
+          (forward-line 1))
+        (when (looking-at "^$") (forward-line 1))
+        (insert (format "* Current Season: %s (%s — %s)\n"
+                        name
+                        (format-time-string "%B %Y")
+                        (format-time-string "%B %Y"
+                                            (time-add (current-time)
+                                                      (days-to-time (* weeks 7))))))
+        (insert (format "  :PROPERTIES:\n  :START: %s\n  :END:   %s\n  :END:\n"
+                        (format-time-string "[%Y-%m-%d %a]")
+                        (format-time-string "[%Y-%m-%d %a]"
+                                            (time-add (current-time)
+                                                      (days-to-time (* weeks 7))))))
+        (insert "  Active: \n  Resting: \n\n"))
+      (save-buffer)
+      (message "Started season: %s" name))))
+
+;; Quick view of active vs resting projects
+(defun a3madkour/show-project-status ()
+  "Display active and resting projects in a temporary buffer."
+  (interactive)
+  (let ((active '())
+        (resting '()))
+    (with-current-buffer (find-file-noselect "~/org/projects.org")
+      (org-map-entries
+       (lambda ()
+         (let ((title (org-get-heading t t t t)))
+           (cond
+            ((member "active" (org-get-tags)) (push title active))
+            ((member "resting" (org-get-tags)) (push title resting)))))
+       "+project"))
+    (with-output-to-temp-buffer "*Project Status*"
+      (princ (format "Season: %s\n\n" (a3madkour/get-current-season)))
+      (princ (format "Active (%d):\n" (length active)))
+      (dolist (p (nreverse active))
+        (princ (format "  • %s\n" p)))
+      (princ (format "\nResting (%d):\n" (length resting)))
+      (dolist (p (nreverse resting))
+        (princ (format "  • %s\n" p))))))
+
+;; Toggle a project between active and resting
+(defun a3madkour/toggle-project-active ()
+  "Toggle the current project heading between :active: and :resting:."
+  (interactive)
+  (unless (member "project" (org-get-tags))
+    (user-error "Not on a project heading"))
+  (let ((tags (org-get-tags)))
+    (cond
+     ((member "active" tags)
+      (org-toggle-tag "active" 'off)
+      (org-toggle-tag "resting" 'on)
+      (message "Project set to resting"))
+     ((member "resting" tags)
+      ;; Check WIP limit before activating
+      (let ((active-count 0))
+        (org-map-entries
+         (lambda () (cl-incf active-count))
+         "+project+active"
+         'agenda)
+        (if (>= active-count 3)
+            (if (yes-or-no-p
+                 (format "You already have %d active projects. Activate anyway? "
+                         active-count))
+                (progn
+                  (org-toggle-tag "resting" 'off)
+                  (org-toggle-tag "active" 'on)
+                  (message "Project activated (WIP limit exceeded)"))
+              (message "Kept resting"))
+          (org-toggle-tag "resting" 'off)
+          (org-toggle-tag "active" 'on)
+          (message "Project activated (%d/3 active)" (1+ active-count)))))
+     (t
+      (org-toggle-tag "active" 'on)
+      (message "Project set to active")))))
+
 (defun a3madkour/add-to-reading-queue ()
   "Add the current org-roam buffer to reading-queue.org."
   (interactive)
@@ -2004,7 +2114,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		   :empty-lines 1)
 		  ("n" "New interest (parking lot)" entry
 		   (file+headline "~/org/someday.org" "Parking Lot")
-		   "* %?\n:PROPERTIES:\n:CAPTURED: %U\n:COOLING: 48h\n:END:\n"
+		   "* %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
 		   :empty-lines 1)))
 
   (setq org-stuck-projects
@@ -2052,8 +2162,9 @@ Looks for .venv directory in project root and activates the Python interpreter."
       (tags-todo "+ENERGY=\"low\"-resting"
        ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
         (org-agenda-sorting-strategy '(priority-down effort-up)))))
-     ((org-agenda-block-separator nil)))))
-  )
+     ((org-agenda-block-separator nil)
+	  (org-agenda-overriding-header
+	   (concat "Season: " (a3madkour/get-current-season) "\n")))))))
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
