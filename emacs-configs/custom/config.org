@@ -234,6 +234,49 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/add-to-reading-queue ()
+  "Add the current org-roam buffer to reading-queue.org."
+  (interactive)
+  (unless (and (buffer-file-name)
+               (org-roam-file-p))
+    (user-error "Not in an org-roam file"))
+  (let* ((title (org-get-title))
+         (id (org-roam-id-at-point))
+         (entry (format "* TODO Read %s\n:PROPERTIES:\n:ENERGY: high\n:ROAM_ID: %s\n:END:\n[[id:%s][Open Notes]]\n\n"
+                        (or title "Untitled") (or id "") (or id ""))))
+    (with-current-buffer (find-file-noselect "~/org/queue.org")
+      (goto-char (point-max))
+      (insert entry)
+      (save-buffer))
+    (message "Added \"%s\" to reading queue" title)))
+
+(defun a3madkour/citar-add-to-reading-queue ()
+  "Select a citar reference and add it to reading-queue.org."
+  (interactive)
+  (let* ((keys (citar-select-refs))
+         (key (car keys))
+         (entry (citar-get-entry key))
+         (title (alist-get "title" entry nil nil #'string=))
+         (author (alist-get "author" entry nil nil #'string=))
+         (year (alist-get "year" entry nil nil #'string=))
+         (display (format "%s (%s)" (or title "Untitled") (or year "")))
+         (text (format "* TODO Read %s\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
+                       display key (or author "") key)))
+    (with-current-buffer (find-file-noselect "~/org/queue.org")
+      (goto-char (point-max))
+      (insert text)
+      (save-buffer))
+    (message "Added \"%s\" to reading queue" display)))
+
+(defun a3madkour/reading-queue-open-notes ()
+  "Open citar notes for the CITEKEY at point in reading-queue.org."
+  (interactive)
+  (if-let ((key (org-entry-get nil "CITEKEY")))
+      (citar-open-notes (list key))
+    (if-let ((id (org-entry-get nil "ROAM_ID")))
+        (org-id-goto id)
+      (user-error "No CITEKEY or ROAM_ID property on this heading"))))
+
 (defun a3madkour/org-roam-nodes-by-tag (tag)
   "Return a list of org-roam nodes that have TAG."
   (cl-remove-if-not
@@ -659,8 +702,8 @@ the file is not in `org-roam-directory' or has no title."
   (evil-set-initial-state 'dashboard-mode 'motion)
   (evil-set-initial-state 'debugger-mode 'motion)
   (evil-set-initial-state 'pdf-view-mode 'motion)
-  (evil-set-initial-state 'inferior-python-mode 'emacs)
-  (evil-set-initial-state 'term-mode 'emacs)
+  (evil-set-initial-state 'inferior-python-mode 'normal)
+  (evil-set-initial-state 'term-mode 'normal)
 
   ;; ----- Keybindings
   ;; I tried using evil-define-key for these. Didn't work.
@@ -772,7 +815,9 @@ the file is not in `org-roam-directory' or has no title."
   :config
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
-  			(lambda () (evil-org-set-key-theme))))
+  			(lambda () (evil-org-set-key-theme)))
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
 
 (require 'evil-org-agenda)
 (setq org-modules '(org-habit))
@@ -1828,6 +1873,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 * Citar
 #+begin_src emacs-lisp
+
 (defun a3madkour/citar-org-format-note(key entry)
   "Format a note from KEY and ENTRY."
   (let* ((template (citar--get-template 'note))
@@ -1937,6 +1983,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
     ("DROP" . (:foreground "#8C8C8C" :strike-through t))))
 
   (setq org-enforce-todo-dependencies t)
+  (setq org-enforce-todo-checkbox-dependencies t)
 
   (setq org-preview-latex-default-process 'dvisvgm)
   (setq org-global-properties
@@ -1977,6 +2024,35 @@ Looks for .venv directory in project root and activates the Python interpreter."
     ("toread" . ?r) ("towatch" . ?w) ("toplay" .?p)
     ;; Routine
     ("routine" . ?o)))
+
+
+  (setq org-agenda-custom-commands
+  '(("d" "Dashboard"
+     ;; Section 1: Today's schedule and habits
+     ((agenda ""
+       ((org-agenda-span 'day)
+        (org-super-agenda-groups
+         '((:name "⏰ Scheduled" :time-grid t :scheduled today :order 0)
+           (:name "🔁 Habits" :habit t :order 1)
+           (:name "⚠️ Overdue" :scheduled past :deadline past :order 2)))))
+      
+      ;; Section 2: This week's commitments
+      (tags-todo "thisweek"
+       ((org-agenda-overriding-header "📌 This Week")))
+
+      ;; Section 3: Available tasks by energy (active projects only)
+      (tags-todo "+ENERGY=\"high\"-resting"
+       ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
+        (org-agenda-sorting-strategy '(priority-down effort-up))))
+      
+      (tags-todo "+ENERGY=\"medium\"-resting"
+       ((org-agenda-overriding-header "⚡ Medium Energy")
+        (org-agenda-sorting-strategy '(priority-down effort-up))))
+      
+      (tags-todo "+ENERGY=\"low\"-resting"
+       ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
+        (org-agenda-sorting-strategy '(priority-down effort-up)))))
+     ((org-agenda-block-separator nil)))))
   )
 #+end_src
 ** Org-habits-stats
@@ -3244,7 +3320,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(org-capture :which-key "org-capture")
  "s"
  '(org-agenda-schedule :which-key "schedule")
- "d"
+ "e"
  '(org-agenda-deadline :which-key "deadline")
  "t"
  '(org-agenda-set-tags :which-key "set tags")
