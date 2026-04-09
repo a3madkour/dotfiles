@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-07 Tue]
+:LAST_MODIFIED: [2026-04-08 Wed]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -1344,6 +1344,7 @@ Fd support for dired
 (use-package magit :defer t)
 (use-package magit-todos :defer t)
 (use-package orgit)
+(use-package orgit-file)
 (use-package git-link)
 #+end_src
 * Diff-hl
@@ -1865,7 +1866,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	(insert "\n#+filetags: :Ref")
 	(when formatted-tags (insert formatted-tags))
 	(insert ":\n")
-	(insert "\n:END:\n")
 	(insert "\n\n|\n\n#+print_bibliography:")
 	(search-backward "|")
 	(delete-char 1)
@@ -1985,6 +1985,10 @@ Looks for .venv directory in project root and activates the Python interpreter."
   		  ("f" "Fleeting note" entry (file (lambda () (a3madkour/file-with-current-date "~/org/fleeting-notes")) )
   		   "* %?\n"))))
 #+end_src
+** Org-habits-stats
+#+begin_src emacs-lisp
+(use-package org-habit-stats)
+#+end_src
 ** Org-Babel
 *** Ob-Async
 #+begin_src emacs-lisp
@@ -2023,6 +2027,14 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  ;; Our :lang common-lisp module uses sly, so...
 	  org-babel-lisp-eval-fn #'sly-eval)
 #+end_src
+** Org-edna 
+#+begin_src emacs-lisp
+(use-package org-edna
+  :ensure t
+  :defer nil
+  :config (org-edna-mode 1))
+#+end_src
+
 ** Org media note
 #+begin_src emacs-lisp
 (use-package org-media-note
@@ -2043,6 +2055,10 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :general
   (general-define-key :keymaps 'org-ql-view-map
 					  "q" 'kill-buffer-and-window))
+#+end_src
+** Org-timeblock
+#+begin_src emacs-lisp
+(use-package org-timeblock)
 #+end_src
 ** Org-bullets
 #+begin_src emacs-lisp
@@ -2347,6 +2363,7 @@ Setting the pipeline for exporting the notes to the website dir
 (use-package elfeed)
 (use-package elfeed-goodies)
 (use-package elfeed-org)
+(use-package elfeed-score)
 #+end_src
 * EditorConfig
 #+begin_src emacs-lisp
