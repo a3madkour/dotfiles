@@ -107,7 +107,13 @@
          :target (file+head "${slug}.org"
                             "#+title: ${title}\n#+filetags: :TODO:\n* ${title}\n* References:\n"
 							)
-         :unnarrowed t)))
+         :unnarrowed t)
+
+	("p" "project" plain "%?"
+    :target (file+head
+             "projects/${slug}.org"
+             ":PROPERTIES:\n:ID: %(org-id-new)\n:END:\n#+title: ${title}\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n")
+    :unnarrowed t)))
 (setq
  ;; org-roam-node-display-template
  ;; (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag))
@@ -1922,68 +1928,56 @@ Looks for .venv directory in project root and activates the Python interpreter."
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
 
-  
+  (setq org-todo-keywords
+		'((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|" "DONE(d!)" "DROP(x)")))
+
+  (setq org-todo-keyword-faces
+  '(("NEXT" . (:foreground "#50FA7B" :weight bold))
+    ("WAIT" . (:foreground "#9FC59F"))
+    ("DROP" . (:foreground "#8C8C8C" :strike-through t))))
+
+  (setq org-enforce-todo-dependencies t)
 
   (setq org-preview-latex-default-process 'dvisvgm)
   (setq org-global-properties
-      '(("LAST_MODIFIED_ALL" . "")))
-
+		'(("LAST_MODIFIED_ALL" . "")
+		  ("ENERGY_ALL" . "high medium low")))	
+  (setq org-refile-targets
+		'(("~/org/actions.org" :maxlevel . 1)
+		  ("~/org/projects.org" :maxlevel . 2)
+		  ("~/org/someday.org" :maxlevel . 1)))
+  
   (setq org-agenda-files
-		(append
-		(directory-files-recursively "~/org/" "\\todo.org$")
-		(directory-files-recursively "~/org/" "\\habits.org$")
-		(directory-files-recursively "~/org/projects/" "\\.org$")))
+		(list "~/org/inbox.org"
+			  "~/org/actions.org"
+			  "~/org/projects.org"))
   (setq org-capture-templates
-  		'(("c" "CS")
-  		  ("ct" "Todo" entry (file+datetree "~/org/CS/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
-  		  ("cu" "Unscheduled" entry (file+headline "~/org/CS/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n")
-  		  ("ch" "Habit" entry (file "~/org/CS/habits.org")
-  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  		'(("i" "Inbox" entry (file "~/org/inbox.org")
+		   "* TODO %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
+		   :empty-lines 1)
+		  ("n" "New interest (parking lot)" entry
+		   (file+headline "~/org/someday.org" "Parking Lot")
+		   "* %?\n:PROPERTIES:\n:CAPTURED: %U\n:COOLING: 48h\n:END:\n"
+		   :empty-lines 1)))
 
-  		  ("a" "Artistic")
-  		  ("at" "Todo" entry (file+datetree "~/org/Artistic/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
-  		  ("au" "Unscheduled" entry (file+headline "~/org/Artistic/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n")
-  		  ("ah" "Habit" entry (file "~/org/Artistic/habits.org")
-  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
+  (setq org-stuck-projects
+  '("+project+active/-DONE-DROP"  ; How to identify projects
+    ("NEXT" "WAIT")               ; Keywords that mean "not stuck"
+    nil                           ; Tags that mean "not stuck"
+    ""))                          ; Regex that mean "not stuck"
 
-  		  ("h" "Health")
-  		  ("ht" "Todo" entry (file+datetree "~/org/Health/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
-  		  ("hu" "Unscheduled" entry (file+headline "~/org/Health/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n")
-  		  ("hh" "Habit" entry (file "~/org/Health/habits.org")
-  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
 
-  		  ("i" "Intellectual")
-  		  ("it" "Todo" entry (file+datetree "~/org/Intellectual/todo.org")
-  		   "* TODO %? %(a3madkour/org-set-effort)\nSCHEDULED: %t" :time-prompt t)
-  		  ("iu" "Unscheduled" entry (file+headline "~/org/Intellectual/todo.org" "Unscheduled")
-  		   "* TODO %? %(a3madkour/org-set-effort)\n")
-  		  ("ih" "Habit" entry (file "~/org/Intellectual/habits.org")
-  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \" .+1d\")\n:PROPERTIES:\n:STYLE:    habit\n:END:\n")
-
-  		  ("b" "Manual Book" entry (file+headline "~/org/reading-list.org" "Books")
-  		   "* %^{TITLE}\n:PROPERTIES:\n:ADDED: %<[%Y-%02m-%02d]>\n:END:%^{AUTHOR}p\n%?" :empty-lines 1)
-
-  		  ("l" "Manual Paper" entry (file+headline "~/org/reading-list.org" "Papers")
-  		   "* TODO %?\nSCHEDULED:%(org-insert-time-stamp (org-read-date nil t) nil nil nil nil \"\")\n")
-
-  		  ("g" "Game idea" entry (file+headline "~/org/ideas.org" "Game")
-  		   "* %?\n")
-  		  ("p" "Paper idea" entry (file+headline "~/org/ideas.org" "Paper")
-  		   "* %?\n")
-  		  ("s" "Software idea" entry (file+headline "~/org/ideas.org" "App")
-  		   "* %?\n")
-  		  ("v" "Video idea" entry (file+headline "~/org/ideas.org" "Video")
-  		   "* %?\n")
-  		  ("w" "Vague idea" entry (file+headline "~/org/ideas.org" "Vague af")
-  		   "* %?\n")
-  		  ("f" "Fleeting note" entry (file (lambda () (a3madkour/file-with-current-date "~/org/fleeting-notes")) )
-  		   "* %?\n"))))
+  (setq org-tag-alist
+  '(;; Life areas
+    ("artistic" . ?a) ("intellectual" . ?i) ("health" . ?h)
+    ("career" . ?c) ("social" . ?s)
+    ;; Project state
+    ("project" . ?p) ("active" . ?A) ("resting" . ?R)
+    ;; Consumption
+    ("toread" . ?r) ("towatch" . ?w) ("toplay" .?p)
+    ;; Routine
+    ("routine" . ?o)))
+  )
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
