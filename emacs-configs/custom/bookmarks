@@ -2,38 +2,34 @@
 ;;; This format is meant to be slightly human-readable;
 ;;; nevertheless, you probably don't want to edit it.
 ;;; -*- End Of Bookmark File Format Version Stamp -*-
-(("org-refile-last-stored"
- (filename . "~/org/CS/habits.org")
- (front-context-string . "**** TODO Watch ")
- (rear-context-string . "-01-03 Saturday\n")
- (position . 9239)
- (last-modified 26959 40113 538057 915000))
-("Meeting"
- (filename . "~/org/meetings.org")
- (front-context-string . ")\n(bookmark-prop")
- (rear-context-string . "rk-set \"Meeting\"")
- (position . 1))
-("Ideas"
- (filename . "~/org/ideas.org")
- (front-context-string . "us that they are")
- (rear-context-string . "t it is so obvio")
- (position . 1))
-("Habits"
- (filename . "~/org/habits.org")
- (front-context-string . "HEDULED: <2021-1")
- (rear-context-string . "an 30 mins\n   SC")
- (position . 1))
-("Tasks"
- (filename . "~/org/tasks.org")
- (front-context-string . "* 2020\n** 2020-0")
+(("Someday"
+ (filename . "~/org/someday.org")
+ (front-context-string . ":PROPERTIES:\n:LA")
  (rear-context-string)
- (position . 1))
-("Goals"
- (filename . "~/org/goals.org"))
-("org-capture-last-stored"
- (filename . "~/org/CS/todo.org")
- (front-context-string . "** TODO Find a w")
- (rear-context-string . "ort:   4h\n:END:\n")
- (position . 11285)
- (last-modified 26959 24684 719270 921000))
+ (position . 1)
+ (last-modified 27095 15426 653500 940000))
+("Queue"
+ (filename . "~/org/queue.org")
+ (front-context-string . ":PROPERTIES:\n:LA")
+ (rear-context-string)
+ (position . 1)
+ (last-modified 27095 15416 833017 919000))
+("Actions"
+ (filename . "~/org/actions.org")
+ (front-context-string . ":PROPERTIES:\n:LA")
+ (rear-context-string)
+ (position . 1)
+ (last-modified 27095 15408 938303 175000))
+("Projects"
+ (filename . "~/org/projects.org")
+ (front-context-string . "ES:\n:LAST_MODIFI")
+ (rear-context-string)
+ (position . 10)
+ (last-modified 27095 15399 702191 365000))
+("Inbox"
+ (filename . "~/org/inbox.org")
+ (front-context-string . "\n* Restart Ritua")
+ (rear-context-string . "4-08 Wed]\n:END:\n")
+ (position . 53)
+ (last-modified 27095 15231 410177 449000))
 )
