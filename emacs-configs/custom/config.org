@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-08 Wed]
+:LAST_MODIFIED: [2026-04-09 Thu]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -234,14 +234,39 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+;; Shared property setter
+(defun a3madkour/set-task-properties ()
+  "Prompt for and set ENERGY and EFFORT on the current heading."
+  (let ((energy (completing-read "Energy level: "
+                                  '("high" "medium" "low") nil t))
+        (effort (read-string "Estimated time (e.g. 0:30, 1:00, 2:00): ")))
+    (org-set-property "ENERGY" energy)
+    (unless (string-empty-p effort)
+      (org-set-property "EFFORT" effort))))
+
+;; Add a task to the current project
+(defun a3madkour/add-project-task ()
+  "Add a new TODO to the current project with energy and effort."
+  (interactive)
+  (unless (or (member "project" (org-get-tags))
+              (save-excursion
+                (org-up-heading-safe)
+                (member "project" (org-get-tags))))
+    (user-error "Not inside a project"))
+  (let ((task (read-string "Task: ")))
+    (org-end-of-subtree t)
+    (insert (format "\n** TODO %s\n" task))
+    (a3madkour/set-task-properties)))
+
+;; Process an inbox item
 (defun a3madkour/process-inbox-item ()
   "Process the current inbox item: classify, set properties, and refile."
   (interactive)
   (unless (org-entry-get nil "TODO")
     (user-error "Not on a TODO heading"))
   (let ((destination (completing-read "Where does this go? "
-                                      '("action" "project" "someday" "org-roam" "delete")
-                                      nil t)))
+                                       '("action" "project" "someday" "org-roam" "delete")
+                                       nil t)))
     (cond
      ;; ---- DELETE ----
      ((string= destination "delete")
@@ -258,10 +283,10 @@
 
      ;; ---- SOMEDAY ----
      ((string= destination "someday")
-      (org-todo "")  ; remove TODO keyword — not a commitment
+      (org-todo "")
       (org-refile nil nil
-                  (list "Someday" "~/org/someday.org" nil
-                        (with-current-buffer (find-file-noselect "~/org/someday.org")
+                  (list "Someday" "~/gtd/someday.org" nil
+                        (with-current-buffer (find-file-noselect "~/gtd/someday.org")
                           (point-max))))
       (message "Sent to someday"))
 
@@ -286,43 +311,112 @@
                                       (format "%s/%sd" repeater (string-to-number flexibility))
                                     repeater)))
               (org-set-property "STYLE" "habit")
-              (org-schedule nil (format "<%s %s>" (format-time-string "%Y-%m-%d %a") full-repeater))
+              (org-schedule nil (format "<%s %s>"
+                                        (format-time-string "%Y-%m-%d %a")
+                                        full-repeater))
               (org-refile nil nil
-                          (list "Recurring / Habits" "~/org/actions.org" nil nil)))
+                          (list "Recurring / Habits" "~/gtd/actions.org" nil nil)))
           ;; Regular one-off action
-          (let ((energy (completing-read "Energy level: "
-                                         '("high" "medium" "low") nil t))
-                (effort (read-string "Estimated time (e.g. 0:30, 1:00, 2:00): ")))
-            (org-set-property "ENERGY" energy)
-            (unless (string-empty-p effort)
-              (org-set-property "EFFORT" effort))
-            (when (yes-or-no-p "Schedule it? ")
-              (org-schedule nil))
-            (org-refile nil nil
-                        (list "Actions" "~/org/actions.org" nil nil))))
+          (a3madkour/set-task-properties)
+          (when (yes-or-no-p "Schedule it? ")
+            (org-schedule nil))
+          (org-refile nil nil
+                      (list "Actions" "~/gtd/actions.org" nil nil)))
         (message "Sent to actions")))
 
      ;; ---- PROJECT ----
      ((string= destination "project")
       (let ((project-action (completing-read "Which project? "
-                                             '("existing project" "create new project")
-                                             nil t)))
+                                              '("existing project" "create new project")
+                                              nil t)))
         (if (string= project-action "create new project")
             (progn
               (a3madkour/create-project)
               (org-cut-subtree)
               (message "Created new project — paste this as a task inside it with C-y"))
           ;; Refile to existing project
-          (let ((energy (completing-read "Energy level: "
-                                         '("high" "medium" "low") nil t))
-                (effort (read-string "Estimated time (e.g. 0:30, 1:00, 2:00): ")))
-            (org-set-property "ENERGY" energy)
-            (unless (string-empty-p effort)
-              (org-set-property "EFFORT" effort))
-            (org-refile nil nil
-                        (org-refile-get-location "Refile to project"
-                                                 (find-file-noselect "~/org/projects.org"))))))
+          (a3madkour/set-task-properties)
+          (org-refile nil nil
+                      (org-refile-get-location "Refile to project"
+                                                (find-file-noselect "~/gtd/projects.org")))))
       (message "Sent to project")))))
+
+
+(defcustom a3madkour/project-wip-limit 3
+  "Maximum number of concurrently active projects."
+  :type 'integer
+  :group 'a3madkour)
+
+(defun a3madkour/active-project-count ()
+  "Return the number of top-level active projects in projects.org."
+  (let ((count 0))
+    (with-current-buffer (find-file-noselect "~/org/projects.org")
+      (org-map-entries
+       (lambda ()
+         (when (= 1 (org-current-level))
+           (cl-incf count)))
+       "+project+active"))
+    count))
+
+(defun a3madkour/check-wip-limit ()
+  "Error if active project count is at or above the WIP limit."
+  (let ((count (a3madkour/active-project-count)))
+    (when (>= count a3madkour/project-wip-limit)
+      (user-error "WIP limit reached (%d/%d active). Deactivate one first"
+                  count a3madkour/project-wip-limit))
+    count))
+
+(defun a3madkour/show-project-status ()
+  "Display active and resting projects with goals."
+  (interactive)
+  (let ((active '())
+        (resting '()))
+    (with-current-buffer (find-file-noselect "~/org/projects.org")
+      (org-map-entries
+       (lambda ()
+         (when (= 1 (org-current-level))
+           (let ((title (org-get-heading t t t t))
+                 (goal (or (org-entry-get nil "GOAL") "no goal set")))
+             (cond
+              ((member "active" (org-get-tags))
+               (push (cons title goal) active))
+              ((member "resting" (org-get-tags))
+               (push (cons title goal) resting))))))
+       "+project"))
+    (with-output-to-temp-buffer "*Project Status*"
+      (princ (format "Season: %s\n\n" (a3madkour/get-current-season)))
+      (princ (format "Active (%d/%d):\n"
+                     (a3madkour/active-project-count)
+                     a3madkour/project-wip-limit))
+      (dolist (p (nreverse active))
+        (princ (format "  • %s\n    → %s\n" (car p) (cdr p))))
+      (princ (format "\nResting (%d):\n" (length resting)))
+      (dolist (p (nreverse resting))
+        (princ (format "  • %s\n    → %s\n" (car p) (cdr p)))))))
+
+(defun a3madkour/toggle-project-active ()
+  "Toggle the current project heading between :active: and :resting:."
+  (interactive)
+  (unless (member "project" (org-get-tags))
+    (user-error "Not on a project heading"))
+  (let ((tags (org-get-tags)))
+    (cond
+     ((member "active" tags)
+      (org-toggle-tag "active" 'off)
+      (org-toggle-tag "resting" 'on)
+      (message "Project set to resting"))
+     ((member "resting" tags)
+      (let ((count (a3madkour/check-wip-limit)))
+        (org-toggle-tag "resting" 'off)
+        (org-toggle-tag "active" 'on)
+        (message "Project activated (%d/%d active)"
+                 (1+ count) a3madkour/project-wip-limit)))
+     (t
+      (let ((count (a3madkour/check-wip-limit)))
+        (org-toggle-tag "active" 'on)
+        (message "Project set to active (%d/%d)"
+                 (1+ count) a3madkour/project-wip-limit))))))
+
 (defun a3madkour/create-project ()
   "Create a new project heading in projects.org with required properties."
   (interactive)
@@ -335,43 +429,34 @@
          (status (completing-read "Status: " '("active" "resting") nil t))
          (has-repo (yes-or-no-p "Does this project have a git repo? "))
          (repo (when has-repo (read-directory-name "Repo path: ")))
-         (goal-value (if (string-empty-p goal) "exploratory" goal))
-         (heading (format (concat "* %s"
-                                  " :%s:%s:project:\n"
-                                  ":PROPERTIES:\n"
-                                  ":TRIGGER: next-sibling todo!(NEXT)\n"
-                                  ":ORDERED: t\n"
-                                  ":DONE_ENOUGH: %s\n"
-                                  ":GOAL: %s\n"
-                                  "%s"
-                                  ":END:\n\n"
-                                  "** TODO \n")
-                          name area status
-                          done-enough
-                          goal-value
-                          (if repo
-                              (format ":REPO: %s\n" (abbreviate-file-name repo))
-                            ""))))
-    ;; Check WIP limit if activating
+         (goal-value (if (string-empty-p goal) "exploratory" goal)))
+    ;; Enforce WIP limit — hard block, no override
     (when (string= status "active")
-      (let ((active-count 0))
-        (with-current-buffer (find-file-noselect "~/org/projects.org")
-          (org-map-entries
-           (lambda () (cl-incf active-count))
-           "+project+active"))
-        (when (>= active-count 3)
-          (unless (yes-or-no-p
-                   (format "You already have %d active projects. Continue? " active-count))
-            (setq heading (replace-regexp-in-string ":active:" ":resting:" heading))
-            (message "Set to resting instead")))))
-    (with-current-buffer (find-file-noselect "~/org/projects.org")
-      (goto-char (point-max))
-      (insert heading)
-      (save-buffer)
-      (search-backward "** TODO ")
-      (end-of-line))
-    (switch-to-buffer (find-file-noselect "~/org/projects.org"))
-    (message "Created project: %s" name)))
+      (a3madkour/check-wip-limit))
+    (let ((heading (format (concat "* %s"
+                                   " :%s:%s:project:\n"
+                                   ":PROPERTIES:\n"
+                                   ":TRIGGER: next-sibling todo!(NEXT)\n"
+                                   ":ORDERED: t\n"
+                                   ":DONE_ENOUGH: %s\n"
+                                   ":GOAL: %s\n"
+                                   "%s"
+                                   ":END:\n\n"
+                                   "** TODO \n")
+                           name area status
+                           done-enough
+                           goal-value
+                           (if repo
+                               (format ":REPO: %s\n" (abbreviate-file-name repo))
+                             ""))))
+      (with-current-buffer (find-file-noselect "~/org/projects.org")
+        (goto-char (point-max))
+        (insert heading)
+        (save-buffer)
+        (search-backward "** TODO ")
+        (end-of-line))
+      (switch-to-buffer (find-file-noselect "~/org/projects.org"))
+      (message "Created project: %s" name))))
 
 (defun a3madkour/create-project-notes ()
   "Create an org-roam note for the project at point and link it."
@@ -379,25 +464,37 @@
   (unless (member "project" (org-get-tags))
     (user-error "Not on a project heading"))
   (let* ((title (org-get-heading t t t t))
-         (note-title (read-string "Note title: " (concat title " Notes")))
+         (note-title (read-string "Note title: " title ))
          (slug (org-roam-node-slug (org-roam-node-create :title note-title)))
          (dir (expand-file-name "projects" org-roam-directory))
          (filepath (expand-file-name (concat slug ".org") dir))
-         (id (org-id-new)))
+         (id nil)
+         (has-context nil))
     (make-directory dir t)
-    (with-current-buffer (find-file-noselect filepath)
-      (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: %s\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n"
-                      id note-title))
-      (save-buffer))
-    ;; Update org-roam db
-    (org-roam-db-update-file filepath)
-    ;; Link from project heading
-    (org-end-of-meta-data t)
-    (insert (format "Context: [[id:%s][%s]]\n" id note-title))
-    (save-buffer)
-    ;; Open the note
+    ;; Create the file if it doesn't exist, otherwise extract its ID
+    (if (file-exists-p filepath)
+        (with-current-buffer (find-file-noselect filepath)
+          (goto-char (point-min))
+          (when (re-search-forward "^:ID:\\s-+\\(.+\\)$" nil t)
+            (setq id (match-string 1))))
+      (setq id (org-id-new))
+      (with-current-buffer (find-file-noselect filepath)
+        (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: %s\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n"
+                        id note-title))
+        (save-buffer))
+      (org-roam-db-update-file filepath))
+    ;; Add context link if not already present
+    (when id
+      (save-excursion
+        (org-end-of-meta-data t)
+        (let ((bound (save-excursion (org-end-of-subtree t t) (point))))
+          (setq has-context (re-search-forward "^Context: \\[\\[id:" bound t))))
+      (unless has-context
+        (org-end-of-meta-data t)
+        (insert (format "Context: [[id:%s][%s]]\n" id note-title))
+        (save-buffer)))
     (find-file filepath)
-    (message "Created and linked: %s" note-title)))
+    (message "Opened: %s" note-title)))
 
 
 ;; Show current season in the dashboard
@@ -452,85 +549,8 @@
       (save-buffer)
       (message "Started season: %s" name))))
 
-
-(defun a3madkour/show-project-status ()
-  "Display active and resting projects with goals."
-  (interactive)
-  (let ((active '())
-        (resting '()))
-    (with-current-buffer (find-file-noselect "~/org/projects.org")
-      (org-map-entries
-       (lambda ()
-         (let ((title (org-get-heading t t t t))
-               (goal (or (org-entry-get nil "GOAL") "no goal set")))
-           (cond
-            ((member "active" (org-get-tags))
-             (push (cons title goal) active))
-            ((member "resting" (org-get-tags))
-             (push (cons title goal) resting)))))
-       "+project"))
-    (with-output-to-temp-buffer "*Project Status*"
-      (princ (format "Season: %s\n\n" (a3madkour/get-current-season)))
-      (princ (format "Active (%d/3):\n" (length active)))
-      (dolist (p (nreverse active))
-        (princ (format "  • %s\n    → %s\n" (car p) (cdr p))))
-      (princ (format "\nResting (%d):\n" (length resting)))
-      (dolist (p (nreverse resting))
-        (princ (format "  • %s\n    → %s\n" (car p) (cdr p)))))))
-
-;; Toggle a project between active and resting
-(defun a3madkour/toggle-project-active ()
-  "Toggle the current project heading between :active: and :resting:."
-  (interactive)
-  (unless (member "project" (org-get-tags))
-    (user-error "Not on a project heading"))
-  (let ((tags (org-get-tags)))
-    (cond
-     ((member "active" tags)
-      (org-toggle-tag "active" 'off)
-      (org-toggle-tag "resting" 'on)
-      (message "Project set to resting"))
-     ((member "resting" tags)
-      ;; Check WIP limit before activating
-      (let ((active-count 0))
-        (org-map-entries
-         (lambda () (cl-incf active-count))
-         "+project+active"
-         'agenda)
-        (if (>= active-count 3)
-            (if (yes-or-no-p
-                 (format "You already have %d active projects. Activate anyway? "
-                         active-count))
-                (progn
-                  (org-toggle-tag "resting" 'off)
-                  (org-toggle-tag "active" 'on)
-                  (message "Project activated (WIP limit exceeded)"))
-              (message "Kept resting"))
-          (org-toggle-tag "resting" 'off)
-          (org-toggle-tag "active" 'on)
-          (message "Project activated (%d/3 active)" (1+ active-count)))))
-     (t
-      (org-toggle-tag "active" 'on)
-      (message "Project set to active")))))
-
-(defun a3madkour/add-to-reading-queue ()
-  "Add the current org-roam buffer to reading-queue.org."
-  (interactive)
-  (unless (and (buffer-file-name)
-               (org-roam-file-p))
-    (user-error "Not in an org-roam file"))
-  (let* ((title (org-get-title))
-         (id (org-roam-id-at-point))
-         (entry (format "* TODO Read %s\n:PROPERTIES:\n:ENERGY: high\n:ROAM_ID: %s\n:END:\n[[id:%s][Open Notes]]\n\n"
-                        (or title "Untitled") (or id "") (or id ""))))
-    (with-current-buffer (find-file-noselect "~/org/queue.org")
-      (goto-char (point-max))
-      (insert entry)
-      (save-buffer))
-    (message "Added \"%s\" to reading queue" title)))
-
 (defun a3madkour/citar-add-to-reading-queue ()
-  "Select a citar reference and add it to reading-queue.org."
+  "Select a citar reference and add it to queue.org."
   (interactive)
   (let* ((keys (citar-select-refs))
          (key (car keys))
@@ -547,14 +567,6 @@
       (save-buffer))
     (message "Added \"%s\" to reading queue" display)))
 
-(defun a3madkour/reading-queue-open-notes ()
-  "Open citar notes for the CITEKEY at point in reading-queue.org."
-  (interactive)
-  (if-let ((key (org-entry-get nil "CITEKEY")))
-      (citar-open-notes (list key))
-    (if-let ((id (org-entry-get nil "ROAM_ID")))
-        (org-id-goto id)
-      (user-error "No CITEKEY or ROAM_ID property on this heading"))))
 
 (defun a3madkour/org-roam-nodes-by-tag (tag)
   "Return a list of org-roam nodes that have TAG."
@@ -970,6 +982,7 @@ the file is not in `org-roam-directory' or has no title."
   :defer nil
   :config
   (global-evil-surround-mode 1))
+
 
 (use-package evil-collection
   :after evil
@@ -1630,7 +1643,6 @@ Fd support for dired
 (use-package magit :defer t)
 (use-package magit-todos :defer t)
 (use-package orgit)
-(use-package orgit-file)
 (use-package git-link)
 #+end_src
 * Diff-hl
@@ -2208,14 +2220,15 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
-
+  (add-to-list 'org-use-property-inheritance "TRIGGER")
+  (add-to-list 'org-use-property-inheritance "BLOCKER")
   (setq org-todo-keywords
 		'((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|" "DONE(d!)" "DROP(x)")))
 
   (setq org-todo-keyword-faces
-  '(("NEXT" . (:foreground "#50FA7B" :weight bold))
-    ("WAIT" . (:foreground "#9FC59F"))
-    ("DROP" . (:foreground "#8C8C8C" :strike-through t))))
+		'(("NEXT" . (:foreground "#50FA7B" :weight bold))
+		  ("WAIT" . (:foreground "#9FC59F"))
+		  ("DROP" . (:foreground "#8C8C8C" :strike-through t))))
 
   (setq org-enforce-todo-dependencies t)
   (setq org-enforce-todo-checkbox-dependencies t)
@@ -2232,6 +2245,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (setq org-agenda-files
 		(list "~/org/inbox.org"
 			  "~/org/actions.org"
+			  "~/org/queue.org"
 			  "~/org/projects.org"))
   (setq org-capture-templates
   		'(("i" "Inbox" entry (file "~/org/inbox.org")
@@ -2243,53 +2257,53 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		   :empty-lines 1)))
 
   (setq org-stuck-projects
-  '("+project+active/-DONE-DROP"  ; How to identify projects
-    ("NEXT" "WAIT")               ; Keywords that mean "not stuck"
-    nil                           ; Tags that mean "not stuck"
-    ""))                          ; Regex that mean "not stuck"
+		'("+project+active/-DONE-DROP"  ; How to identify projects
+		  ("NEXT" "WAIT")               ; Keywords that mean "not stuck"
+		  nil                           ; Tags that mean "not stuck"
+		  ""))                          ; Regex that mean "not stuck"
 
 
   (setq org-tag-alist
-  '(;; Life areas
-    ("artistic" . ?a) ("intellectual" . ?i) ("health" . ?h)
-    ("career" . ?c) ("social" . ?s)
-    ;; Project state
-    ("project" . ?p) ("active" . ?A) ("resting" . ?R)
-    ;; Consumption
-    ("toread" . ?r) ("towatch" . ?w) ("toplay" .?p)
-    ;; Routine
-    ("routine" . ?o)))
+		'(;; Life areas
+		  ("artistic" . ?a) ("intellectual" . ?i) ("health" . ?h)
+		  ("career" . ?c) ("social" . ?s)
+		  ;; Project state
+		  ("project" . ?p) ("active" . ?A) ("resting" . ?R)
+		  ;; Consumption
+		  ("toread" . ?r) ("towatch" . ?w) ("toplay" .?p)
+		  ;; Routine
+		  ("routine" . ?o)))
 
 
   (setq org-agenda-custom-commands
-  '(("d" "Dashboard"
-     ;; Section 1: Today's schedule and habits
-     ((agenda ""
-       ((org-agenda-span 'day)
-        (org-super-agenda-groups
-         '((:name "⏰ Scheduled" :time-grid t :scheduled today :order 0)
-           (:name "🔁 Habits" :habit t :order 1)
-           (:name "⚠️ Overdue" :scheduled past :deadline past :order 2)))))
-      
-      ;; Section 2: This week's commitments
-      (tags-todo "thisweek"
-       ((org-agenda-overriding-header "📌 This Week")))
+		'(("d" "Dashboard"
+		   ;; Section 1: Today's schedule and habits
+		   ((agenda ""
+					((org-agenda-span 'day)
+					 (org-super-agenda-groups
+					  '((:name "⏰ Scheduled" :time-grid t :scheduled today :order 0)
+						(:name "🔁 Habits" :habit t :order 1)
+						(:name "⚠️ Overdue" :scheduled past :deadline past :order 2)))))
+			
+			;; Section 2: This week's commitments
+			(tags-todo "thisweek"
+					   ((org-agenda-overriding-header "📌 This Week")))
 
-      ;; Section 3: Available tasks by energy (active projects only)
-      (tags-todo "+ENERGY=\"high\"-resting"
-       ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
-        (org-agenda-sorting-strategy '(priority-down effort-up))))
-      
-      (tags-todo "+ENERGY=\"medium\"-resting"
-       ((org-agenda-overriding-header "⚡ Medium Energy")
-        (org-agenda-sorting-strategy '(priority-down effort-up))))
-      
-      (tags-todo "+ENERGY=\"low\"-resting"
-       ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
-        (org-agenda-sorting-strategy '(priority-down effort-up)))))
-     ((org-agenda-block-separator nil)
-	  (org-agenda-overriding-header
-	   (concat "Season: " (a3madkour/get-current-season) "\n")))))))
+			;; Section 3: Available tasks by energy (active projects only)
+			(tags-todo "+ENERGY=\"high\"-resting"
+					   ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
+						(org-agenda-sorting-strategy '(priority-down effort-up))))
+			
+			(tags-todo "+ENERGY=\"medium\"-resting"
+					   ((org-agenda-overriding-header "⚡ Medium Energy")
+						(org-agenda-sorting-strategy '(priority-down effort-up))))
+			
+			(tags-todo "+ENERGY=\"low\"-resting"
+					   ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
+						(org-agenda-sorting-strategy '(priority-down effort-up)))))
+		   ((org-agenda-block-separator nil)
+			(org-agenda-overriding-header
+			 (concat "Season: " (a3madkour/get-current-season) "\n")))))))
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
@@ -2835,6 +2849,12 @@ Debuging adapter protocol for emacs
  '(consult-bookmark :which-key "bookmarks")
  "fi"
  '((lambda () (interactive) (find-file "~/org/inbox.org")) :which-key "inbox")
+ "fp"
+ '((lambda () (interactive) (find-file "~/org/projects.org")) :which-key "projects")
+ "fa"
+ '((lambda () (interactive) (find-file "~/org/actions.org")) :which-key "actions")
+ "fq"
+ '((lambda () (interactive) (find-file "~/org/queue.org")) :which-key "queue")
  "ff"
  '(find-file :which-key "find file")
  "fd"
