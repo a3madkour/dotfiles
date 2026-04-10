@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-09 Thu]
+:LAST_MODIFIED: [2026-04-10 Fri]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -191,16 +191,6 @@
 ;;flyspell stuff
 (add-hook 'text-mode-hook 'flyspell-mode)
 (add-hook 'prog-mode-hook 'flyspell-prog-mode)
-
-(defmacro η (fnc)
-  "Return function that ignores its arguments and invokes FNC."
-  `(lambda (&rest _rest) (funcall ,fnc)))
-(advice-add 'org-deadline       :after (η #'org-save-all-org-buffers))
-(advice-add 'org-schedule       :after (η #'org-save-all-org-buffers))
-(advice-add 'org-store-log-note :after
-			(η #'org-save-all-org-buffers))
-(advice-add 'org-todo           :after (η #'org-save-all-org-buffers))
-
 ;;for the love of god stop the ~s it is so trashy
 (setq backup-directory-alist `(("." . "~/.saves")))
 ;;get rid of startup screen
@@ -285,8 +275,8 @@
      ((string= destination "someday")
       (org-todo "")
       (org-refile nil nil
-                  (list "Someday" "~/gtd/someday.org" nil
-                        (with-current-buffer (find-file-noselect "~/gtd/someday.org")
+                  (list "Someday" "~/org/someday.org" nil
+                        (with-current-buffer (find-file-noselect "~/org/someday.org")
                           (point-max))))
       (message "Sent to someday"))
 
@@ -315,13 +305,13 @@
                                         (format-time-string "%Y-%m-%d %a")
                                         full-repeater))
               (org-refile nil nil
-                          (list "Recurring / Habits" "~/gtd/actions.org" nil nil)))
+                          (list "Recurring / Habits" "~/org/actions.org" nil nil)))
           ;; Regular one-off action
           (a3madkour/set-task-properties)
           (when (yes-or-no-p "Schedule it? ")
             (org-schedule nil))
           (org-refile nil nil
-                      (list "Actions" "~/gtd/actions.org" nil nil)))
+                      (list "Actions" "~/org/actions.org" nil nil)))
         (message "Sent to actions")))
 
      ;; ---- PROJECT ----
@@ -338,7 +328,7 @@
           (a3madkour/set-task-properties)
           (org-refile nil nil
                       (org-refile-get-location "Refile to project"
-                                                (find-file-noselect "~/gtd/projects.org")))))
+                                                (find-file-noselect "~/org/projects.org")))))
       (message "Sent to project")))))
 
 
@@ -2352,7 +2342,9 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package org-edna
   :ensure t
   :defer nil
-  :config (org-edna-mode 1))
+  :config
+  (org-edna-mode 1)
+  (setq org-edna-use-inheritance t))
 #+end_src
 
 ** Org media note
@@ -2364,6 +2356,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :hook (org-mode .  org-media-note-mode)
   :bind (
 	 ("H-v" . org-media-note-show-interface))  ;; Main entrance
+  :defer nil
   :config
   (setq org-media-note-screenshot-image-dir "~/org/notes/imgs/")  ;; Folder to save screenshot
   (setq org-media-note-use-refcite-first t))
@@ -3639,5 +3632,3 @@ _SPC_ cancel    _o_nly this      _d_elete
 #+begin_src emacs-lisp
 (use-package plz)
 #+end_src
-
-
