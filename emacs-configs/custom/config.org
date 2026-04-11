@@ -224,6 +224,16 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/get-refile-marker (file headline)
+  "Get a marker for HEADLINE in FILE."
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (goto-char (point-min))
+      (let ((pos (org-find-exact-headline-in-buffer headline)))
+        (if pos
+            (move-marker (make-marker) pos (current-buffer))
+          (error "Heading '%s' not found in %s" headline file))))))
+
 (defvar a3madkour/todo-keyword-styles
   '(("NEXT" :color "#50FA7B" :weight bold)
     ("WAIT" :color "#9FC59F")
@@ -261,7 +271,7 @@ BASE-FN takes a color and returns the base face plist."
 (defun a3madkour/set-task-properties ()
   "Prompt for and set ENERGY and EFFORT on the current heading."
   (let ((energy (completing-read "Energy level: "
-                                  '("high" "medium" "low") nil t))
+                                 '("high" "medium" "low") nil t))
         (effort (read-string "Estimated time (e.g. 0:30, 1:00, 2:00): ")))
     (org-set-property "ENERGY" energy)
     (unless (string-empty-p effort)
@@ -288,8 +298,8 @@ BASE-FN takes a color and returns the base face plist."
   (unless (org-entry-get nil "TODO")
     (user-error "Not on a TODO heading"))
   (let ((destination (completing-read "Where does this go? "
-                                       '("action" "project" "someday" "org-roam" "delete")
-                                       nil t)))
+                                      '("action" "project" "someday" "org-roam" "delete")
+                                      nil t)))
     (cond
      ;; ---- DELETE ----
      ((string= destination "delete")
@@ -314,6 +324,7 @@ BASE-FN takes a color and returns the base face plist."
      ((string= destination "action")
       (let ((is-habit (yes-or-no-p "Is this a recurring habit? ")))
         (if is-habit
+            ;; ---- HABIT ----
             (let* ((frequency (completing-read "How often? "
                                                '("daily" "every 2 days" "every 3 days"
                                                  "weekly" "biweekly" "monthly")
@@ -334,20 +345,27 @@ BASE-FN takes a color and returns the base face plist."
               (org-schedule nil (format "<%s %s>"
                                         (format-time-string "%Y-%m-%d %a")
                                         full-repeater))
+              ;; FIX 1: All these forms are now properly inside the let* body,
+              ;; so they execute as part of the habit branch
               (org-refile nil nil
-                          (list "Recurring / Habits" "~/org/actions.org" nil nil)))
-          ;; Regular one-off action
+                          (list "Habits" "~/org/actions.org" nil
+                                (a3madkour/get-refile-marker "~/org/actions.org" "Habits")))
+              (message "Sent to habits"))
+          ;; ---- REGULAR ONE-OFF ACTION (else branch of if) ----
           (a3madkour/set-task-properties)
           (when (yes-or-no-p "Schedule it? ")
             (org-schedule nil))
+          ;; FIX 2: Use get-refile-marker instead of nil for the position,
+          ;; so it refiles UNDER the "Actions" heading instead of as a top-level entry
           (org-refile nil nil
-                      (list "Actions" "~/org/actions.org" nil nil)))
-        (message "Sent to actions")))
+                      (list "Actions" "~/org/actions.org" nil
+                            (a3madkour/get-refile-marker "~/org/actions.org" "Actions")))
+          (message "Sent to actions"))))
      ;; ---- PROJECT ----
      ((string= destination "project")
       (let ((project-action (completing-read "Which project? "
-                                              '("existing project" "create new project")
-                                              nil t)))
+                                             '("existing project" "create new project")
+                                             nil t)))
         (if (string= project-action "create new project")
             (let ((project-marker (a3madkour/create-project)))
               (a3madkour/set-task-properties)
@@ -359,9 +377,10 @@ BASE-FN takes a color and returns the base face plist."
           ;; Refile to existing project
           (a3madkour/set-task-properties)
           (org-refile nil nil
-                      (org-refile-get-location "Refile to project"
-                                                (find-file-noselect "~/org/projects.org")))
+                      (list "Actions" "~/org/actions.org" nil
+                            (a3madkour/get-refile-marker "~/org/actions.org" "Actions")))
           (message "Sent to project")))))))
+
 
 (defcustom a3madkour/project-wip-limit 3
   "Maximum number of concurrently active projects."
