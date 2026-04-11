@@ -224,6 +224,39 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defvar a3madkour/todo-keyword-styles
+  '(("NEXT" :color "#50FA7B" :weight bold)
+    ("WAIT" :color "#9FC59F")
+    ("DROP" :color "#8C8C8C" :strike-through t))
+  "Alist of TODO keyword styles. :color is the accent color.
+Extra properties like :weight and :strike-through are passed through.")
+
+(defun a3madkour/plist-without (plist &rest keys)
+  "Return a copy of PLIST with KEYS removed."
+  (let (result)
+    (while plist
+      (let ((k (pop plist)) (v (pop plist)))
+        (unless (memq k keys)
+          (push v result)
+          (push k result))))
+    (nreverse result)))
+
+(defun a3madkour/build-faces (base-fn)
+  "Build faces from `a3madkour/todo-keyword-styles'.
+BASE-FN takes a color and returns the base face plist."
+  (mapcar (lambda (entry)
+            (cons (car entry)
+                  (append (funcall base-fn (plist-get (cdr entry) :color))
+                          (a3madkour/plist-without (cdr entry) :color))))
+          a3madkour/todo-keyword-styles))
+
+(setq org-todo-keyword-faces
+      (a3madkour/build-faces
+       (lambda (c) `(:foreground ,c))))
+
+(setq org-modern-todo-faces
+      (a3madkour/build-faces
+       (lambda (c) `(:background ,c :foreground "#000000"))))
 ;; Shared property setter
 (defun a3madkour/set-task-properties ()
   "Prompt for and set ENERGY and EFFORT on the current heading."
