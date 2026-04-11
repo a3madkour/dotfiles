@@ -224,6 +224,14 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+;; Don't hide/dim tasks that are only blocked by checkboxes
+(defun a3madkour/ignore-checkbox-blocking-for-agenda (orig-fn &rest args)
+  "Run `org-entry-blocked-p' with checkbox dependencies temporarily off.
+Only affects agenda display — actual state-change enforcement is untouched
+because `org-todo' runs `org-blocker-hook' directly, not through
+`org-entry-blocked-p'."
+  (let ((org-enforce-todo-checkbox-dependencies nil))
+    (apply orig-fn args)))
 (defun a3madkour/get-refile-marker (file headline)
   "Get a marker for HEADLINE in FILE."
   (with-current-buffer (find-file-noselect file)
@@ -770,14 +778,22 @@ the file is not in `org-roam-directory' or has no title."
 (defun a3madkour/force-time-after-todo ()
   (interactive)
   (when (equal org-state "DONE")
-  	(unless (equal (org-entry-get (org-element-at-point) "STYLE") "habit")
-  	  (let ((duration-str (read-string "Time taken (HH:MM or minutes):  ")))
-  		(unless (string-empty-p duration-str)
-  		  (let* ((minutes (org-duration-to-minutes duration-str))
-  				 (now (current-time))
-  				 (start-time (time-subtract now (seconds-to-time (* minutes 60)))))
-  			(org-clock-in 0 start-time)
-  			(org-clock-out)))))))
+    (unless (equal (org-entry-get (org-element-at-point) "STYLE") "habit")
+      (unless (a3madkour/has-logbook-p)
+        (let ((duration-str (read-string "Time taken (HH:MM or minutes):  ")))
+          (unless (string-empty-p duration-str)
+            (let* ((minutes (org-duration-to-minutes duration-str))
+                   (now (current-time))
+                   (start-time (time-subtract now (seconds-to-time (* minutes 60)))))
+              (org-clock-in 0 start-time)
+              (org-clock-out))))))))
+
+(defun a3madkour/has-logbook-p ()
+  "Return non-nil if the current entry has a LOGBOOK drawer with clock entries."
+  (save-excursion
+    (org-back-to-heading t)
+    (let ((end (save-excursion (outline-next-heading) (point))))
+      (re-search-forward ":LOGBOOK:" end t))))
 
 (defun a3madkour/org-roam-node-find-no-refs ()
   "Find an Org-roam node, excluding those that have associated refs."
@@ -2309,6 +2325,8 @@ Looks for .venv directory in project root and activates the Python interpreter."
 			  "~/org/actions.org"
 			  "~/org/queue.org"
 			  "~/org/projects.org"))
+  (setq org-agenda-dim-blocked-tasks 'invisible)
+  (advice-add 'org-entry-blocked-p :around #'a3madkour/ignore-checkbox-blocking-for-agenda)
   (setq org-capture-templates
   		'(("i" "Inbox" entry (file "~/org/inbox.org")
 		   "* TODO %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
