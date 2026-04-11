@@ -2195,8 +2195,8 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+begin_src emacs-lisp
 (use-package org-super-agenda
   :after org org-modern-mode
+  :defer nil
   :config
-  (setq org-super-agenda-header-map nil)
   (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
   (setq org-super-agenda-groups
 		'((:auto-dir-name t)))
@@ -2308,6 +2308,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   ;;agenda dir
   (add-to-list 'org-use-property-inheritance "TRIGGER")
   (add-to-list 'org-use-property-inheritance "BLOCKER")
+  (setq org-super-agenda-header-map nil)
   (setq org-todo-keywords
 		'((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|" "DONE(d!)" "DROP(x)")))
 
@@ -3674,12 +3675,12 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(org-agenda :which-key "org agenda")
  "c"
  '(org-capture :which-key "org-capture")
+ "v"
+ '(org-habit-stats-view-habit-at-point-agenda :which-key "view habit stats at point")
  "s"
  '(org-agenda-schedule :which-key "schedule")
  "e"
  '(org-agenda-deadline :which-key "deadline")
- "t"
- '(org-agenda-set-tags :which-key "set tags")
  ;; clocking
  "c"
  '(nil :which-key "clocking")

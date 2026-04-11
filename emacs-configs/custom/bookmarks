@@ -2,7 +2,13 @@
 ;;; This format is meant to be slightly human-readable;
 ;;; nevertheless, you probably don't want to edit it.
 ;;; -*- End Of Bookmark File Format Version Stamp -*-
-(("Someday"
+(("Config"
+ (filename . "~/emacs-configs/custom/config.org")
+ (front-context-string . "#+TITLE: My Emac")
+ (rear-context-string)
+ (position . 1)
+ (last-modified 27097 52848 693583 982000))
+("Someday"
  (filename . "~/org/someday.org")
  (front-context-string . ":PROPERTIES:\n:LA")
  (rear-context-string)
