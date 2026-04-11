@@ -224,6 +224,12 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/reset-checkboxes-on-repeat ()
+  "Reset checkboxes when a repeating task is marked done."
+  (when (and (org-get-repeat)
+             (member org-state org-done-keywords))
+    (org-reset-checkbox-state-subtree)))
+
 ;; Don't hide/dim tasks that are only blocked by checkboxes
 (defun a3madkour/ignore-checkbox-blocking-for-agenda (orig-fn &rest args)
   "Run `org-entry-blocked-p' with checkbox dependencies temporarily off.
@@ -2296,6 +2302,8 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-to-list 'org-structure-template-alist '("yaml" . "src yaml"))
   (add-to-list 'org-structure-template-alist '("json" . "src json"))
   (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
+  (add-hook 'org-after-todo-state-change-hook
+          #'a3madkour/reset-checkboxes-on-repeat)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
   (add-to-list 'org-use-property-inheritance "TRIGGER")
