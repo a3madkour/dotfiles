@@ -2810,7 +2810,7 @@ Debuging adapter protocol for emacs
  '(jump-to-register :which-key "registers")
  "x" 'org-capture
  "a" 'embark-act
-
+ "u" '(a3madkour/process-inbox-item :which-key "process inbox item")
  ;; Defaults and debugging
  "d"
  '(nil  :which-key "defaults and debug")
@@ -2939,6 +2939,8 @@ Debuging adapter protocol for emacs
  "oa"
  '(org-agenda :which-key "org-agenda")
  "od"
+ '((lambda () (interactive) (org-agenda nil "d")) :which-key "open dashboard")
+ "oc"
  '(a3madkour/vterm-cd :which-key "cd to current buffer in vterm")
  "op"
  '(a3madkour/vterm-toggle-project-root :which-key "cd to the project root in vterm")
@@ -3127,6 +3129,10 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(nil :which-key "project")
  "pr"
  '(a3madkour/project-recentf :which-key "project-recentf")
+ "pf"
+ '(a3madkour/rotate-season :which-key "rotate season")
+ "pa"
+ '(a3madkour/project-add-project-task :which-key "add project task")
  "p&"
  'project-async-shell-command
  "p!"
@@ -3135,13 +3141,19 @@ _SPC_ cancel    _o_nly this      _d_elete
  'project-forget-project
  "pb"
  'project-switch-to-buffer
- "pa"
+ "pu"
  'project-remember-projects-under
  "ps"
+ '(a3madkour/show-project-status :which-key "show project status")
+ "pt"
+ '(a3madkour/toggle-project-active :which-key "toggle project active")
+ "pc"
+ '(a3madkour/create-project :which-key "create project")
+ "pS"
  'project-save-buffers
  "po"
  '(a3madkour/project-find-file-other-window :which-key "open file in other window")
- "pc"
+ "pC"
  'project-compile
  "pp"
  'project-switch-project
@@ -3149,6 +3161,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  'project-kill-buffers
  "pn"
  '(a3madkour/make-project :which-key "make-project")
+ "pN"
+ '(a3madkour/create-project-notes :which-key "create project notes")
  "pw"
  '(a3madkour/make-ws-project :which-key "make-ws-project")
  "SPC"
@@ -3163,6 +3177,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(org-cite-insert :which-key "org-cite-insert")
  "ze"
  '(citar-insert-edit :which-key "Edit citation")
+ "zq"
+ '(a3madkour/citar-add-to-reading-queue :which-key "add to reading list")
  "zd"
  '(citar-dwim :which-key "citar-dwim")
 
@@ -3585,12 +3601,10 @@ _SPC_ cancel    _o_nly this      _d_elete
  "M-["
  '(org-agenda-backward-block :which-key "org-agenda-backward-block"))
 ;; Org-agenda
-;;TODO figure out a better key than , for these mappings
 (general-define-key
- :prefix ","
  :states 'motion
  :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
- "" nil
+  "" nil
  "a"
  '(org-agenda :which-key "org agenda")
  "c"
@@ -3609,11 +3623,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "co"
  '(org-agenda-clock-out :which-key "clock out")
  "cj"
- '(org-clock-goto :which-key "jump to clock"))
-;; Org-agenda
-(general-define-key
- :states 'motion
- :keymaps '(org-agenda-mode-map) ;; Available in org mode, org agenda
+ '(org-clock-goto :which-key "jump to clock")
  "cp"
  '(org-pomodoro :which-key "Start or stop pomodoro"))
 
