@@ -971,6 +971,7 @@ the file is not in `org-roam-directory' or has no title."
   ;; (setq evil-want-Y-yank-to-eol t)
   (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
   (setq evil-want-keybinding nil)
+  (setq evil-undo-system 'undo-fu)
 
   :config
 
@@ -1160,15 +1161,27 @@ the file is not in `org-roam-directory' or has no title."
 ;; Bind this custom function to your preferred key
   (use-package multi-vterm :ensure t)
 #+end_src
-* Undo-tree
+* Undo-fu
 #+begin_src emacs-lisp
-(use-package undo-tree
+(use-package undo-fu)
+(use-package undo-fu-session
   :defer nil
-  :hook (prog-mode . undo-tree-mode)
-  :config
-    (global-undo-tree-mode 1)
-    (evil-set-undo-system 'undo-tree)
-    (add-to-list 'undo-tree-history-directory-alist '("." . "~/.undo-tree")))
+  :config (undo-fu-session-global-mode))
+#+end_src
+* Vundo
+#+begin_src emacs-lisp
+(use-package vundo
+  :defer nil
+  :ensure t
+  :bind (("C-x u" . vundo)
+         :map vundo-mode-map
+         ("h" . vundo-backward)
+         ("j" . vundo-next)
+         ("k" . vundo-previous)
+         ("l" . vundo-forward)
+         ("q" . vundo-quit)
+         ("RET" . vundo-confirm)))
+
 #+end_src
 * Recent
 #+begin_src emacs-lisp
@@ -1948,8 +1961,7 @@ Highlight the diffs of the past commit in a file
   (setq ein:output-area-inlined-images t))
 (use-package python-mode
   :dash "Python 3"
-  :config
-  (undo-tree-mode))
+  :config)
 (use-package sphinx-doc
   :hook
   (python-mode . sphinx-doc-mode))
@@ -2231,7 +2243,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+begin_src emacs-lisp
 (use-package org
   :hook (org-mode . a3madkour/org-font-setup)
-  :hook (org-mode . undo-tree-mode)
   :hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
   :hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
   :diminish org-indent-mode
