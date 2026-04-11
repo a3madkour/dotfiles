@@ -421,10 +421,10 @@ BASE-FN takes a color and returns the base face plist."
     count))
 
 (defun a3madkour/show-project-status ()
-  "Display active and resting projects with goals."
+  "Display active and inactive projects with goals."
   (interactive)
   (let ((active '())
-        (resting '()))
+        (inactive '()))
     (with-current-buffer (find-file-noselect "~/org/projects.org")
       (org-map-entries
        (lambda ()
@@ -434,8 +434,8 @@ BASE-FN takes a color and returns the base face plist."
              (cond
               ((member "active" (org-get-tags))
                (push (cons title goal) active))
-              ((member "resting" (org-get-tags))
-               (push (cons title goal) resting))))))
+              ((member "inactive" (org-get-tags))
+               (push (cons title goal) inactive))))))
        "+project"))
     (with-output-to-temp-buffer "*Project Status*"
       (princ (format "Season: %s\n\n" (a3madkour/get-current-season)))
@@ -444,32 +444,88 @@ BASE-FN takes a color and returns the base face plist."
                      a3madkour/project-wip-limit))
       (dolist (p (nreverse active))
         (princ (format "  • %s\n    → %s\n" (car p) (cdr p))))
-      (princ (format "\nResting (%d):\n" (length resting)))
-      (dolist (p (nreverse resting))
+      (princ (format "\nInactive (%d):\n" (length inactive)))
+      (dolist (p (nreverse inactive))
         (princ (format "  • %s\n    → %s\n" (car p) (cdr p)))))))
 
-(defun a3madkour/toggle-project-active ()
-  "Toggle the current project heading between :active: and :resting:."
+(defcustom a3madkour/reading-queue-wip-limit 5
+  "Maximum number of active items in the reading queue."
+  :type 'integer
+  :group 'a3madkour)
+
+(defun a3madkour/reading-queue-active-count ()
+  "Return the number of active TODO entries in queue.org."
+  (with-current-buffer (find-file-noselect "~/org/queue.org")
+    (length (org-map-entries t "+active" 'file))))
+
+(defun a3madkour/deactivate-on-done ()
+  "Remove :active: tag and add :inactive: when a task is marked done."
+  (when (and (member org-state org-done-keywords)
+             (member "active" (org-get-tags)))
+    (org-toggle-tag "active" 'off)
+    (org-toggle-tag "inactive" 'on)))
+
+
+(defun a3madkour/citar-add-to-reading-queue ()
+  "Select a citar reference and add it to queue.org."
   (interactive)
-  (unless (member "project" (org-get-tags))
-    (user-error "Not on a project heading"))
-  (let ((tags (org-get-tags)))
+  (let ((count (a3madkour/reading-queue-active-count)))
+    (when (>= count a3madkour/reading-queue-wip-limit)
+      (user-error "Reading queue WIP limit reached (%d/%d active). Finish something first"
+                  count a3madkour/reading-queue-wip-limit))
+    (let* ((keys (citar-select-refs))
+           (key (car keys))
+           (entry (citar-get-entry key))
+           (title (alist-get "title" entry nil nil #'string=))
+           (author (alist-get "author" entry nil nil #'string=))
+           (year (when-let ((date (alist-get "date" entry nil nil #'string=)))
+                   (substring date 0 4)))
+           (display (format "%s (%s)" (or title "Untitled") (or year "")))
+           (text (format "* TODO Read %s :active:toread:\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
+                         display key (or author "") key)))
+      (with-current-buffer (find-file-noselect "~/org/queue.org")
+        (goto-char (point-max))
+        (insert text)
+        (save-buffer))
+      (message "Added \"%s\" to reading queue (%d/%d active)"
+               display (1+ count) a3madkour/reading-queue-wip-limit))))
+
+
+(defvar a3madkour/wip-limits
+  '(("project" :limit a3madkour/project-wip-limit
+               :count a3madkour/active-project-count)
+    ("toread"  :limit a3madkour/reading-queue-wip-limit
+               :count a3madkour/reading-queue-active-count))
+  "Alist mapping tags to their WIP limit variable and count function.")
+
+(defun a3madkour/toggle-active ()
+  "Toggle the current heading between :active: and :inactive:.
+Automatically detects the heading type and enforces the appropriate WIP limit."
+  (interactive)
+  (let* ((tags (org-get-tags))
+         (wip-entry (cl-find-if (lambda (entry)
+                                  (member (car entry) tags))
+                                a3madkour/wip-limits))
+         (wip-limit (when wip-entry (symbol-value (plist-get (cdr wip-entry) :limit))))
+         (count-fn (when wip-entry (plist-get (cdr wip-entry) :count))))
     (cond
      ((member "active" tags)
       (org-toggle-tag "active" 'off)
-      (org-toggle-tag "resting" 'on)
-      (message "Project set to resting"))
-     ((member "resting" tags)
-      (let ((count (a3madkour/check-wip-limit)))
-        (org-toggle-tag "resting" 'off)
-        (org-toggle-tag "active" 'on)
-        (message "Project activated (%d/%d active)"
-                 (1+ count) a3madkour/project-wip-limit)))
+      (org-toggle-tag "inactive" 'on)
+      (message "Set to inactive"))
      (t
-      (let ((count (a3madkour/check-wip-limit)))
-        (org-toggle-tag "active" 'on)
-        (message "Project set to active (%d/%d)"
-                 (1+ count) a3madkour/project-wip-limit))))))
+      (when (and wip-limit count-fn)
+        (let ((count (funcall count-fn)))
+          (when (>= count wip-limit)
+            (user-error "WIP limit reached (%d/%d active)" count wip-limit))))
+      (when (member "inactive" tags)
+        (org-toggle-tag "inactive" 'off))
+      (org-toggle-tag "active" 'on)
+      (if wip-limit
+          (message "Set to active (%d/%d)" (funcall count-fn) wip-limit)
+        (message "Set to active"))))))
+
+
 
 (defun a3madkour/create-project ()
   "Create a new project heading in projects.org with required properties.
@@ -482,7 +538,7 @@ When called interactively, also switches to the projects buffer."
          (area (completing-read "Life area: "
                                 '("artistic" "intellectual" "health" "career" "social")
                                 nil t))
-         (status (completing-read "Status: " '("active" "resting") nil t))
+         (status (completing-read "Status: " '("active" "inactive") nil t))
          (has-repo (yes-or-no-p "Does this project have a git repo? "))
          (repo (when has-repo (read-directory-name "Repo path: ")))
          (goal-value (if (string-empty-p goal) "exploratory" goal)))
@@ -606,28 +662,9 @@ When called interactively, also switches to the projects buffer."
                         (format-time-string "[%Y-%m-%d %a]"
                                             (time-add (current-time)
                                                       (days-to-time (* weeks 7))))))
-        (insert "  Active: \n  Resting: \n\n"))
+        (insert "  Active: \n  Inactive: \n\n"))
       (save-buffer)
       (message "Started season: %s" name))))
-
-(defun a3madkour/citar-add-to-reading-queue ()
-  "Select a citar reference and add it to queue.org."
-  (interactive)
-  (let* ((keys (citar-select-refs))
-         (key (car keys))
-         (entry (citar-get-entry key))
-         (title (alist-get "title" entry nil nil #'string=))
-         (author (alist-get "author" entry nil nil #'string=))
-         (year (alist-get "year" entry nil nil #'string=))
-         (display (format "%s (%s)" (or title "Untitled") (or year "")))
-         (text (format "* TODO Read %s\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
-                       display key (or author "") key)))
-    (with-current-buffer (find-file-noselect "~/org/queue.org")
-      (goto-char (point-max))
-      (insert text)
-      (save-buffer))
-    (message "Added \"%s\" to reading queue" display)))
-
 
 (defun a3madkour/org-roam-nodes-by-tag (tag)
   "Return a list of org-roam nodes that have TAG."
@@ -2304,6 +2341,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
   (add-hook 'org-after-todo-state-change-hook
           #'a3madkour/reset-checkboxes-on-repeat)
+  (add-hook 'org-after-todo-state-change-hook #'a3madkour/deactivate-on-done)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
   (add-to-list 'org-use-property-inheritance "TRIGGER")
@@ -2357,7 +2395,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		  ("artistic" . ?a) ("intellectual" . ?i) ("health" . ?h)
 		  ("career" . ?c) ("social" . ?s)
 		  ;; Project state
-		  ("project" . ?p) ("active" . ?A) ("resting" . ?R)
+		  ("project" . ?p) ("active" . ?A) ("inactive" . ?R)
 		  ;; Consumption
 		  ("toread" . ?r) ("towatch" . ?w) ("toplay" .?p)
 		  ;; Routine
@@ -2379,15 +2417,15 @@ Looks for .venv directory in project root and activates the Python interpreter."
 					   ((org-agenda-overriding-header "📌 This Week")))
 
 			;; Section 3: Available tasks by energy (active projects only)
-			(tags-todo "+ENERGY=\"high\"-resting"
+			(tags-todo "+ENERGY=\"high\"-inactive"
 					   ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
 						(org-agenda-sorting-strategy '(priority-down effort-up))))
 			
-			(tags-todo "+ENERGY=\"medium\"-resting"
+			(tags-todo "+ENERGY=\"medium\"-inactive"
 					   ((org-agenda-overriding-header "⚡ Medium Energy")
 						(org-agenda-sorting-strategy '(priority-down effort-up))))
 			
-			(tags-todo "+ENERGY=\"low\"-resting"
+			(tags-todo "+ENERGY=\"low\"-inactive"
 					   ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
 						(org-agenda-sorting-strategy '(priority-down effort-up)))))
 		   ((org-agenda-block-separator nil)
@@ -3022,6 +3060,8 @@ Debuging adapter protocol for emacs
  '(display-line-numbers-mode :which-key "display line numbers")
  "tc"
  '(centered-cursor-mode :which-key "centered-cursor-mode")
+ "ta"
+ '(a3madkour/toggle-active :which-key "toggle active")
  "ty"
  '(load-theme :which-key "load theme")
  "tR"
@@ -3211,8 +3251,6 @@ _SPC_ cancel    _o_nly this      _d_elete
  'project-remember-projects-under
  "ps"
  '(a3madkour/show-project-status :which-key "show project status")
- "pt"
- '(a3madkour/toggle-project-active :which-key "toggle project active")
  "pc"
  '(a3madkour/create-project :which-key "create project")
  "pS"
