@@ -1182,7 +1182,11 @@ the file is not in `org-roam-directory' or has no title."
 #+end_src
 * Undo-fu
 #+begin_src emacs-lisp
-(use-package undo-fu)
+(use-package undo-fu
+  :config
+  (setq undo-limit 67108864) ; 64mb.
+  (setq undo-strong-limit 100663296) ; 96mb.
+  (setq undo-outer-limit 1006632960))
 (use-package undo-fu-session
   :defer nil
   :config (undo-fu-session-global-mode))
