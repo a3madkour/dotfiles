@@ -295,7 +295,6 @@ BASE-FN takes a color and returns the base face plist."
      ((string= destination "delete")
       (org-cut-subtree)
       (message "Deleted"))
-
      ;; ---- ORG-ROAM (Zettelkasten seed) ----
      ((string= destination "org-roam")
       (let ((title (org-get-heading t t t t)))
@@ -303,7 +302,6 @@ BASE-FN takes a color and returns the base face plist."
         (org-roam-capture-
          :node (org-roam-node-create :title title))
         (message "Sent to org-roam")))
-
      ;; ---- SOMEDAY ----
      ((string= destination "someday")
       (org-todo "")
@@ -312,7 +310,6 @@ BASE-FN takes a color and returns the base face plist."
                         (with-current-buffer (find-file-noselect "~/org/someday.org")
                           (point-max))))
       (message "Sent to someday"))
-
      ;; ---- ACTION ----
      ((string= destination "action")
       (let ((is-habit (yes-or-no-p "Is this a recurring habit? ")))
@@ -346,24 +343,25 @@ BASE-FN takes a color and returns the base face plist."
           (org-refile nil nil
                       (list "Actions" "~/org/actions.org" nil nil)))
         (message "Sent to actions")))
-
      ;; ---- PROJECT ----
      ((string= destination "project")
       (let ((project-action (completing-read "Which project? "
                                               '("existing project" "create new project")
                                               nil t)))
         (if (string= project-action "create new project")
-            (progn
-              (a3madkour/create-project)
-              (org-cut-subtree)
-              (message "Created new project — paste this as a task inside it with C-y"))
+            (let ((project-marker (a3madkour/create-project)))
+              (a3madkour/set-task-properties)
+              (org-refile nil nil
+                          (list nil "~/org/projects.org" nil
+                                (marker-position project-marker)))
+              (set-marker project-marker nil)
+              (message "Sent to new project"))
           ;; Refile to existing project
           (a3madkour/set-task-properties)
           (org-refile nil nil
                       (org-refile-get-location "Refile to project"
-                                                (find-file-noselect "~/org/projects.org")))))
-      (message "Sent to project")))))
-
+                                                (find-file-noselect "~/org/projects.org")))
+          (message "Sent to project")))))))
 
 (defcustom a3madkour/project-wip-limit 3
   "Maximum number of concurrently active projects."
@@ -441,7 +439,9 @@ BASE-FN takes a color and returns the base face plist."
                  (1+ count) a3madkour/project-wip-limit))))))
 
 (defun a3madkour/create-project ()
-  "Create a new project heading in projects.org with required properties."
+  "Create a new project heading in projects.org with required properties.
+When called from code, returns a marker to the new project heading.
+When called interactively, also switches to the projects buffer."
   (interactive)
   (let* ((name (read-string "Project name: "))
          (done-enough (read-string "Done enough (what does finished look like?): "))
@@ -453,7 +453,6 @@ BASE-FN takes a color and returns the base face plist."
          (has-repo (yes-or-no-p "Does this project have a git repo? "))
          (repo (when has-repo (read-directory-name "Repo path: ")))
          (goal-value (if (string-empty-p goal) "exploratory" goal)))
-    ;; Enforce WIP limit — hard block, no override
     (when (string= status "active")
       (a3madkour/check-wip-limit))
     (let ((heading (format (concat "* %s"
@@ -471,15 +470,21 @@ BASE-FN takes a color and returns the base face plist."
                            goal-value
                            (if repo
                                (format ":REPO: %s\n" (abbreviate-file-name repo))
-                             ""))))
+                             "")))
+          project-marker)
       (with-current-buffer (find-file-noselect "~/org/projects.org")
         (goto-char (point-max))
         (insert heading)
         (save-buffer)
-        (search-backward "** TODO ")
+        (re-search-backward (format "^\\* %s" (regexp-quote name)))
+        (setq project-marker (point-marker)))
+      (when (called-interactively-p 'any)
+        (switch-to-buffer (find-file-noselect "~/org/projects.org"))
+        (goto-char (marker-position project-marker))
+        (re-search-forward "^\\*\\* TODO ")
         (end-of-line))
-      (switch-to-buffer (find-file-noselect "~/org/projects.org"))
-      (message "Created project: %s" name))))
+      (message "Created project: %s" name)
+      project-marker)))
 
 (defun a3madkour/create-project-notes ()
   "Create an org-roam note for the project at point and link it."
