@@ -3,11 +3,15 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-10 Fri]
+:LAST_MODIFIED: [2026-04-12 Sun]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
+;;Phone config
+(when (eq system-type 'android)
+  (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin" (getenv "PATH")))
+  (push "/data/data/com.termux/files/usr/bin" exec-path))
 ;; Ensure Emacs loads the most recent byte-compiled files.
 (setq load-prefer-newer t)
 
