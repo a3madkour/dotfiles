@@ -12,7 +12,8 @@
 (when (eq system-type 'android)
   (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin" (getenv "PATH")))
   (push "/data/data/com.termux/files/usr/bin" exec-path)
-  (setq touch-screen-display-keyboard t))
+  (setq touch-screen-display-keyboard t)
+  (setq overriding-text-conversion-style nil))
 ;; Ensure Emacs loads the most recent byte-compiled files.
 (setq load-prefer-newer t)
 
