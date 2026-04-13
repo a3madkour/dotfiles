@@ -2302,6 +2302,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  (evil-insert 1))))
 
 (use-package citar
+  :defer nil
   :no-require
   :custom
   (citar-templates
