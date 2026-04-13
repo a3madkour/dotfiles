@@ -13,6 +13,7 @@
   (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin" (getenv "PATH")))
   (push "/data/data/com.termux/files/usr/bin" exec-path)
   (setq touch-screen-display-keyboard t)
+  (set-fontset-font t 'emoji '("Noto Emoji" . "iso10646-1") nil 'prepend)
   (setq overriding-text-conversion-style nil))
 ;; Ensure Emacs loads the most recent byte-compiled files.
 (setq load-prefer-newer t)
