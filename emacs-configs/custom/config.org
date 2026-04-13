@@ -3484,7 +3484,6 @@ _SPC_ cancel    _o_nly this      _d_elete
 ;; Non-insert mode keymaps
 (general-def
   :states '(normal visual motion)
-  "u" 'undo
   "|"
   '(lambda () (interactive) (org-agenda nil "k")) ;; Opens my n custom org-super-agenda view
   "C-|"
