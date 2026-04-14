@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-12 Sun]
+:LAST_MODIFIED: [2026-04-14 Tue]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -237,6 +237,91 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/get-current-season ()
+  "Get the current season heading from projects.org."
+  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
+    (save-excursion
+      (goto-char (point-min))
+      (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
+          (replace-regexp-in-string "\\s-*:[[:alnum:]_@:]+:$" "" (match-string 1))
+        "No season set"))))
+
+(defun a3madkour/get-current-season-tags ()
+  "Get the tags from the current season heading in projects.org."
+  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
+    (save-excursion
+      (goto-char (point-min))
+      (if (re-search-forward "^\\* Current Season:" nil t)
+          (org-get-tags)
+        nil))))
+
+(defun a3madkour/get-habit-tags ()
+  "Collect all unique tags from habit entries in actions.org."
+  (with-current-buffer (find-file-noselect (a3madkour/org-file "actions.org"))
+    (delete-dups
+     (apply #'append
+            (org-map-entries
+             (lambda ()
+               (org-get-tags))
+             "STYLE=\"habit\"")))))
+
+(defun a3madkour/select-season-tags ()
+  "Prompt user to select tags for the new season from existing habit tags or enter new ones."
+  (let* ((existing (a3madkour/get-habit-tags))
+         (selected '())
+         (done nil))
+    (while (not done)
+      (let* ((choices (append
+                       (cl-remove-if (lambda (tag) (member tag selected)) existing)
+                       '("-- Enter new tag --" "-- Done --")))
+             (choice (completing-read
+                      (format "Season tags %s: " (or selected '("(none yet)")))
+                      choices nil nil)))
+        (cond
+         ((string= choice "-- Done --")
+          (setq done t))
+         ((string= choice "-- Enter new tag --")
+          (let ((new-tag (read-string "New tag: ")))
+            (when (and (not (string-empty-p new-tag))
+                       (not (member new-tag selected)))
+              (push new-tag selected))))
+         ((not (string-empty-p choice))
+          (unless (member choice selected)
+            (push choice selected))))))
+    (nreverse selected)))
+
+(defun a3madkour/org-roam-find-in-progress ()
+  "Find org-roam reference notes that are mid-pipeline."
+  (interactive)
+  (let* ((rows (org-roam-db-query
+                [:select [file title properties]
+                 :from nodes
+                 :where (like properties '"%PROGRESS%")]))
+         (candidates
+          (cl-loop for (file title props) in rows
+                   for progress = (cdr (assoc "PROGRESS" props))
+                   when (and progress (not (string= progress "done")))
+                   collect (cons title file))))
+    (if candidates
+        (find-file (cdr (assoc (completing-read "In progress: " candidates)
+                               candidates)))
+      (message "No in-progress notes found"))))
+
+(defun a3madkour/org-roam-advance-pipeline ()
+  "Advance the PROGRESS property to the next stage."
+  (interactive)
+  (let* ((current (or (org-entry-get nil "PROGRESS") "none"))
+         (stages '("none" "highlighting" "ref-notes" "main-notes" "done"))
+         (next-idx (1+ (cl-position current stages :test #'string=)))
+         (next (if (< next-idx (length stages))
+                   (nth next-idx stages)
+                 "done")))
+    (save-excursion
+      (goto-char (point-min))
+      (org-set-property "PROGRESS" next))
+    (message "Progress: %s → %s" current next)))
+
+
 (defun a3madkour/reset-checkboxes-on-repeat ()
   "Reset checkboxes when a repeating task is marked done."
   (when (and (org-get-repeat)
@@ -632,47 +717,87 @@ When called interactively, also switches to the projects buffer."
 			(match-string 1)
           "No season set"))))
 
-  ;; Start a new season, archiving the old one
-  (defun a3madkour/rotate-season ()
-	"Archive the current season and start a new one."
-	(interactive)
-	(let ((name (read-string "New season name: "))
-          (weeks (read-number "How many weeks: " 6)))
-	  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-		(save-excursion
-          (goto-char (point-min))
-          ;; Archive old season if it exists
-          (when (re-search-forward "^\\* Current Season:" nil t)
-			(beginning-of-line)
-			(let ((accomplished (read-string "What did you accomplish this season? ")))
-              ;; Rename to ARCHIVE
-              (re-search-forward "Current Season:" nil t)
-              (replace-match "ARCHIVE Season:")
-              ;; Add accomplishments before the next heading
-              (if (re-search-forward "^\\*" nil t)
-                  (progn (beginning-of-line) (forward-line -1))
-				(goto-char (point-max)))
-              (end-of-line)
-              (insert "\n  Accomplished: " accomplished)))
-          ;; Insert new season at top, after any #+TITLE/#+CATEGORY lines
-          (goto-char (point-min))
-          (while (looking-at "^[#]")
-			(forward-line 1))
-          (when (looking-at "^$") (forward-line 1))
-          (insert (format "* Current Season: %s (%s — %s)\n"
-                          name
-                          (format-time-string "%B %Y")
-                          (format-time-string "%B %Y"
-                                              (time-add (current-time)
-														(days-to-time (* weeks 7))))))
-          (insert (format "  :PROPERTIES:\n  :START: %s\n  :END:   %s\n  :END:\n"
-                          (format-time-string "[%Y-%m-%d %a]")
-                          (format-time-string "[%Y-%m-%d %a]"
-                                              (time-add (current-time)
-														(days-to-time (* weeks 7))))))
-          (insert "  Active: \n  Inactive: \n\n"))
-		(save-buffer)
-		(message "Started season: %s" name))))
+
+
+(defun a3madkour/setup-agenda-commands ()
+  "Set up agenda commands with current season context."
+  (let* ((season-tags (a3madkour/get-current-season-tags))
+         (core-group '(:name "🔁 Core Habits" :and (:habit t :tag "core") :order 1))
+         (seasonal-group (when season-tags
+                           `(:name "🔁 Seasonal Habits"
+                             :and (:habit t :tag ,(mapconcat #'identity season-tags "|"))
+                             :order 2)))
+         (super-groups (delq nil
+                        (list
+                         '(:name "⏰ Scheduled" :and (:time-grid t :scheduled today :not (:habit t)) :order 0)
+                         core-group
+                         seasonal-group
+                         '(:name "⚠️ Overdue" :scheduled past :deadline past :order 3)
+                         '(:discard (:habit t))))))
+    (setq org-agenda-custom-commands
+          `(("d" "Dashboard"
+             ((agenda ""
+                      ((org-agenda-span 'day)
+                       (org-super-agenda-groups ',super-groups)))
+
+              (tags-todo "thisweek"
+                         ((org-agenda-overriding-header "📌 This Week")))
+
+              (tags-todo "+ENERGY=\"high\"-inactive"
+                         ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
+                          (org-agenda-sorting-strategy '(priority-down effort-up))))
+
+              (tags-todo "+ENERGY=\"medium\"-inactive"
+                         ((org-agenda-overriding-header "⚡ Medium Energy")
+                          (org-agenda-sorting-strategy '(priority-down effort-up))))
+
+              (tags-todo "+ENERGY=\"low\"-inactive"
+                         ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
+                          (org-agenda-sorting-strategy '(priority-down effort-up)))))
+             ((org-agenda-block-separator nil)
+              (org-agenda-overriding-header
+               (concat "Season: " (a3madkour/get-current-season) "\n"))))))))
+
+(defun a3madkour/rotate-season ()
+  "Archive the current season and start a new one."
+  (interactive)
+  (let* ((name (read-string "New season name: "))
+         (weeks (read-number "How many weeks: " 6))
+         (tags (a3madkour/select-season-tags))
+         (end-time (time-add (current-time) (days-to-time (* weeks 7))))
+         (start-str (format-time-string "[%Y-%m-%d %a]"))
+         (end-str (format-time-string "[%Y-%m-%d %a]" end-time))
+         (start-month (format-time-string "%B %Y"))
+         (end-month (format-time-string "%B %Y" end-time))
+         (tag-string (if tags
+                         (concat "  :" (mapconcat #'identity tags ":") ":")
+                       "")))
+    (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
+      (save-excursion
+        (goto-char (point-min))
+        ;; Archive old season if it exists
+        (when (re-search-forward "^\\* Current Season:" nil t)
+          (beginning-of-line)
+          (let ((accomplished (read-string "What did you accomplish this season? ")))
+            (re-search-forward "Current Season:" nil t)
+            (replace-match "ARCHIVE Season:")
+            (if (re-search-forward "^\\*" nil t)
+                (progn (beginning-of-line) (forward-line -1))
+              (goto-char (point-max)))
+            (end-of-line)
+            (insert "\n  Accomplished: " accomplished)))
+        (goto-char (point-min))
+        (while (looking-at "^[#]")
+          (forward-line 1))
+        (when (looking-at "^$") (forward-line 1))
+        (insert (format "* Current Season: %s (%s — %s)%s\n"
+                        name start-month end-month tag-string))
+        (insert (format "  :PROPERTIES:\n  :START: %s\n  :END:   %s\n  :END:\n"
+                        start-str end-str)))
+      (save-buffer)
+      (message "Started season: %s" name)
+      (a3madkour/setup-agenda-commands))))
+
 
   (defun a3madkour/org-roam-nodes-by-tag (tag)
 	"Return a list of org-roam nodes that have TAG."
@@ -1604,7 +1729,19 @@ Fd support for dired
   (setq xref-show-xrefs-function #'consult-xref
 		xref-show-definitions-function #'consult-xref)
   :config
-  (setq consult-narrow-key "<"))
+  (setq consult-narrow-key "<")
+  (defun a3madkour/consult-line-evil-sync (&rest _)
+  "Sync the last consult-line query to evil's search state."
+  (when-let ((query (car consult--line-history)))
+    (setq evil-flash-timer (run-at-time 0.05 nil #'evil-flash-hook))
+    (evil-push-search-history query t)
+    (isearch-update-ring query)
+    (setq isearch-string query)
+    (evil-search query t t)))
+
+(advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync)
+
+  )
 #+end_src
 * Consult Flycheck
 #+begin_src emacs-lisp
@@ -2345,7 +2482,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 
   (setq org-enforce-todo-dependencies t)
   (setq org-enforce-todo-checkbox-dependencies t)
-
+  
   (setq org-preview-latex-default-process 'dvisvgm)
   (setq org-global-properties
 		'(("LAST_MODIFIED_ALL" . "")
@@ -2382,6 +2519,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		'(;; Life areas
 		  ("artistic" . ?a) ("intellectual" . ?i) ("health" . ?h)
 		  ("career" . ?c) ("social" . ?s)
+		  ("core" . ?C) 
 		  ;; Project state
 		  ("project" . ?p) ("active" . ?A) ("inactive" . ?R)
 		  ;; Consumption
@@ -2389,36 +2527,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		  ;; Routine
 		  ("routine" . ?o)))
 
-
-  (setq org-agenda-custom-commands
-		'(("d" "Dashboard"
-		   ;; Section 1: Today's schedule and habits
-		   ((agenda ""
-					((org-agenda-span 'day)
-					 (org-super-agenda-groups
-					  '((:name "⏰ Scheduled" :time-grid t :scheduled today :order 0)
-						(:name "🔁 Habits" :habit t :order 1)
-						(:name "⚠️ Overdue" :scheduled past :deadline past :order 2)))))
-			
-			;; Section 2: This week's commitments
-			(tags-todo "thisweek"
-					   ((org-agenda-overriding-header "📌 This Week")))
-
-			;; Section 3: Available tasks by energy (active projects only)
-			(tags-todo "+ENERGY=\"high\"-inactive"
-					   ((org-agenda-overriding-header "🔥 High Energy (medicated window)")
-						(org-agenda-sorting-strategy '(priority-down effort-up))))
-			
-			(tags-todo "+ENERGY=\"medium\"-inactive"
-					   ((org-agenda-overriding-header "⚡ Medium Energy")
-						(org-agenda-sorting-strategy '(priority-down effort-up))))
-			
-			(tags-todo "+ENERGY=\"low\"-inactive"
-					   ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
-						(org-agenda-sorting-strategy '(priority-down effort-up)))))
-		   ((org-agenda-block-separator nil)
-			(org-agenda-overriding-header
-			 (concat "Season: " (a3madkour/get-current-season) "\n")))))))
+(a3madkour/setup-agenda-commands)
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
@@ -3174,7 +3283,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  "rI" #'org-id-get-create
  "rm" #'org-roam-buffer-toggle
  "rM" #'org-roam-buffer-display-dedicated
- "rc" #'org-roam-capture
+ "rp" #'(a3madkour/org-roam-advance-pipeline :which-key "advance the current node's progress")
+ "rc" #'(a3madkour/org-roam-find-in-progress :which-key "notes currently being in progress")
  "rF" #'org-roam-refile
  "rR" #'org-roam-link-replace-all
  "rd"
@@ -3582,9 +3692,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "g"
  '(org-goto :which-key "goto heading")
  "t"
- '(a3madkour/add-scheduled-todo :which-key "add scheduled todo")
- "T"
- '(a3madkour/add-scheduled-headline-todo :which-key "add new datetree deadline todo")
+ '(org-set-tags-command :which-key "org set tags")
  "p"
  '(org-set-property :which-key "set property")
  "e"
