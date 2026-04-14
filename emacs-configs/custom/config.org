@@ -336,6 +336,7 @@ because `org-todo' runs `org-blocker-hook' directly, not through
 `org-entry-blocked-p'."
   (let ((org-enforce-todo-checkbox-dependencies nil))
     (apply orig-fn args)))
+
 (defun a3madkour/get-refile-marker (file headline)
   "Get a marker for HEADLINE in FILE."
   (with-current-buffer (find-file-noselect file)
@@ -1733,15 +1734,11 @@ Fd support for dired
   (defun a3madkour/consult-line-evil-sync (&rest _)
   "Sync the last consult-line query to evil's search state."
   (when-let ((query (car consult--line-history)))
-    (setq evil-flash-timer (run-at-time 0.05 nil #'evil-flash-hook))
-    (evil-push-search-history query t)
+    (save-excursion
+      (evil-search query t t))
     (isearch-update-ring query)
-    (setq isearch-string query)
-    (evil-search query t t)))
-
-(advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync)
-
-  )
+    (evil-push-search-history query t)))
+   (advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync))
 #+end_src
 * Consult Flycheck
 #+begin_src emacs-lisp
