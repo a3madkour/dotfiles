@@ -2527,7 +2527,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		  ;; Routine
 		  ("routine" . ?o)))
 
-(a3madkour/setup-agenda-commands)
+(a3madkour/setup-agenda-commands))
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
