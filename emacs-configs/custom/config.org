@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-14 Tue]
+:LAST_MODIFIED: [2026-04-15 Wed]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -3806,7 +3806,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "cj"
  '(org-clock-goto :which-key "jump to clock")
  "cp"
- '(org-pomodoro :which-key "Start or stop pomodoro"))
+ '(org-pomodoro :which-key "Start or stop pomodoro")
 
  ;; transclusion stuff
  "l"
