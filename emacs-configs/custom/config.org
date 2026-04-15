@@ -104,6 +104,7 @@
 
 * General configuration
 #+begin_src emacs-lisp
+(require 'bibtex)
 (defvar a3madkour/org-base-dir
   (if (eq system-type 'android)
       "/sdcard/org"
