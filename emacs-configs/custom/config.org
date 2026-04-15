@@ -1165,6 +1165,22 @@ the file is not in `org-roam-directory' or has no title."
         (vterm-toggle-cd-show)
         (vterm-send-string (concat "cd " root))
         (vterm-send-return)))))
+
+
+(defun a3madkour/sort-by-active-tag ()
+  "Sort top-level headings so :active: comes first and :inactive: comes last."
+  (interactive)
+  (save-excursion
+    (goto-char (point-min))
+    (set-mark (point-max))
+    (org-sort-entries nil ?f
+                      (lambda ()
+                        (let ((tags (org-get-tags nil t)))
+                          (cond
+                           ((member "active" tags) "1")
+                           ((member "inactive" tags) "3")
+                           (t "2")))))
+    (deactivate-mark)))
 #+end_src
 ** Adapted from doom
 #+begin_src emacs-lisp
