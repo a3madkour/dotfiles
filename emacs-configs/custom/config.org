@@ -433,6 +433,7 @@ BASE-FN takes a color and returns the base face plist."
 						(with-current-buffer (find-file-noselect (a3madkour/org-file "someday.org"))
 						  (point-max))))
       (message "Sent to someday"))
+	 
      ;; ---- ACTION ----
      ((string= destination "action")
       (let ((is-habit (yes-or-no-p "Is this a recurring habit? ")))
@@ -3073,6 +3074,7 @@ Debuging adapter protocol for emacs
  "fp" `((lambda () (interactive) (find-file ,(a3madkour/org-file "projects.org"))) :which-key "projects")
  "fa" `((lambda () (interactive) (find-file ,(a3madkour/org-file "actions.org"))) :which-key "actions")
  "fq" `((lambda () (interactive) (find-file ,(a3madkour/org-file "queue.org"))) :which-key "queue")
+ "fc" `((lambda () (interactive) (find-file ,(expand-file-name "config.org" user-emacs-directory))) :which-key "config")
  "ff"
  '(find-file :which-key "find file")
  "fd"
@@ -3755,6 +3757,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(org-clock-out :which-key "clock out")
  "cj"
  '(org-clock-goto :which-key "jump to clock")
+ "cp"
+ '(org-pomodoro :which-key "Start or stop pomodoro"))
 
  ;; transclusion stuff
  "l"
