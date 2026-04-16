@@ -239,6 +239,69 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/archive-subtree-to-file (&optional archive-file)
+  "Archive the subtree at point. Use ARCHIVE-FILE if provided, otherwise use org-archive-location."
+  (org-back-to-heading t)
+  (if archive-file
+      (let ((beg (point))
+            (end (save-excursion (org-end-of-subtree t t) (point))))
+        (let ((text (buffer-substring beg end)))
+          (make-directory (file-name-directory archive-file) t)
+          (with-current-buffer (find-file-noselect archive-file)
+            (goto-char (point-max))
+            (unless (bolp) (insert "\n"))
+            (insert text)
+            (unless (bolp) (insert "\n"))
+            (save-buffer))
+          (delete-region beg (min end (point-max)))
+          (deactivate-mark)
+          (save-buffer)))
+    (org-archive-subtree)))
+
+
+(defun a3madkour/complete-project ()
+  "Mark a project as DONE, record accomplishments, and archive."
+  (interactive)
+  (while (and (not (member "project" (org-get-tags nil t)))
+              (org-up-heading-safe)))
+  (unless (member "project" (org-get-tags nil t))
+    (user-error "Not inside a project"))
+  (org-back-to-heading t)
+  (let ((title (org-get-heading t t t t))
+        (done-enough (org-entry-get nil "DONE_ENOUGH")))
+    (unless (yes-or-no-p (format "Complete \"%s\"? " title))
+      (user-error "Cancelled"))
+    (let ((accomplished (read-string
+                         (format "What did you accomplish? (Goal was: %s)\n> "
+                                 (or done-enough "not set")))))
+      (org-set-property "ACCOMPLISHED" accomplished)
+      (org-set-property "COMPLETED" (format-time-string "[%Y-%m-%d %a]"))
+      (org-toggle-tag "active" 'off)
+      (org-toggle-tag "resting" 'off)
+      (org-toggle-tag "done" 'on)
+      (a3madkour/archive-subtree-to-file)
+      (message "Completed project: %s" title))))
+
+(defun a3madkour/drop-project ()
+  "Drop a project without shame. Record why and archive."
+  (interactive)
+  (while (and (not (member "project" (org-get-tags nil t)))
+              (org-up-heading-safe)))
+  (unless (member "project" (org-get-tags nil t))
+    (user-error "Not inside a project"))
+  (org-back-to-heading t)
+  (let ((title (org-get-heading t t t t)))
+    (unless (yes-or-no-p (format "Drop \"%s\"? " title))
+      (user-error "Cancelled"))
+    (let ((reason (read-string "Why are you dropping this? (No judgment): ")))
+      (org-set-property "DROP_REASON" reason)
+      (org-set-property "DROPPED" (format-time-string "[%Y-%m-%d %a]"))
+      (org-toggle-tag "active" 'off)
+      (org-toggle-tag "resting" 'off)
+      (org-toggle-tag "dropped" 'on)
+      (a3madkour/archive-subtree-to-file)
+      (message "Dropped project: %s" title))))
+
 (defun a3madkour/get-current-season ()
   "Get the current season heading from projects.org."
   (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
@@ -2522,6 +2585,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (setq org-todo-keywords
 		'((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|" "DONE(d!)" "DROP(x)")))
 
+  (setq org-archive-location (a3madkour/org-file "Archive/%s_archieve::datetree/"))
   (setq org-todo-keyword-faces
 		'(("NEXT" . (:foreground "#50FA7B" :weight bold))
 		  ("WAIT" . (:foreground "#9FC59F"))
@@ -3375,7 +3439,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(nil :which-key "project")
  "pr"
  '(a3madkour/project-recentf :which-key "project-recentf")
- "pf"
+ "pR"
  '(a3madkour/rotate-season :which-key "rotate season")
  "pa"
  '(a3madkour/project-add-project-task :which-key "add project task")
@@ -3393,6 +3457,10 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3madkour/show-project-status :which-key "show project status")
  "pc"
  '(a3madkour/create-project :which-key "create project")
+ "pf"
+ '(a3madkour/complete-project :which-key "finish project")
+ "pD"
+ '(a3madkour/drop-project :which-key "drop project")
  "pS"
  'project-save-buffers
  "po"
