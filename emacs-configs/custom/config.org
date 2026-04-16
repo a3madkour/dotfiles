@@ -2584,7 +2584,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-to-list 'org-structure-template-alist '("json" . "src json"))
   (add-hook 'org-after-todo-state-change-hook 'a3madkour/force-time-after-todo)
   (add-hook 'org-after-todo-state-change-hook
-          #'a3madkour/reset-checkboxes-on-repeat)
+			#'a3madkour/reset-checkboxes-on-repeat)
   (add-hook 'org-after-todo-state-change-hook #'a3madkour/deactivate-on-done)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
@@ -2608,26 +2608,30 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		'(("LAST_MODIFIED_ALL" . "")
 		  ("ENERGY_ALL" . "high medium low")))	
   (setq org-refile-targets
-      `((,(a3madkour/org-file "actions.org") :maxlevel . 1)
-        (,(a3madkour/org-file "projects.org") :maxlevel . 2)
-        (,(a3madkour/org-file "someday.org") :maxlevel . 1)))
+		`((,(a3madkour/org-file "actions.org") :maxlevel . 1)
+          (,(a3madkour/org-file "projects.org") :maxlevel . 2)
+          (,(a3madkour/org-file "someday.org") :maxlevel . 1)))
   
   (setq org-agenda-files
-      (list (a3madkour/org-file "inbox.org")
-            (a3madkour/org-file "actions.org")
-            (a3madkour/org-file "queue.org")
-            (a3madkour/org-file "projects.org")))
+		(list (a3madkour/org-file "inbox.org")
+              (a3madkour/org-file "actions.org")
+              (a3madkour/org-file "queue.org")
+              (a3madkour/org-file "projects.org")))
   
   (setq org-agenda-dim-blocked-tasks 'invisible)
   (advice-add 'org-entry-blocked-p :around #'a3madkour/ignore-checkbox-blocking-for-agenda)
-(setq org-capture-templates
-      `(("i" "Inbox" entry (file ,(a3madkour/org-file "inbox.org"))
-         "* TODO %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
-         :empty-lines 1)
-        ("n" "New interest (parking lot)" entry
-         (file+headline ,(a3madkour/org-file "someday.org") "Parking Lot")
-         "* %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
-         :empty-lines 1)))
+  (setq org-capture-templates
+		`(("i" "Inbox" entry (file ,(a3madkour/org-file "inbox.org"))
+           "* TODO %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
+           :empty-lines 1)
+		  ("f" "Fantasizing log" table-line
+		   (file ,(a3madkour/org-file "Health/mental-health/fantasizing.org"))
+		   "| %U | %(let ((m (string-to-number (read-string \"Minutes: \")))) (format \"%d:%02d\" (/ m 60) (mod m 60))) | %^{Did you resist?|T|F|Partially} | %^{Context} |")
+	  ("n" "New interest (parking lot)" entry
+           (file+headline ,(a3madkour/org-file "someday.org") "Parking Lot")
+           "* %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
+           :empty-lines 1)))
+  
   (setq org-stuck-projects
 		'("+project+active/-DONE-DROP"  ; How to identify projects
 		  ("NEXT" "WAIT")               ; Keywords that mean "not stuck"
@@ -2647,7 +2651,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		  ;; Routine
 		  ("routine" . ?o)))
 
-(a3madkour/setup-agenda-commands))
+  (a3madkour/setup-agenda-commands))
 #+end_src
 ** Org-habits-stats
 #+begin_src emacs-lisp
