@@ -121,16 +121,21 @@
 (setq ns-pop-up-frames nil)
 (setq org-roam-capture-templates
       '(("d" "default" plain "%?"
-         :target (file+head "${slug}.org"
-                            "#+title: ${title}\n#+filetags: :TODO:\n* ${title}\n* References:\n"
-  							)
-         :unnarrowed t)
+	 :target (file+head "${slug}.org"
+			    "#+title: ${title}\n#+filetags: :TODO:\n* ${title}\n* References:\n"
+							)
+	 :unnarrowed t)
+		("s" "solution" plain "%?"
+		  :target (file+head
+				   "${slug}.org"
+				   ":PROPERTIES:\n:ID: %(org-id-new)\n:END:\n#+title: ${title}\n#+filetags: :solution:\n\n* Problem\n\n* Solution\n\n* Why this works\n")
+		  :unnarrowed t)
+		("p" "project" plain "%?"
+		 :target (file+head
+				  "projects/${slug}.org"
+				  ":PROPERTIES:\n:ID: %(org-id-new)\n:END:\n#+title: ${title}\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n")
+		 :unnarrowed t)))
 
-  		("p" "project" plain "%?"
-  		 :target (file+head
-  				  "projects/${slug}.org"
-  				  ":PROPERTIES:\n:ID: %(org-id-new)\n:END:\n#+title: ${title}\n#+filetags: :project:\n\n* Context\n\n* Decisions\n\n* References\n")
-  		 :unnarrowed t)))
 (setq
  org-ref-notes (a3madkour/org-file "notes/ref-notes")
  org-roam-dir (a3madkour/org-file "notes")
@@ -216,24 +221,24 @@
   (add-to-list 'eglot-server-programs
     		   '(org-mode . ("harper-ls" "--stdio"))))
 (setq-default eglot-workspace-configuration
-	      '(:harper-ls (:userDictPath ""
-									  :fileDictPath ""
-									  :linters (:SpellCheck t
-															:SpelledNumbers :json-false
-															:AnA t
-															:SentenceCapitalization t
-															:UnclosedQuotes t
-															:WrongQuotes :json-false
-															:LongSentences t
-															:RepeatedWords t
-															:Spaces t
-															:Matcher t
-															:CorrectNumberSuffix t)
-									  :codeActions (:ForceStable :json-false)
-									  :markdown (:IgnoreLinkTitle :json-false)
-									  :diagnosticSeverity "hint"
-									  :isolateEnglish :json-false
-									  :dialect "American")))
+			  '(:harper-ls (:userDictPath ""
+										  :fileDictPath ""
+										  :linters (:SpellCheck t
+																:SpelledNumbers :json-false
+																:AnA t
+																:SentenceCapitalization t
+																:UnclosedQuotes t
+																:WrongQuotes :json-false
+																:LongSentences t
+																:RepeatedWords t
+																:Spaces t
+																:Matcher t
+																:CorrectNumberSuffix t)
+										  :codeActions (:ForceStable :json-false)
+										  :markdown (:IgnoreLinkTitle :json-false)
+										  :diagnosticSeverity "hint"
+										  :isolateEnglish :json-false
+										  :dialect "American")))
 
 #+end_src
 * My functions
