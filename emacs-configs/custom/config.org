@@ -258,7 +258,6 @@
           (save-buffer)))
     (org-archive-subtree)))
 
-
 (defun a3madkour/complete-project ()
   "Mark a project as DONE, record accomplishments, and archive."
   (interactive)
@@ -267,8 +266,18 @@
   (unless (member "project" (org-get-tags nil t))
     (user-error "Not inside a project"))
   (org-back-to-heading t)
-  (let ((title (org-get-heading t t t t))
-        (done-enough (org-entry-get nil "DONE_ENOUGH")))
+  (let* ((title (org-get-heading t t t t))
+         (done-enough (org-entry-get nil "DONE_ENOUGH"))
+         (beg (point))
+         (end (save-excursion
+                (outline-next-heading)
+                (point)))
+         (body (buffer-substring-no-properties beg end))
+         (has-notes (string-match-p "\\[\\[id:" body)))
+    (when (and (not has-notes)
+               (yes-or-no-p "This project has no linked notes. Create one before completing? "))
+      (a3madkour/create-project-notes)
+      (user-error "Created notes — complete the project when you're done writing"))
     (unless (yes-or-no-p (format "Complete \"%s\"? " title))
       (user-error "Cancelled"))
     (let ((accomplished (read-string
