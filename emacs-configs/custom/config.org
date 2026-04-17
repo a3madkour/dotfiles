@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-15 Wed]
+:LAST_MODIFIED: [2026-04-16 Thu]
 :END:
 * TODO Go through the config and cite all the sources of information
 * Early Init
@@ -244,6 +244,16 @@
 * My functions
 #+NAME: my_funcs
 #+begin_src emacs-lisp
+(defun a3madkour/org-roam-find-by-tag ()
+  "Find org-roam nodes filtered by tag."
+  (interactive)
+  (let ((tag (completing-read "Tag: "
+              (seq-uniq (seq-mapcat #'org-roam-node-tags
+                                    (org-roam-node-list))))))
+    (org-roam-node-find nil nil
+                        (lambda (node)
+                          (member tag (org-roam-node-tags node))))))
+
 (defun a3madkour/archive-subtree-to-file (&optional archive-file)
   "Archive the subtree at point. Use ARCHIVE-FILE if provided, otherwise use org-archive-location."
   (org-back-to-heading t)
@@ -3404,12 +3414,12 @@ _SPC_ cancel    _o_nly this      _d_elete
  "rf" '(a3madkour/org-roam-node-find-no-refs :which-key "org roam find nodes no refs")
  "rn" #'org-roam-node-find
  "rt"
+ '(a3madkour/org-roam-find-by-tag :which-key "find note by tag")
+ "rT"
  '(org-roam-dailies-goto-today :which-key "Goto today")
  "rw"
  '(a3madkour/create-weekly-summary :which-key "Create weekly summary")
  "rr" #'org-roam-ref-find
- "rt"
- '(org-roam-dailies-goto-today :which-key "Goto today")
  "rg" #'org-roam-graph
  "ri" #'org-roam-node-insert
  "rI" #'org-id-get-create
