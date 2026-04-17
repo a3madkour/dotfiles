@@ -2530,8 +2530,9 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  (when (search-forward ":END:" nil t)
 		(beginning-of-line)
 		(insert ":NOTER_DOCUMENT: ")
-		(when note-path-clean (insert note-path-clean))
-		(insert "\n")
+		(when note-path-clean
+		  (insert (concat "~/" (replace-regexp-in-string ".*Sync/" "Sync/" note-path-clean))))
+		(insert "\n")	
 		(insert ":DATE_CREATED: ")
 		(insert (format-time-string "[%Y-%m-%d %a]"))
 		(insert "\n")
@@ -2586,6 +2587,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :hook (org-mode . a3madkour/org-font-setup)
   :hook (org-agenda-mode . org-super-agenda-mode) ;; Start org-super-agenda
   :hook (org-capture-mode . evil-insert-state) ;; Start org-capture in Insert state by default
+  :defer nil
   :diminish org-indent-mode
   :diminish visual-line-mode
   :config
