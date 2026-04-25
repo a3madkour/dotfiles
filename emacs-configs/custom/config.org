@@ -3109,8 +3109,11 @@ Debuging adapter protocol for emacs
 #+end_src
 * Agent shell
 #+begin_src emacs-lisp
+(use-package shell-maker)
+(use-package acp)
 (use-package agent-shell
   :ensure t
+  :defer nil
   :config
 
   ;; ── OpenCode auth (use CLI-stored credentials) ──
@@ -3213,8 +3216,29 @@ Debuging adapter protocol for emacs
  "j"
  '(jump-to-register :which-key "registers")
  "x" 'org-capture
- "a" 'embark-act
  "u" '(a3madkour/process-inbox-item :which-key "process inbox item")
+
+
+
+
+ ;; Agents
+ "a" 
+ '(nil  :which-key "agents")
+ "ao"
+ '(agent-shell-opencode-start-agent :which-key "opencode")
+ "ar"
+ '(agent-shell-send-region-to :which-key "send region")
+ "ad"
+ '(agent-shell-send-dwim :which-key "send dwim")
+ "af"
+ '(agent-shell-send-file :which-key "send file")
+ "ac"
+ '(agent-shell-prompt-compose :which-key "prompt compose")
+ "ah"
+ '(agent-shell-help-menu :which-key "help menu")
+ "ab"
+ '(agent-shell-other-buffer :which-key "switch to the between viewport and shell")
+ 
  ;; Defaults and debugging
  "d"
  '(nil  :which-key "defaults and debug")
