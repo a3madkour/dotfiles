@@ -3,8 +3,9 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-16 Thu]
+:LAST_MODIFIED: [2026-04-24 Fri]
 :END:
+
 * TODO Go through the config and cite all the sources of information
 * Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
@@ -3105,6 +3106,69 @@ Debuging adapter protocol for emacs
                              (concat "target/debug/" (project-name (project-current)))
                              (project-root (project-current))))
                  :cwd dape-cwd-fn)))
+#+end_src
+* Agent shell
+#+begin_src emacs-lisp
+(use-package agent-shell
+  :ensure t
+  :config
+
+  ;; ── OpenCode auth (use CLI-stored credentials) ──
+  (setq agent-shell-opencode-authentication '((:none . t)))
+
+  ;; ── Enable @ file completion ──
+  (setq agent-shell-file-completion-enabled t)
+
+  ;; ── Use comint mode (more reliable for diffs) ──
+  (setq agent-shell-prefer-viewport nil)
+
+  ;; ── Suppress interfering modes during edits ──
+  (setopt agent-shell-write-inhibit-minor-modes
+          '(aggressive-indent-mode electric-indent-mode))
+
+  ;; ── Evil ──
+  (with-eval-after-load 'evil
+    (evil-define-key 'insert agent-shell-mode-map
+      (kbd "S-<return>") #'newline
+        (kbd "RET") #'comint-send-input)
+    (evil-define-key 'normal agent-shell-mode-map
+      (kbd "RET") #'comint-send-input))
+
+
+    ;; Diff/permission buffers in emacs state so y/n/p/q just work
+    (add-hook 'diff-mode-hook
+              (lambda ()
+                (when (string-match-p "\\*agent-shell-diff\\*" (buffer-name))
+                  (evil-emacs-state))))
+
+  ;; ── Corfu: ensure @ completion triggers ──
+  (add-hook 'agent-shell-mode-hook
+            (lambda ()
+              (setq-local corfu-auto t)
+              (setq-local corfu-auto-prefix 1)
+              (setq-local corfu-auto-delay 0.1)
+              (corfu-mode 1)))
+
+  ;; ── Fix: symlinked project dirs not found by project.el ──
+  (advice-add 'agent-shell--project-files :around
+              (lambda (orig-fn &rest args)
+                (let ((default-directory (file-truename default-directory)))
+                  (apply orig-fn args))))
+
+  ;; ── Fix: OpenCode sends oldString/newString/filePath instead of
+  ;;    old_str/new_str/path that agent-shell expects ──
+  (advice-add 'agent-shell--make-diff-info :around
+              (lambda (orig-fn &rest args)
+                (or (apply orig-fn args)
+                    (when-let* ((acp-tool-call (plist-get args :acp-tool-call))
+                                (raw-input (map-elt acp-tool-call 'rawInput))
+                                (new-text (map-elt raw-input 'newString))
+                                (old-text (or (map-elt raw-input 'oldString) "")))
+                      (append (list (cons :old old-text)
+                                    (cons :new new-text))
+                              (when-let ((path (or (map-elt raw-input 'filePath)
+                                                   (map-elt raw-input 'filepath))))
+                                (list (cons :file path)))))))))
 #+end_src
 * Themes
 #+begin_src emacs-lisp
