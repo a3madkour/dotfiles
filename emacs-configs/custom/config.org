@@ -3116,6 +3116,9 @@ Debuging adapter protocol for emacs
   :defer nil
   :config
 
+
+  (setq agent-shell-display-action
+      '(display-buffer-pop-up-window))
   ;; ── OpenCode auth (use CLI-stored credentials) ──
   (setq agent-shell-opencode-authentication '((:none . t)))
 
