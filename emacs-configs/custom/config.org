@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-24 Fri]
+:LAST_MODIFIED: [2026-04-25 Sat]
 :END:
 
 * TODO Go through the config and cite all the sources of information
@@ -48,7 +48,7 @@
 (setq file-name-handler-alist nil)
 ;;return file-name-hanlder-alist to default after loading
 (add-hook 'emacs-startup-hook
-	      (lambda ()
+	      (lambda ()The Lion Sleeps Tonight
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
 * Compile-angel
@@ -3150,6 +3150,9 @@ Debuging adapter protocol for emacs
               (setq-local corfu-auto t)
               (setq-local corfu-auto-prefix 1)
               (setq-local corfu-auto-delay 0.1)
+			  (setq-local completion-at-point-functions
+                        '(agent-shell--command-completion-at-point
+                          agent-shell--file-completion-at-point))
               (corfu-mode 1)))
 
   ;; ── Fix: symlinked project dirs not found by project.el ──
@@ -3171,7 +3174,26 @@ Debuging adapter protocol for emacs
                                     (cons :new new-text))
                               (when-let ((path (or (map-elt raw-input 'filePath)
                                                    (map-elt raw-input 'filepath))))
-                                (list (cons :file path)))))))))
+                                (list (cons :file path))))))))
+
+  ;; ── Fix: OpenCode sends empty rawInput in bash permission requests ──
+(advice-add 'agent-shell--permission-title :around
+            (lambda (orig-fn &rest args)
+              (let ((result (apply orig-fn args)))
+                (if (and result
+                         (not (string= result "bash"))
+                         (not (string= result "execute")))
+                    result
+                  ;; Original returned a generic name, try saved state
+                  (when-let* ((acp-request (plist-get args :acp-request))
+                              (tool-call-id (map-nested-elt acp-request
+                                                            '(params toolCall toolCallId)))
+                              (saved (map-nested-elt agent-shell--state
+                                                     (list :tool-calls tool-call-id)))
+                              (command (map-elt saved :command)))
+                    (if (equal (map-elt saved :kind) "execute")
+                        (concat "```console\n" command "\n```")
+                      command)))))))
 #+end_src
 * Themes
 #+begin_src emacs-lisp
