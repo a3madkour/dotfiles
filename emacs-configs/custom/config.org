@@ -1,6 +1,6 @@
 #+TITLE: My Emacs Configuration
-:PROPERTIES:
 #+author: Abdelrahman Madkour
+:PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
 :LAST_MODIFIED: [2026-04-28 Tue]
@@ -203,12 +203,7 @@
 (size-indication-mode 1)
 (frame-parameter nil 'left)
 
-;;flymake stuff
-(add-hook 'prog-mode-hook 'flymake-mode)
 
-;;flyspell stuff
-(add-hook 'text-mode-hook 'flyspell-mode)
-(add-hook 'prog-mode-hook 'flyspell-prog-mode)
 ;;for the love of god stop the ~s it is so trashy
 (setq backup-directory-alist `(("." . "~/.saves")))
 ;;get rid of startup screen
@@ -499,11 +494,27 @@ BASE-FN takes a color and returns the base face plist."
   (message "Deleted"))
 
 (defun a3madkour/inbox-to-org-roam ()
-  "Send the current inbox item to org-roam as a Zettelkasten seed."
-  (let ((title (org-get-heading t t t t)))
+  "Send the current inbox item to org-roam as a Zettelkasten seed.
+Preserves the inbox item's body as initial content of the new node."
+  (org-back-to-heading t)
+  (let* ((title (org-get-heading t t t t))
+         (body (save-excursion
+                 (org-end-of-meta-data t)
+                 (string-trim
+                  (buffer-substring-no-properties
+                   (point)
+                   (org-entry-end-position))))))
     (org-cut-subtree)
     (org-roam-capture-
-     :node (org-roam-node-create :title title))
+     :node (org-roam-node-create :title title)
+     :templates `(("d" "default" plain
+                   ,(if (string-empty-p body)
+                        "%?"
+                      (concat body "\n\n%?"))
+                   :target (file+head
+                            "${slug}.org"
+                            "#+title: ${title}\n#+filetags: :TODO:\n")
+                   :unnarrowed t)))
     (message "Sent to org-roam")))
 
 (defun a3madkour/inbox-to-someday ()
@@ -1586,8 +1597,9 @@ the file is not in `org-roam-directory' or has no title."
   (add-hook 'completion-at-point-functions #'cape-dabbrev)
   (add-hook 'completion-at-point-functions #'cape-file)
   (add-hook 'completion-at-point-functions #'cape-elisp-block)
-  (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster)
-  (advice-add 'eglot-completion-at-point :around #'cape-wrap-nonexclusive)
+  (with-eval-after-load 'eglot
+    (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster)
+    (advice-add 'eglot-completion-at-point :around #'cape-wrap-nonexclusive))
   ;; (add-hook 'completion-at-point-functions #'cape-history)
   ;; ...
   )
@@ -1862,10 +1874,6 @@ Fd support for dired
     (evil-push-search-history query t)))
    (advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync))
 #+end_src
-* Consult Flycheck
-#+begin_src emacs-lisp
-(use-package consult-flycheck)
-#+end_src
 * Consult-dash
 #+begin_src emacs-lisp
 (use-package consult-dash
@@ -1971,38 +1979,6 @@ Fd support for dired
 			 ;; genuinely want to start a new form in the middle of a word.
 			 :unless '(sp-point-before-word-p sp-point-before-same-p)))
   (smartparens-global-mode t))
-#+end_src
-* Flyspell
-#+begin_src emacs-lisp
-
-;; "Enable Flyspell mode, which highlights all misspelled words. "
-(use-package flyspell
-  :after general
-  :config
-
-  (add-to-list 'ispell-skip-region-alist '("~" "~"))
-  (add-to-list 'ispell-skip-region-alist '("=" "="))
-  (add-to-list 'ispell-skip-region-alist '("^#\\+BEGIN_SRC" . "^#\\+END_SRC"))
-  (add-to-list 'ispell-skip-region-alist '("^#\\+BEGIN_EXPORT" . "^#\\+END_EXPORT"))
-  (add-to-list 'ispell-skip-region-alist '("^#\\+BEGIN_EXPORT" . "^#\\+END_EXPORT"))
-  (add-to-list 'ispell-skip-region-alist '(":\\(PROPERTIES\\|LOGBOOK\\):" . ":END:"))
-
-  (setq ispell-extra-args '("--sug-mode=ultra"))
-
-  (setq flyspell-issue-welcome-flag nil
-		flyspell-issue-message-flag nil)
-
-  :general ;; Switches correct word from middle click to right click
-  (general-define-key :keymaps 'flyspell-mouse-map
-					  "<mouse-3>" #'ispell-word
-					  "<mouse-2>" nil)
-  (general-define-key :keymaps 'evil-motion-state-map
-					  "zz" #'ispell-word)
-  )
-
-(use-package flyspell-correct
-  :after flyspell
-  :bind (:map flyspell-mode-map ("C-;" . flyspell-correct-wrapper)))
 #+end_src
 * Git
 #+begin_src emacs-lisp
@@ -2589,17 +2565,12 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (add-hook 'org-after-todo-state-change-hook #'a3madkour/deactivate-on-done)
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
-  (add-to-list 'org-use-property-inheritance "TRIGGER")
-  (add-to-list 'org-use-property-inheritance "BLOCKER")
+  (setq org-use-property-inheritance '("TRIGGER" "BLOCKER"))
   (setq org-super-agenda-header-map nil)
   (setq org-todo-keywords
 		'((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|" "DONE(d!)" "DROP(x)")))
 
   (setq org-archive-location (a3madkour/org-file "Archive/%s_archieve::datetree/"))
-  (setq org-todo-keyword-faces
-		'(("NEXT" . (:foreground "#50FA7B" :weight bold))
-		  ("WAIT" . (:foreground "#9FC59F"))
-		  ("DROP" . (:foreground "#8C8C8C" :strike-through t))))
 
   (setq org-enforce-todo-dependencies t)
   (setq org-enforce-todo-checkbox-dependencies t)
@@ -2637,7 +2608,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 		'("+project+active/-DONE-DROP"  ; How to identify projects
 		  ("NEXT" "WAIT")               ; Keywords that mean "not stuck"
 		  nil                           ; Tags that mean "not stuck"
-		  ""))                          ; Regex that mean "not stuck"
+		  nil))                          ; Regex that mean "not stuck"
 
 
   (setq org-tag-alist
@@ -3051,14 +3022,6 @@ Setting the pipeline for exporting the notes to the website dir
                            ("integration" "integration/*")
                            (:exclude ".dir-locals.el" "*-tests.el"))))
 
-;; for vterm terminal backend:
-(use-package vterm :straight t)
-
-;; for ghostel terminal backend (libghostty):
-(use-package ghostel
-  :straight (:type git :host github :repo "dakra/ghostel"))
-
-;; install claude-code.el, using :depth 1 to reduce download size:
 (use-package claude-code
   :straight (:type git :host github :repo "stevemolitor/claude-code.el" :branch "main" :depth 1
                    :files ("*.el" (:exclude "images/*")))
@@ -3259,8 +3222,6 @@ Debuging adapter protocol for emacs
  "," 'consult-recent-file
  "TAB"
  '(perspective-map :which-key "perspective map")
- "q"
- '(save-buffers-kill-terminal :which-key "quit emacs")
  "j"
  '(jump-to-register :which-key "registers")
  "x" 'org-capture
@@ -3632,7 +3593,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "pR"
  '(a3madkour/rotate-season :which-key "rotate season")
  "pa"
- '(a3madkour/project-add-project-task :which-key "add project task")
+ '(a3madkour/add-project-task :which-key "add project task")
  "p&"
  'project-async-shell-command
  "p!"
@@ -3715,7 +3676,6 @@ _SPC_ cancel    _o_nly this      _d_elete
  "cc" 'compile
  "cp" 'project-compile
  "cC" 'recompile
- "ce" 'eval-buffer
  "cf"
  '(format-all-buffer :which-key "format buffer")
  "cr" 'eglot-rename
@@ -3730,10 +3690,10 @@ _SPC_ cancel    _o_nly this      _d_elete
  "l"
  '(nil :which-key "Language Tool")
  "lb" #'langtool-check
- "lc" #'langtool-corrct-buffer
+ "lc" #'langtool-correct-buffer
  "lm" #'langtool-show-message-at-point
  "ld" #'langtool-check-done
- "ln" #'langtool-goto-next-eror
+ "ln" #'langtool-goto-next-error
  "lp" #'langtool-goto-previous-error
  ) ;; End SPC prefix block
 
