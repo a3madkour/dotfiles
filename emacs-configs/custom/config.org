@@ -3,7 +3,7 @@
 #+author: Abdelrahman Madkour
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-04-25 Sat]
+:LAST_MODIFIED: [2026-04-28 Tue]
 :END:
 
 * TODO Go through the config and cite all the sources of information
@@ -22,7 +22,6 @@
 ;; Make Emacs Native-compile .elc files asynchronously by setting
 ;; `native-comp-jit-compilation' to t.
 (setq native-comp-jit-compilation t)
-(setq native-comp-deferred-compilation native-comp-jit-compilation)  ; Deprecated
 (setq gc-cons-percentage 0.6)
 (setq gc-cons-threshold most-positive-fixnum)
 (push '(menu-bar-lines . 0) default-frame-alist)
@@ -48,7 +47,7 @@
 (setq file-name-handler-alist nil)
 ;;return file-name-hanlder-alist to default after loading
 (add-hook 'emacs-startup-hook
-	      (lambda ()The Lion Sleeps Tonight
+	      (lambda ()
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
 * Compile-angel
@@ -119,7 +118,6 @@
 ;;stop bothering me about reload things from disk and just do it
 (setq revert-without-query '("pdf"))
 (setq use-short-answers t)
-(setq ns-pop-up-frames nil)
 (setq org-roam-capture-templates
       '(("d" "default" plain "%?"
 	 :target (file+head "${slug}.org"
@@ -830,18 +828,6 @@ When called interactively, also switches to the projects buffer."
     (message "Opened: %s" note-title)))
 
 
-;; Show current season in the dashboard
-(defun a3madkour/get-current-season ()
-  "Get the current season heading from projects.org."
-  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-    (save-excursion
-	  (goto-char (point-min))
-	  (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
-		  (match-string 1)
-        "No season set"))))
-
-
-
 (defun a3madkour/setup-agenda-commands ()
   "Set up agenda commands with current season context."
   (let* ((season-tags (a3madkour/get-current-season-tags))
@@ -1425,10 +1411,8 @@ the file is not in `org-roam-directory' or has no title."
   (require 'evil-org-agenda)
   (evil-org-agenda-set-keys))
 
-(require 'evil-org-agenda)
 (setq org-modules '(org-habit))
 (setq org-habit-graph-column 110)
-(evil-org-agenda-set-keys)
 (eval-after-load 'org
   '(org-load-modules-maybe t))
 (use-package evil-anzu
@@ -2496,7 +2480,6 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
   (setq org-super-agenda-groups
 		'((:auto-dir-name t)))
-  (org-agenda-list)
   (org-super-agenda-mode))
 #+end_src
 * Citar
@@ -3045,21 +3028,60 @@ Setting the pipeline for exporting the notes to the website dir
 (use-package elfeed-org)
 (use-package elfeed-score)
 #+end_src
-* EditorConfig
-#+begin_src emacs-lisp
-(use-package editorconfig
-  :ensure t
-  :config
-  (editorconfig-mode 1))
-#+end_src
 * Citproc
 #+begin_src emacs-lisp
 (use-package citeproc)
 #+end_src
-* Obisidian
-Heresy
+* Claude code
 #+begin_src emacs-lisp
-;;(use-package obsidian)
+;; install required inheritenv dependency:
+(use-package inheritenv
+  :straight (:type git :host github :repo "purcell/inheritenv"))
+
+(use-package monet
+  :straight (:type git :host github :repo "stevemolitor/monet"))
+;; for eat terminal backend:
+(use-package eat
+  :straight (:type git
+                   :host codeberg
+                   :repo "akib/emacs-eat"
+                   :files ("*.el" ("term" "term/*.el") "*.texi"
+                           "*.ti" ("terminfo/e" "terminfo/e/*")
+                           ("terminfo/65" "terminfo/65/*")
+                           ("integration" "integration/*")
+                           (:exclude ".dir-locals.el" "*-tests.el"))))
+
+;; for vterm terminal backend:
+(use-package vterm :straight t)
+
+;; for ghostel terminal backend (libghostty):
+(use-package ghostel
+  :straight (:type git :host github :repo "dakra/ghostel"))
+
+;; install claude-code.el, using :depth 1 to reduce download size:
+(use-package claude-code
+  :straight (:type git :host github :repo "stevemolitor/claude-code.el" :branch "main" :depth 1
+                   :files ("*.el" (:exclude "images/*")))
+  :bind-keymap
+  ("C-c c" . claude-code-command-map) ;; or your preferred key
+  ;; Optionally define a repeat map so that "M" will cycle thru Claude auto-accept/plan/confirm modes after invoking claude-code-cycle-mode / C-c M.
+  :bind
+  (:repeat-map my-claude-code-map ("M" . claude-code-cycle-mode))
+  :config
+  ;; optional IDE integration with Monet
+  (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
+  (monet-mode 1)
+
+  (claude-code-mode))
+
+(defun a3madkour/eat-send-escape ()
+  "Send a literal ESC to the eat terminal."
+  (interactive)
+  (eat-self-input 1 ?\e))
+
+(with-eval-after-load 'eat
+  (evil-define-key 'insert eat-semi-char-mode-map
+    (kbd "C-c <escape>") #'a3madkour/eat-send-escape))
 #+end_src
 * Dape
 Debuging adapter protocol for emacs
@@ -3116,9 +3138,10 @@ Debuging adapter protocol for emacs
   :defer nil
   :config
 
-
+  (setq agent-shell-anthropic-authentication
+		(agent-shell-anthropic-make-authentication :login t))
   (setq agent-shell-display-action
-      '(display-buffer-pop-up-window))
+		'(display-buffer-pop-up-window))
   ;; ── OpenCode auth (use CLI-stored credentials) ──
   (setq agent-shell-opencode-authentication '((:none . t)))
 
@@ -3136,16 +3159,16 @@ Debuging adapter protocol for emacs
   (with-eval-after-load 'evil
     (evil-define-key 'insert agent-shell-mode-map
       (kbd "S-<return>") #'newline
-        (kbd "RET") #'comint-send-input)
+      (kbd "RET") #'comint-send-input)
     (evil-define-key 'normal agent-shell-mode-map
       (kbd "RET") #'comint-send-input))
 
 
-    ;; Diff/permission buffers in emacs state so y/n/p/q just work
-    (add-hook 'diff-mode-hook
-              (lambda ()
-                (when (string-match-p "\\*agent-shell-diff\\*" (buffer-name))
-                  (evil-emacs-state))))
+  ;; Diff/permission buffers in emacs state so y/n/p/q just work
+  (add-hook 'diff-mode-hook
+            (lambda ()
+              (when (string-match-p "\\*agent-shell-diff\\*" (buffer-name))
+                (evil-emacs-state))))
 
   ;; ── Corfu: ensure @ completion triggers ──
   (add-hook 'agent-shell-mode-hook
@@ -3154,8 +3177,8 @@ Debuging adapter protocol for emacs
               (setq-local corfu-auto-prefix 1)
               (setq-local corfu-auto-delay 0.1)
 			  (setq-local completion-at-point-functions
-                        '(agent-shell--command-completion-at-point
-                          agent-shell--file-completion-at-point))
+                          '(agent-shell--command-completion-at-point
+							agent-shell--file-completion-at-point))
               (corfu-mode 1)))
 
   ;; ── Fix: symlinked project dirs not found by project.el ──
@@ -3180,23 +3203,23 @@ Debuging adapter protocol for emacs
                                 (list (cons :file path))))))))
 
   ;; ── Fix: OpenCode sends empty rawInput in bash permission requests ──
-(advice-add 'agent-shell--permission-title :around
-            (lambda (orig-fn &rest args)
-              (let ((result (apply orig-fn args)))
-                (if (and result
-                         (not (string= result "bash"))
-                         (not (string= result "execute")))
-                    result
-                  ;; Original returned a generic name, try saved state
-                  (when-let* ((acp-request (plist-get args :acp-request))
-                              (tool-call-id (map-nested-elt acp-request
-                                                            '(params toolCall toolCallId)))
-                              (saved (map-nested-elt agent-shell--state
-                                                     (list :tool-calls tool-call-id)))
-                              (command (map-elt saved :command)))
-                    (if (equal (map-elt saved :kind) "execute")
-                        (concat "```console\n" command "\n```")
-                      command)))))))
+  (advice-add 'agent-shell--permission-title :around
+              (lambda (orig-fn &rest args)
+				(let ((result (apply orig-fn args)))
+                  (if (and result
+                           (not (string= result "bash"))
+                           (not (string= result "execute")))
+                      result
+					;; Original returned a generic name, try saved state
+					(when-let* ((acp-request (plist-get args :acp-request))
+								(tool-call-id (map-nested-elt acp-request
+                                                              '(params toolCall toolCallId)))
+								(saved (map-nested-elt agent-shell--state
+                                                       (list :tool-calls tool-call-id)))
+								(command (map-elt saved :command)))
+                      (if (equal (map-elt saved :kind) "execute")
+                          (concat "```console\n" command "\n```")
+						command)))))))
 #+end_src
 * Themes
 #+begin_src emacs-lisp
@@ -3251,6 +3274,8 @@ Debuging adapter protocol for emacs
  '(nil  :which-key "agents")
  "ao"
  '(agent-shell-opencode-start-agent :which-key "opencode")
+ "ak"
+ '(agent-shell-anthropic-start-claude-code  :which-key "claude")
  "ar"
  '(agent-shell-send-region-to :which-key "send region")
  "ad"
@@ -3376,6 +3401,26 @@ Debuging adapter protocol for emacs
  '(describe-key :which-key "des. key")
  "hi"
  '(info :which-key "info")
+
+
+
+ ;; claude
+ "k"
+ '(nil :which-key "claude code")
+ "ko"
+ '(claude-code :which-key "open claude code")
+ "kr"
+ '(claude-code-send-region :which-key "send claude code region")
+ "kt"
+ '(claude-code-toggle :which-key "claude code toggle")
+ "km"
+ '(claude-code-transient :which-key "claude code transient menu")
+ "kd"
+ '(claude-code-start-in-directory :which-key "open claude code in dir")
+ "kk"
+ '(claude-code-kill :which-key "kill claude code")
+ "kc"
+ '(claude-code-send-command-with-context :which-key "send a command to claude code with region context")
 
  ;; Git
  "g"
