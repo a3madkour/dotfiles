@@ -7,7 +7,8 @@
 :END:
 
 * TODO Go through the config and cite all the sources of information
-* Early Init
+* Bootstrap
+** Early Init
 #+begin_src emacs-lisp :tangle "./early-init.el"
 ;;Phone config
 (when (eq system-type 'android)
@@ -50,7 +51,7 @@
 	      (lambda ()
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
-* Compile-angel
+** Compile-angel
 #+begin_src emacs-lisp
 (use-package compile-angel
   :ensure t
@@ -77,7 +78,7 @@
   ;; using `load' or `require'.
   (compile-angel-on-load-mode 1))
 #+end_src
-* GCMH
+** GCMH
 #+begin_src emacs-lisp
 (use-package gcmh
   :diminish gcmh-mode
@@ -1286,7 +1287,8 @@ the file is not in `org-roam-directory' or has no title."
   (+default/insert-file-path 1))
 #+end_src
 
-* Evil
+* Editor
+** Evil
 #+begin_src emacs-lisp
 (use-package evil
   :defer nil
@@ -1444,7 +1446,7 @@ the file is not in `org-roam-directory' or has no title."
   :config
   (global-evil-matchit-mode 1))
 #+end_src
-* General
+** General
 #+begin_src emacs-lisp
 (use-package general
   :defer nil
@@ -1462,7 +1464,7 @@ the file is not in `org-roam-directory' or has no title."
   )
 
 #+end_src
-* Treesit-auto
+** Treesit-auto
 #+begin_src emacs-lisp
 (use-package treesit-auto
   :custom
@@ -1471,21 +1473,7 @@ the file is not in `org-roam-directory' or has no title."
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
 #+end_src
-* Vterm
-#+begin_src emacs-lisp
-(use-package vterm
-  :ensure t
-  :config
-  (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds))
-(add-hook 'vterm-mode-hook (lambda()
-							 (goto-address-mode 1)))
-(use-package vterm-toggle
-  :config
-  (setq vtrm-toggle-cd-auto-create-buffer nil))
-;; Bind this custom function to your preferred key
-  (use-package multi-vterm :ensure t)
-#+end_src
-* Undo-fu
+** Undo-fu
 #+begin_src emacs-lisp
 (use-package undo-fu
   :config
@@ -1496,7 +1484,7 @@ the file is not in `org-roam-directory' or has no title."
   :defer nil
   :config (undo-fu-session-global-mode))
 #+end_src
-* Vundo
+** Vundo
 #+begin_src emacs-lisp
 (use-package vundo
   :defer nil
@@ -1511,7 +1499,89 @@ the file is not in `org-roam-directory' or has no title."
          ("RET" . vundo-confirm)))
 
 #+end_src
-* Recent
+** Super-save
+#+begin_src emacs-lisp
+(use-package super-save
+  :diminish super-save-mode
+  :defer 2
+  :config
+  (setq super-save-auto-save-when-idle t
+		super-save-idle-duration 5 ;; after 5 seconds of not typing autosave
+		super-save-triggers ;; Functions after which buffers are saved (switching window, for example)
+		'(evil-window-next evil-window-prev balance-windows other-window)
+		super-save-max-buffer-size 10000000)
+  (super-save-mode +1))
+#+end_src
+** Saveplace
+#+begin_src emacs-lisp
+(use-package saveplace
+  :init (setq save-place-limit 100)
+  :config (save-place-mode))
+#+end_src
+** Editorconfig
+#+begin_src emacs-lisp
+(use-package editorconfig
+  :ensure t
+  :config
+  (editorconfig-mode 1))
+#+end_src
+** Smart-parens
+#+begin_src emacs-lisp
+(use-package smartparens
+  :diminish smartparens-mode
+  :defer 1
+  :config
+  ;; Load default smartparens rules for various languages
+  (require 'smartparens-config)
+  (setq sp-max-prefix-length 25)
+  (setq sp-max-pair-length 4)
+  (setq sp-highlight-pair-overlay nil
+		sp-highlight-wrap-overlay nil
+		sp-highlight-wrap-tag-overlay nil)
+
+  (with-eval-after-load 'evil
+	(setq sp-show-pair-from-inside t)
+	(setq sp-cancel-autoskip-on-backward-movement nil)
+	(setq sp-pair-overlay-keymap (make-sparse-keymap)))
+
+  (let ((unless-list '(sp-point-before-word-p
+					   sp-point-after-word-p
+					   sp-point-before-same-p)))
+	(sp-pair "'"  nil :unless unless-list)
+	(sp-pair "\"" nil :unless unless-list))
+
+  ;; In lisps ( should open a new form if before another parenthesis
+  (sp-local-pair sp-lisp-modes "(" ")" :unless '(:rem sp-point-before-same-p))
+
+  ;; Don't do square-bracket space-expansion where it doesn't make sense to
+  (sp-local-pair '(emacs-lisp-mode org-mode markdown-mode gfm-mode)
+				 "[" nil :post-handlers '(:rem ("| " "SPC")))
+
+
+  (dolist (brace '("(" "{" "["))
+	(sp-pair brace nil
+			 :post-handlers '(("||\n[i]" "RET") ("| " "SPC"))
+			 ;; Don't autopair opening braces if before a word character or
+			 ;; other opening brace. The rationale: it interferes with manual
+			 ;; balancing of braces, and is odd form to have s-exps with no
+			 ;; whitespace in between, e.g. ()()(). Insert whitespace if
+			 ;; genuinely want to start a new form in the middle of a word.
+			 :unless '(sp-point-before-word-p sp-point-before-same-p)))
+  (smartparens-global-mode t))
+#+end_src
+** Hl-todo
+#+begin_src emacs-lisp
+(use-package hl-todo
+  :defer t
+  :hook (prog-mode . hl-todo-mode)
+  :config
+  (setq hl-todo-keyword-faces
+		'(("TODO"   . "#FF0000")
+		  ("FIXME"  . "#FF4500")
+		  ("DEBUG"  . "#A020F0")
+		  ("WIP"   . "#1E90FF"))))
+#+end_src
+** Recent
 #+begin_src emacs-lisp
 (use-package recentf
   :ensure nil
@@ -1525,210 +1595,17 @@ the file is not in `org-roam-directory' or has no title."
 		(append '(abbreviate-file-name) recentf-filename-handlers))
   (recentf-mode))
 #+end_src
-* Ebib
-#+begin_src emacs-lisp
-(use-package ebib)
-#+end_src
-* zotra
-#+begin_src emacs-lisp
-(use-package zotra)
-#+end_src
-* Uniquify
+** Uniquify
 #+begin_src emacs-lisp
 (require 'uniquify)
 (setq uniquify-buffer-name-style 'forward)
 #+end_src
-* Which key
+** Centered-cursor-mode
 #+begin_src emacs-lisp
-(use-package which-key
-  :diminish which-key-mode
-  :init
-  (which-key-mode)
-  (which-key-setup-minibuffer)
-  :config
-  (setq which-key-idle-delay 0.3)
-  (setq which-key-prefix-prefix "◉ ")
-  (setq which-key-sort-order 'which-key-key-order-alpha
-		which-key-min-display-lines 6
-		which-key-max-display-columns nil))
+(use-package centered-cursor-mode :diminish centered-cursor-mode)
 #+end_src
-* All the icons
-#+begin_src emacs-lisp
-(use-package all-the-icons
-  :if (display-graphic-p))
-(use-package all-the-icons-completion
-  :config
-  (all-the-icons-completion-mode)
-  (add-hook 'marginalia-mode-hook #'all-the-icons-completion-marginalia-setup))
-#+end_src
-* Hydra
-#+begin_src emacs-lisp
-(use-package hydra)
-#+end_src
-* Corfu
-#+begin_src emacs-lisp
-(use-package corfu
-  :custom
-  (corfu-auto t)
-  :init
-  (global-corfu-mode))
-#+end_src
-* Ace window
-#+begin_src emacs-lisp
-(use-package ace-window)
-#+end_src
-* Cape
-#+begin_src emacs-lisp
-;; Add extensions
-(use-package cape
-  ;; Bind prefix keymap providing all Cape commands under a mnemonic key.
-  ;; Press C-c p ? to for help.
-  :bind ("C-c p" . cape-prefix-map) ;; Alternative key: M-<tab>, M-p, M-+
-  ;; Alternatively bind Cape commands individually.
-  ;; :bind (("C-c p d" . cape-dabbrev)
-  ;;        ("C-c p h" . cape-history)
-  ;;        ("C-c p f" . cape-file)
-  ;;        ...)
-  :init
-  ;; Add to the global default value of `completion-at-point-functions' which is
-  ;; used by `completion-at-point'.  The order of the functions matters, the
-  ;; first function returning a result wins.  Note that the list of buffer-local
-  ;; completion functions takes precedence over the global list.
-  (add-hook 'completion-at-point-functions #'cape-dabbrev)
-  (add-hook 'completion-at-point-functions #'cape-file)
-  (add-hook 'completion-at-point-functions #'cape-elisp-block)
-  (with-eval-after-load 'eglot
-    (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster)
-    (advice-add 'eglot-completion-at-point :around #'cape-wrap-nonexclusive))
-  ;; (add-hook 'completion-at-point-functions #'cape-history)
-  ;; ...
-  )
-#+end_src
-* Dired stuff
-** diredfl
-front lock rules for colorful dired
-#+begin_src emacs-lisp
-(use-package diredfl
-  :hook (dired-mode . diredfl-mode)
-  )
-#+end_src
-** dired-git-info
-Simple package for showing git info
-#+begin_src emacs-lisp
-(use-package dired-git-info
-  :config
-  (add-hook 'dired-after-readin-hook 'dired-git-info-auto-enable)
-  )
-#+end_src
-** Dired rsync
-#+begin_src emacs-lisp
-(use-package dired-rsync
-  :bind (:map dired-mode-map
-              ("C-c C-r" . dired-rsync)))
-#+end_src
-
-#+begin_src emacs-lisp
-(use-package dired-rsync-transient
-  :bind (:map dired-mode-map
-              ("C-c C-x" . dired-rsync-transient)))
-#+end_src
-** Nerd icons dired
-Nerd icons for dired
-#+begin_src emacs-lisp
-(use-package nerd-icons-dired
-  :hook
-  (dired-mode . nerd-icons-dired-mode))
-#+end_src
-** Fd for dired
-Fd support for dired
-#+begin_src emacs-lisp
-(use-package fd-dired
-  :config
-  (global-set-key [remap find-dired] #'fd-dired)
-  )
-#+end_src
-* Super-save
-#+begin_src emacs-lisp
-(use-package super-save
-  :diminish super-save-mode
-  :defer 2
-  :config
-  (setq super-save-auto-save-when-idle t
-		super-save-idle-duration 5 ;; after 5 seconds of not typing autosave
-		super-save-triggers ;; Functions after which buffers are saved (switching window, for example)
-		'(evil-window-next evil-window-prev balance-windows other-window)
-		super-save-max-buffer-size 10000000)
-  (super-save-mode +1))
-#+end_src
-* Saveplace
-#+begin_src emacs-lisp
-(use-package saveplace
-  :init (setq save-place-limit 100)
-  :config (save-place-mode))
-#+end_src
-* Auto activating snippets
-#+begin_src emacs-lisp
-(use-package aas
-  :hook (LaTeX-mode . aas-activate-for-major-mode)
-  :hook (org-mode . aas-activate-for-major-mode))
-(use-package laas
-  :hook (LaTeX-mode . laas-mode)
-  :hook (org-mode . laas-mode)
-  :config ; do whatever here
-  (aas-set-snippets 'laas-mode
-                    ;; set condition!
-                    :cond #'texmathp ; expand only while in math
-                    "supp" "\\supp"
-                    "On" "O(n)"
-                    "O1" "O(1)"
-                    "Olog" "O(\\log n)"
-                    "Olon" "O(n \\log n)"
-                    ;; bind to functions!
-                    "Sum" (lambda () (interactive)
-                            (yas-expand-snippet "\\sum_{$1}^{$2} $0"))
-                    "Span" (lambda () (interactive)
-                             (yas-expand-snippet "\\Span($1)$0"))
-                    "ub" (lambda () (interactive)
-                            (yas-expand-snippet "\\underbrace{$0}_{$1}"))
-                    ;; add accent snippets
-                    :cond #'laas-object-on-left-condition
-                    "qq" (lambda () (interactive) (laas-wrap-previous-object "sqrt"))))
-#+end_src
-* Yasnippet
-** Regular Yasnippet
-#+begin_src emacs-lisp
-(use-package yasnippet
-  :diminish yas-minor-mode
-  :defer nil
-  :config
-  ;; (setq yas-snippet-dirs (list (expand-file-name "snippets" jib/emacs-stuff)))
-  (yas-global-mode 1)
-  (yas-reload-all)) ;; or M-x yas-reload-all if you've started YASnippet already.
-(require 'warnings)
-(add-to-list 'warning-suppress-types '(yasnippet backquote-change))
-(use-package yasnippet-snippets)
-#+end_src
-* Hide-mode-line
-#+begin_src emacs-lisp
-(use-package hide-mode-line
-  :commands (hide-mode-line-mode))
-#+end_src
-* Doom modeline
-#+begin_src emacs-lisp
-(use-package doom-modeline
-  :defer nil
-  :config
-  (doom-modeline-mode)
-  (setq doom-modeline-buffer-file-name-style 'auto ;; Just show file name (no path)
-		doom-modeline-enable-word-count t
-		doom-modeline-buffer-encoding nil
-		doom-modeline-icon t ;; Enable/disable all icons
-		doom-modeline-modal-icon t ;; Icon for Evil mode
-		doom-modeline-major-mode-icon t
-		doom-modeline-major-mode-color-icon t
-		doom-modeline-bar-width 3))
-#+end_src
-* Vetico
+* Completion
+** Vertico
 #+begin_src emacs-lisp
 ;; Enable vertico
 (use-package vertico
@@ -1779,27 +1656,14 @@ Fd support for dired
   ;; Enable recursive minibuffers
   (setq enable-recursive-minibuffers t))
 #+end_src
-* Marginalia
+** Marginalia
 #+begin_src emacs-lisp
 (use-package marginalia
   :ensure t
   :config
   (marginalia-mode))
 #+end_src
-* Dash Docs
-#+begin_src emacs-lisp
-(use-package dash-docs
-  :config
-  (setq dash-docs-docsets-path "~/.docsets")
-  (setq installed-langs (dash-docs-installed-docsets))
-  (setq dash-docs-common-docsets nil)
-  ;;figure out to convert spaces into underscores when installing the docs
-  (setq docset-langs '("Python_3" "Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell"))
-  (dolist (lang docset-langs)
-	(when (null (member lang installed-langs))
-	  (dash-docs-install-docset lang))))
-#+end_src
-* Consult
+** Consult
 #+begin_src emacs-lisp
 ;; Example configuration for Consult
 (use-package consult
@@ -1874,7 +1738,7 @@ Fd support for dired
     (evil-push-search-history query t)))
    (advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync))
 #+end_src
-* Consult-dash
+** Consult-dash
 #+begin_src emacs-lisp
 (use-package consult-dash
   :config
@@ -1887,7 +1751,7 @@ Fd support for dired
   (setq counsel-dash-ignored-docsets nil)
   (consult-customize consult-dash :initial (thing-at-point 'symbol)))
 #+end_src
-* Embark
+** Embark
 #+begin_src emacs-lisp
 (use-package embark
   :ensure t
@@ -1912,7 +1776,7 @@ Fd support for dired
 
 										;
 #+end_src
-* Embark-consult
+** Embark-consult
 #+begin_src emacs-lisp
 ;; Consult users will also want the embark-consult package.
 (use-package embark-consult
@@ -1924,7 +1788,7 @@ Fd support for dired
   :hook
   (embark-collect-mode . consult-preview-at-point-mode))
 #+end_src
-* Orderless
+** Orderless
 #+begin_src emacs-lisp
 ;; Optionally use the `orderless' completion style.
 (use-package orderless
@@ -1936,182 +1800,135 @@ Fd support for dired
 		completion-category-defaults nil
 		completion-category-overrides '((file (styles partial-completion)))))
 #+end_src
-* Smart-parens
+** Corfu
 #+begin_src emacs-lisp
-(use-package smartparens
-  :diminish smartparens-mode
-  :defer 1
-  :config
-  ;; Load default smartparens rules for various languages
-  (require 'smartparens-config)
-  (setq sp-max-prefix-length 25)
-  (setq sp-max-pair-length 4)
-  (setq sp-highlight-pair-overlay nil
-		sp-highlight-wrap-overlay nil
-		sp-highlight-wrap-tag-overlay nil)
-
-  (with-eval-after-load 'evil
-	(setq sp-show-pair-from-inside t)
-	(setq sp-cancel-autoskip-on-backward-movement nil)
-	(setq sp-pair-overlay-keymap (make-sparse-keymap)))
-
-  (let ((unless-list '(sp-point-before-word-p
-					   sp-point-after-word-p
-					   sp-point-before-same-p)))
-	(sp-pair "'"  nil :unless unless-list)
-	(sp-pair "\"" nil :unless unless-list))
-
-  ;; In lisps ( should open a new form if before another parenthesis
-  (sp-local-pair sp-lisp-modes "(" ")" :unless '(:rem sp-point-before-same-p))
-
-  ;; Don't do square-bracket space-expansion where it doesn't make sense to
-  (sp-local-pair '(emacs-lisp-mode org-mode markdown-mode gfm-mode)
-				 "[" nil :post-handlers '(:rem ("| " "SPC")))
-
-
-  (dolist (brace '("(" "{" "["))
-	(sp-pair brace nil
-			 :post-handlers '(("||\n[i]" "RET") ("| " "SPC"))
-			 ;; Don't autopair opening braces if before a word character or
-			 ;; other opening brace. The rationale: it interferes with manual
-			 ;; balancing of braces, and is odd form to have s-exps with no
-			 ;; whitespace in between, e.g. ()()(). Insert whitespace if
-			 ;; genuinely want to start a new form in the middle of a word.
-			 :unless '(sp-point-before-word-p sp-point-before-same-p)))
-  (smartparens-global-mode t))
+(use-package corfu
+  :custom
+  (corfu-auto t)
+  :init
+  (global-corfu-mode))
 #+end_src
-* Git
+** Cape
 #+begin_src emacs-lisp
-(use-package magit :defer t)
-(use-package magit-todos :defer t)
-(use-package orgit)
-(use-package git-link)
-#+end_src
-* Diff-hl
-Highlight the diffs of the past commit in a file
-#+begin_src emacs-lisp
-(use-package diff-hl
-  :config
-  (global-diff-hl-mode))
-#+end_src
-* Jinx
-#+begin_src emacs-lisp
-(pcase system-type
-	('gnu/linux
-	(use-package jinx
-	  :hook (emacs-startup . global-jinx-mode)
-	  :bind ([remap ispell-word] . jinx-correct))))
-#+end_src
-* Centered-cursor-mode
-#+begin_src emacs-lisp
-(use-package centered-cursor-mode :diminish centered-cursor-mode)
-#+end_src
-* Restart emacs
-#+begin_src emacs-lisp
-(use-package restart-emacs :defer t)
-#+end_src
-* Diminish
-#+begin_src emacs-lisp
-(use-package diminish)
-#+end_src
-* EMMS
-#+begin_src emacs-lisp
-(use-package emms
-  :config
-  (emms-all)
-  (setq emms-source-file-default-directory '"~/Music/")
-  (emms-default-players)
+;; Add extensions
+(use-package cape
+  ;; Bind prefix keymap providing all Cape commands under a mnemonic key.
+  ;; Press C-c p ? to for help.
+  :bind ("C-c p" . cape-prefix-map) ;; Alternative key: M-<tab>, M-p, M-+
+  ;; Alternatively bind Cape commands individually.
+  ;; :bind (("C-c p d" . cape-dabbrev)
+  ;;        ("C-c p h" . cape-history)
+  ;;        ("C-c p f" . cape-file)
+  ;;        ...)
+  :init
+  ;; Add to the global default value of `completion-at-point-functions' which is
+  ;; used by `completion-at-point'.  The order of the functions matters, the
+  ;; first function returning a result wins.  Note that the list of buffer-local
+  ;; completion functions takes precedence over the global list.
+  (add-hook 'completion-at-point-functions #'cape-dabbrev)
+  (add-hook 'completion-at-point-functions #'cape-file)
+  (add-hook 'completion-at-point-functions #'cape-elisp-block)
+  (with-eval-after-load 'eglot
+    (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster)
+    (advice-add 'eglot-completion-at-point :around #'cape-wrap-nonexclusive))
+  ;; (add-hook 'completion-at-point-functions #'cape-history)
+  ;; ...
   )
 #+end_src
-* PDF-Tools
+** Yasnippet
+*** Regular Yasnippet
 #+begin_src emacs-lisp
-(use-package pdf-tools
-  :after general
-  :defer t
-  :mode  ("\\.pdf\\'" . pdf-view-mode)
-  :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
+(use-package yasnippet
+  :diminish yas-minor-mode
+  :defer nil
   :config
-  (pdf-loader-install)
-  (push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
-  (setq pdf-view-use-scaling t
-  		pdf-view-use-imagemagick nil)
-
-  ;; (setq-default pdf-view-display-size 'fit-height)
-  ;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
-  (setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
-  :general
-  (general-define-key :states 'motion :keymaps 'pdf-view-mode-map
-  					  "j" 'pdf-view-next-page
-  					  "k" 'pdf-view-previous-page
-
-    				  "C-j" 'pdf-view-next-line-or-next-page
-    				  "C-k" 'pdf-view-previous-line-or-previous-page
-
-    				  ;; Arrows for movement as well
-    				  (kbd "<down>") 'pdf-view-next-line-or-next-page
-    				  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
-
-    				  (kbd "<down>") 'pdf-view-next-line-or-next-page
-    				  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
-
-    				  (kbd "<left>") 'image-backward-hscroll
-    				  (kbd "<right>") 'image-forward-hscroll
-
-    				  "H" 'pdf-view-fit-height-to-window
-    				  "0" 'pdf-view-fit-height-to-window
-    				  "W" 'pdf-view-fit-width-to-window
-    				  "=" 'pdf-view-enlarge
-    				  "-" 'pdf-view-shrink
-
-    				  "Q" 'quit-window
-    				  "q" 'kill-this-buffer
-  					  "g" 'revert-buffer
-
-    				  )
-
-
-  )
+  ;; (setq yas-snippet-dirs (list (expand-file-name "snippets" jib/emacs-stuff)))
+  (yas-global-mode 1)
+  (yas-reload-all)) ;; or M-x yas-reload-all if you've started YASnippet already.
+(require 'warnings)
+(add-to-list 'warning-suppress-types '(yasnippet backquote-change))
+(use-package yasnippet-snippets)
 #+end_src
-* Dumb Jump
+** Auto activating snippets
 #+begin_src emacs-lisp
-(use-package dumb-jump
+(use-package aas
+  :hook (LaTeX-mode . aas-activate-for-major-mode)
+  :hook (org-mode . aas-activate-for-major-mode))
+(use-package laas
+  :hook (LaTeX-mode . laas-mode)
+  :hook (org-mode . laas-mode)
+  :config ; do whatever here
+  (aas-set-snippets 'laas-mode
+                    ;; set condition!
+                    :cond #'texmathp ; expand only while in math
+                    "supp" "\\supp"
+                    "On" "O(n)"
+                    "O1" "O(1)"
+                    "Olog" "O(\\log n)"
+                    "Olon" "O(n \\log n)"
+                    ;; bind to functions!
+                    "Sum" (lambda () (interactive)
+                            (yas-expand-snippet "\\sum_{$1}^{$2} $0"))
+                    "Span" (lambda () (interactive)
+                             (yas-expand-snippet "\\Span($1)$0"))
+                    "ub" (lambda () (interactive)
+                            (yas-expand-snippet "\\underbrace{$0}_{$1}"))
+                    ;; add accent snippets
+                    :cond #'laas-object-on-left-condition
+                    "qq" (lambda () (interactive) (laas-wrap-previous-object "sqrt"))))
+#+end_src
+* UI
+** All the icons
+#+begin_src emacs-lisp
+(use-package all-the-icons
+  :if (display-graphic-p))
+(use-package all-the-icons-completion
   :config
-  (add-hook 'xref-backend-functions #'dumb-jump-xref-activate)
-  (setq xref-show-definitions-function #'xref-show-definitions-completing-read))
+  (all-the-icons-completion-mode)
+  (add-hook 'marginalia-mode-hook #'all-the-icons-completion-marginalia-setup))
 #+end_src
-* Rainbow-mode
+** Hide-mode-line
 #+begin_src emacs-lisp
-(use-package rainbow-mode
-  :defer t)
+(use-package hide-mode-line
+  :commands (hide-mode-line-mode))
 #+end_src
-* Kurecolor
+** Doom modeline
 #+begin_src emacs-lisp
-(use-package kurecolor)
+(use-package doom-modeline
+  :defer nil
+  :config
+  (doom-modeline-mode)
+  (setq doom-modeline-buffer-file-name-style 'auto ;; Just show file name (no path)
+		doom-modeline-enable-word-count t
+		doom-modeline-buffer-encoding nil
+		doom-modeline-icon t ;; Enable/disable all icons
+		doom-modeline-modal-icon t ;; Icon for Evil mode
+		doom-modeline-major-mode-icon t
+		doom-modeline-major-mode-color-icon t
+		doom-modeline-bar-width 3))
 #+end_src
-* Editorconfig
+** Themes
 #+begin_src emacs-lisp
-(use-package editorconfig
+(use-package doom-themes
+  :defer nil
   :ensure t
   :config
-  (editorconfig-mode 1))
+  ;; Global settings (defaults)
+  (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
+		doom-themes-enable-italic t) ; if nil, italics is universally disabled
+  (load-theme 'doom-molokai t)
+
+  ;; Enable flashing mode-line on errors
+  (doom-themes-visual-bell-config)
+  ;; Enable custom neotree theme (all-the-icons must be installed!)
+  (doom-themes-neotree-config)
+  ;; or for treemacs users
+  ;; (setq doom-themes-treemacs-theme "doom-molokai") ; use "doom-colors" for less minimal icon theme
+  (doom-themes-treemacs-config)
+  ;; Corrects (and improves) org-mode's native fontification.
+  (doom-themes-org-config))
 #+end_src
-* Hl-todo
-#+begin_src emacs-lisp
-(use-package hl-todo
-  :defer t
-  :hook (prog-mode . hl-todo-mode)
-  :config
-  (setq hl-todo-keyword-faces
-		'(("TODO"   . "#FF0000")
-		  ("FIXME"  . "#FF4500")
-		  ("DEBUG"  . "#A020F0")
-		  ("WIP"   . "#1E90FF"))))
-#+end_src
-* Command-log-mode
-#+begin_src emacs-lisp
-(use-package command-log-mode)
-#+end_src
-* Pulsar
+** Pulsar
 #+begin_src emacs-lisp
 (use-package pulsar
   :config
@@ -2162,29 +1979,180 @@ Highlight the diffs of the past commit in a file
   (pulsar-global-mode 1)
   )
 #+end_src
-* Academic Phrases
+** Rainbow-mode
 #+begin_src emacs-lisp
-(use-package academic-phrases)
+(use-package rainbow-mode
+  :defer t)
 #+end_src
-* Fountain-mode
+** Kurecolor
 #+begin_src emacs-lisp
-(use-package fountain-mode)
+(use-package kurecolor)
 #+end_src
-* Ripgrep
+** Diminish
+#+begin_src emacs-lisp
+(use-package diminish)
+#+end_src
+** Keycast
+#+begin_src emacs-lisp
+(defun +toggle-keycast()
+  (interactive)
+  (if (member '("" keycast-mode-line " ") global-mode-string)
+	  (progn (setq global-mode-string (delete '("" keycast-mode-line " ") global-mode-string))
+			 (remove-hook 'pre-command-hook 'keycast--update)
+			 (message "Keycast OFF"))
+	(add-to-list 'global-mode-string '("" keycast-mode-line " "))
+	(add-hook 'pre-command-hook 'keycast--update t)
+	(message "Keycast ON")))
+(use-package keycast
+  :bind ("C-c t k" . +toggle-keycast))
+#+end_src
+** Hydra
+#+begin_src emacs-lisp
+(use-package hydra)
+#+end_src
+** Which key
+#+begin_src emacs-lisp
+(use-package which-key
+  :diminish which-key-mode
+  :init
+  (which-key-mode)
+  (which-key-setup-minibuffer)
+  :config
+  (setq which-key-idle-delay 0.3)
+  (setq which-key-prefix-prefix "◉ ")
+  (setq which-key-sort-order 'which-key-key-order-alpha
+		which-key-min-display-lines 6
+		which-key-max-display-columns nil))
+#+end_src
+* Windows & Project
+** Ace window
+#+begin_src emacs-lisp
+(use-package ace-window)
+#+end_src
+** Perspective
+#+begin_src emacs-lisp
+(use-package perspective
+  :bind
+  ("C-x C-b" . persp-list-buffers)         ; or use a nicer switcher, see below
+  :custom
+  (persp-mode-prefix-key (kbd "C-c M-p"))  ; pick your own prefix key here
+  :init
+  (persp-mode))
+#+end_src
+* Files
+** Dired stuff
+*** diredfl
+front lock rules for colorful dired
+#+begin_src emacs-lisp
+(use-package diredfl
+  :hook (dired-mode . diredfl-mode)
+  )
+#+end_src
+*** dired-git-info
+Simple package for showing git info
+#+begin_src emacs-lisp
+(use-package dired-git-info
+  :config
+  (add-hook 'dired-after-readin-hook 'dired-git-info-auto-enable)
+  )
+#+end_src
+*** Dired rsync
+#+begin_src emacs-lisp
+(use-package dired-rsync
+  :bind (:map dired-mode-map
+              ("C-c C-r" . dired-rsync)))
+#+end_src
+
+#+begin_src emacs-lisp
+(use-package dired-rsync-transient
+  :bind (:map dired-mode-map
+              ("C-c C-x" . dired-rsync-transient)))
+#+end_src
+*** Nerd icons dired
+Nerd icons for dired
+#+begin_src emacs-lisp
+(use-package nerd-icons-dired
+  :hook
+  (dired-mode . nerd-icons-dired-mode))
+#+end_src
+*** Fd for dired
+Fd support for dired
+#+begin_src emacs-lisp
+(use-package fd-dired
+  :config
+  (global-set-key [remap find-dired] #'fd-dired)
+  )
+#+end_src
+* Search
+** Ripgrep
 #+begin_src emacs-lisp
 (use-package rg)
 #+end_src
-* Define word
+** Dumb Jump
+#+begin_src emacs-lisp
+(use-package dumb-jump
+  :config
+  (add-hook 'xref-backend-functions #'dumb-jump-xref-activate)
+  (setq xref-show-definitions-function #'xref-show-definitions-completing-read))
+#+end_src
+* Git
+** Git
+#+begin_src emacs-lisp
+(use-package magit :defer t)
+(use-package magit-todos :defer t)
+(use-package orgit)
+(use-package git-link)
+#+end_src
+** Diff-hl
+Highlight the diffs of the past commit in a file
+#+begin_src emacs-lisp
+(use-package diff-hl
+  :config
+  (global-diff-hl-mode))
+#+end_src
+* Writing
+** Jinx
+#+begin_src emacs-lisp
+(pcase system-type
+	('gnu/linux
+	(use-package jinx
+	  :hook (emacs-startup . global-jinx-mode)
+	  :bind ([remap ispell-word] . jinx-correct))))
+#+end_src
+** Define word
 #+begin_src emacs-lisp
 (use-package define-word)
 #+end_src
-* Format all
+** Powerthesaurus
 #+begin_src emacs-lisp
-(use-package format-all
- :commands format-all-mode
- :hook (prog-mode . format-all-mode))
+(use-package powerthesaurus)
 #+end_src
-* Lsp
+** Academic Phrases
+#+begin_src emacs-lisp
+(use-package academic-phrases)
+#+end_src
+** Language Tool
+#+begin_src emacs-lisp
+(use-package langtool
+  :config
+  (setq langtool-default-language "en-US")
+  (setq langtool-bin "languagetool")
+  )
+#+end_src
+** Lexic
+#+begin_src emacs-lisp
+(use-package lexic)
+#+end_src
+** Fountain-mode
+#+begin_src emacs-lisp
+(use-package fountain-mode)
+#+end_src
+** String inflection
+#+begin_src emacs-lisp
+(use-package string-inflection)
+#+end_src
+* LSP & Languages
+** Lsp
 #+begin_src emacs-lisp
 (use-package eglot-booster
   :straight (:type git :host github :repo "jdtsmith/eglot-booster")
@@ -2205,30 +2173,33 @@ Highlight the diffs of the past commit in a file
   (setq eldoc-echo-area-use-multiline-p nil)
   (setq eldoc-idle-delay 0.5))
 #+end_src
-* Perspective
+** Format all
 #+begin_src emacs-lisp
-(use-package perspective
-  :bind
-  ("C-x C-b" . persp-list-buffers)         ; or use a nicer switcher, see below
-  :custom
-  (persp-mode-prefix-key (kbd "C-c M-p"))  ; pick your own prefix key here
-  :init
-  (persp-mode))
+(use-package format-all
+ :commands format-all-mode
+ :hook (prog-mode . format-all-mode))
 #+end_src
-* Powerthesaurus
+** Emmet
 #+begin_src emacs-lisp
-(use-package powerthesaurus)
-#+end_src
-* Language Tool
-#+begin_src emacs-lisp
-(use-package langtool
+(use-package emmet-mode
   :config
-  (setq langtool-default-language "en-US")
-  (setq langtool-bin "languagetool")
-  )
+  (add-hook 'web-mode-hook 'emmet-mode)
+  (add-hook 'html-mode-hook 'emmet-mode)
+  (add-hook 'css-mode-hook 'emmet-mode)
+  (add-hook 'scss-mode-hook 'emmet-mode)
+  (add-hook 'js2-mode-hook 'emmet-mode)
+  (add-hook 'typescript-mode-hook 'emmet-mode)
+  (add-hook 'rjsx-mode-hook 'emmet-mode))
 #+end_src
-* Language Packages
-** Markdown
+** Polymode
+#+begin_src emacs-lisp
+(use-package poly-markdown
+  :ensure t)
+;; (use-package poly-org
+;; :ensure t)
+#+end_src
+** Language Packages
+*** Markdown
 #+begin_src emacs-lisp
 (use-package markdown-mode
   :config
@@ -2237,7 +2208,7 @@ Highlight the diffs of the past commit in a file
                '(markdown-mode . ("harper-ls" "--stdio"))))
 )
 #+end_src
-** Rust
+*** Rust
 #+begin_src emacs-lisp
 (use-package rust-mode
   :dash "Rust")
@@ -2245,17 +2216,17 @@ Highlight the diffs of the past commit in a file
   :config
   (setq rustic-lsp-client 'eglot))
 #+end_src
-** GDScript
+*** GDScript
 #+begin_src emacs-lisp
 (use-package gdscript-mode
   :ensure t)
 #+end_src
-** Haskell
+*** Haskell
 #+begin_src emacs-lisp
 (use-package haskell-mode
   :dash "Haskell")
 #+end_src
-** Python
+*** Python
 #+begin_src emacs-lisp
 (use-package ein
   :config
@@ -2314,11 +2285,11 @@ Looks for .venv directory in project root and activates the Python interpreter."
 ;; 						   (require 'lsp-pyright)
 ;; 						   (lsp))))  ; or lsp-deferred
 #+end_src
-** Prolog
+*** Prolog
 #+begin_src emacs-lisp
 (add-to-list 'auto-mode-alist '("\\.pl\\'" . prolog-mode))
 #+end_src
-** C/C++
+*** C/C++
 #+begin_src emacs-lisp
 (use-package demangle-mode)
 
@@ -2329,12 +2300,12 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package disaster)
 (use-package modern-cpp-font-lock)
 #+end_src
-** Emacs lisp
-*** Elisp def
+*** Emacs lisp
+**** Elisp def
 #+begin_src emacs-lisp
 (use-package elisp-def)
 #+end_src
-*** Elfmt
+**** Elfmt
 #+begin_src emacs-lisp
 (use-package elfmt
   :straight (:type git :host github :repo "riscy/elfmt")
@@ -2342,16 +2313,16 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (elfmt-global-mode)
   )
 #+end_src
-** Yaml
+*** Yaml
 #+begin_src emacs-lisp
 (use-package yaml-mode)
 #+end_src
-** ESS
+*** ESS
 #+begin_src emacs-lisp
 (use-package ess)
 (use-package poly-R)
 #+end_src
-** Latex
+*** Latex
 #+begin_src emacs-lisp
 ;reftex
 (add-hook 'org-mode-hook 'reftex-mode)
@@ -2427,38 +2398,70 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :config (setq auctex-latexmk-inherit-TeX-PDF-mode t)
   (auctex-latexmk-setup))
 #+end_src
-** Lua
+*** Lua
 #+begin_src emacs-lisp
 (use-package lua-mode)
 #+end_src
-** JSON
+*** JSON
 #+begin_src emacs-lisp
 (use-package json-mode)
 #+end_src
-* Emmet
+** Dape
+Debuging adapter protocol for emacs
 #+begin_src emacs-lisp
-(use-package emmet-mode
+(use-package dape
+  ;; To use window configuration like gud (gdb-mi)
+  :init
+  (setq dape-buffer-window-arrangement 'gud)
+
   :config
-  (add-hook 'web-mode-hook 'emmet-mode)
-  (add-hook 'html-mode-hook 'emmet-mode)
-  (add-hook 'css-mode-hook 'emmet-mode)
-  (add-hook 'scss-mode-hook 'emmet-mode)
-  (add-hook 'js2-mode-hook 'emmet-mode)
-  (add-hook 'typescript-mode-hook 'emmet-mode)
-  (add-hook 'rjsx-mode-hook 'emmet-mode))
+  ;; Info buffers to the right
+  (setq dape-buffer-window-arrangement 'right)
+
+  ;; To not display info and/or buffers on startup
+  (remove-hook 'dape-on-start-hooks 'dape-info)
+  (remove-hook 'dape-on-start-hooks 'dape-repl)
+
+  ;; To display info and/or repl buffers on stopped
+  (add-hook 'dape-on-stopped-hooks 'dape-info)
+  (add-hook 'dape-on-stopped-hooks 'dape-repl)
+
+  ;; By default dape uses gdb keybinding prefix
+  ;; If you do not want to use any prefix, set it to nil.
+  ;; (setq dape-key-prefix "\C-x\C-a")
+  (setq dape-key-prefix 'nil)
+
+  ;; Kill compile buffer on build success
+  (add-hook 'dape-compile-compile-hooks 'kill-buffer)
+
+  ;; Save buffers on startup, useful for interpreted languages
+  (add-hook 'dape-on-start-hooks
+            (defun dape--save-on-start ()
+              (save-some-buffers t t)))
+
+  (add-to-list 'dape-configs
+               `(rust-gdb
+                 modes (rust-mode rust-ts-mode)
+                 command "rust-gdb"
+                 command-args ("--interpreter=dap")
+                 :type "executable"
+                 :request "launch"
+                 :program (lambda ()
+                            (expand-file-name
+                             (concat "target/debug/" (project-name (project-current)))
+                             (project-root (project-current))))
+                 :cwd dape-cwd-fn)))
 #+end_src
-* Org-super-agenda
+* Bibliography
+** Ebib
 #+begin_src emacs-lisp
-(use-package org-super-agenda
-  :after org org-modern-mode
-  :defer nil
-  :config
-  (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
-  (setq org-super-agenda-groups
-		'((:auto-dir-name t)))
-  (org-super-agenda-mode))
+(use-package ebib)
 #+end_src
-* Citar
+** zotra
+#+begin_src emacs-lisp
+(use-package zotra)
+#+end_src
+** Citar
 #+begin_src emacs-lisp
 
 (defun a3madkour/citar-org-format-note(key entry)
@@ -2540,8 +2543,24 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (setq citar-at-point-function 'embark-act)
 
 #+end_src
-* Org-Mode
-** Base
+** Citproc
+#+begin_src emacs-lisp
+(use-package citeproc)
+#+end_src
+* Org
+** Org-super-agenda
+#+begin_src emacs-lisp
+(use-package org-super-agenda
+  :after org org-modern-mode
+  :defer nil
+  :config
+  (set-face-attribute 'org-super-agenda-header nil :inherit 'org-agenda-structure :weight 'bold) ;; Bolds org-super-agenda headers
+  (setq org-super-agenda-groups
+		'((:auto-dir-name t)))
+  (org-super-agenda-mode))
+#+end_src
+** Org-Mode
+*** Base
 #+begin_src emacs-lisp
 (use-package org
   :hook (org-mode . a3madkour/org-font-setup)
@@ -2625,21 +2644,21 @@ Looks for .venv directory in project root and activates the Python interpreter."
 
   (a3madkour/setup-agenda-commands))
 #+end_src
-** Org-habits-stats
+*** Org-habits-stats
 #+begin_src emacs-lisp
 (use-package org-habit-stats)
 #+end_src
-** Org-Babel
-*** Ob-Async
+*** Org-Babel
+**** Ob-Async
 #+begin_src emacs-lisp
 (use-package ob-async)
 #+end_src
-*** Ob-http
+**** Ob-http
 #+begin_src emacs-lisp
 (use-package ob-http)
 #+end_src
 
-*** Final Setup
+**** Final Setup
 #+begin_src emacs-lisp
 (org-babel-do-load-languages
  'org-babel-load-languages
@@ -2667,7 +2686,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 	  ;; Our :lang common-lisp module uses sly, so...
 	  org-babel-lisp-eval-fn #'sly-eval)
 #+end_src
-** Org-edna 
+*** Org-edna 
 #+begin_src emacs-lisp
 (use-package org-edna
   :ensure t
@@ -2677,7 +2696,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (setq org-edna-use-inheritance t))
 #+end_src
 
-** Org media note
+*** Org media note
 #+begin_src emacs-lisp
 (use-package org-media-note
   :straight
@@ -2691,7 +2710,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (setq org-media-note-screenshot-image-dir (a3madkour/org-file "notes/imgs/"))
   (setq org-media-note-use-refcite-first t))
 #+end_src
-** Org-ql
+*** Org-ql
 #+begin_src emacs-lisp
 (use-package org-ql
   :after general
@@ -2699,16 +2718,16 @@ Looks for .venv directory in project root and activates the Python interpreter."
   (general-define-key :keymaps 'org-ql-view-map
 					  "q" 'kill-buffer-and-window))
 #+end_src
-** Org-timeblock
+*** Org-timeblock
 #+begin_src emacs-lisp
 (use-package org-timeblock)
 #+end_src
-** Org-bullets
+*** Org-bullets
 #+begin_src emacs-lisp
 (use-package org-bullets
   :hook (org-mode . org-bullets-mode))
 #+end_src
-** Org-fancy-priorities
+*** Org-fancy-priorities
 #+begin_src emacs-lisp
 (use-package org-fancy-priorities
   :ensure t
@@ -2717,7 +2736,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
   :config
   (setq org-fancy-priorities-list '("IDEAL" "DOABLE" "G4N" )))
 #+end_src
-** Org roam
+*** Org roam
 #+begin_src emacs-lisp
 (use-package org-roam
   :defer nil
@@ -2825,7 +2844,7 @@ Prompts for the link type interactively."
 (org-roam-typed-link--register-types)
 
 #+end_src
-** Org roam ui
+*** Org roam ui
 #+begin_src emacs-lisp
 (use-package org-roam-ui
   :straight
@@ -2838,7 +2857,7 @@ Prompts for the link type interactively."
 		org-roam-ui-open-on-start t))
 
 #+end_src
-** Org noter
+*** Org noter
 #+begin_src emacs-lisp
 (use-package org-noter
   :config
@@ -2846,27 +2865,27 @@ Prompts for the link type interactively."
   (setq org-noter-kill-frame-at-session-end nil)
   )
 #+end_src
-** Org-pomodoro
+*** Org-pomodoro
 #+begin_src emacs-lisp
 (use-package org-pomodoro)
 #+end_src
-** Org-transclusion
+*** Org-transclusion
 #+begin_src emacs-lisp
 (use-package org-transclusion)
 #+end_src
-** Org-book
+*** Org-book
 #+begin_src emacs-lisp
 (use-package org-books
   :config
   (setq org-books-file (a3madkour/org-file "reading-list.org"))
   )
 #+end_src
-** Org PDFtools
+*** Org PDFtools
 #+begin_src emacs-lisp
 (use-package org-pdftools
   :hook (org-load . org-pdftools-setup-link ))
 #+end_src
-** Org appear
+*** Org appear
 #+begin_src emacs-lisp
 (use-package org-appear
   :hook
@@ -2874,7 +2893,7 @@ Prompts for the link type interactively."
   :config
   (setq org-appear-autolinks t))
 #+end_src
-** Org modern
+*** Org modern
 #+begin_src emacs-lisp
 (use-package org-modern
    :after org
@@ -2907,7 +2926,7 @@ Prompts for the link type interactively."
 
 	(global-org-modern-mode))
 #+end_src
-** Exporting to website
+*** Exporting to website
 Setting the pipeline for exporting the notes to the website dir
 #+begin_src emacs-lisp
 (setq website-notes-dir "~/Workspace/website/notes")
@@ -2926,27 +2945,27 @@ Setting the pipeline for exporting the notes to the website dir
          :recursive t
          :publishing-function org-html-publish-to-html)))
 #+end_src
-** Org web-tools
+*** Org web-tools
 #+begin_src emacs-lisp
 (use-package org-web-tools)
 #+end_src
-** Org-pandoc-import
+*** Org-pandoc-import
 #+begin_src emacs-lisp
 (use-package org-pandoc-import
   :straight (:host github
 				   :repo "tecosaur/org-pandoc-import"
 				   :files ("*.el" "filters" "preprocessors")))
 #+end_src
-** Org-glossary
+*** Org-glossary
 #+begin_src emacs-lisp
 (use-package org-glossary
   :straight (:host github :repo "tecosaur/org-glossary"))
 #+end_src
-** Ox-pandoc
+*** Ox-pandoc
 #+begin_src emacs-lisp
 (use-package ox-pandoc)
 #+end_src
-** Ox-hugo
+*** Ox-hugo
 #+begin_src emacs-lisp
 (use-package ox-hugo
   :ensure t
@@ -2955,55 +2974,122 @@ Setting the pipeline for exporting the notes to the website dir
   (with-eval-after-load 'ox
   (require 'ox-hugo)))
 #+end_src
-** Org-clock-csv
+*** Org-clock-csv
 #+begin_src emacs-lisp
 (use-package org-clock-csv)
 #+end_src
-* Crux
+* Tools
+** Vterm
+#+begin_src emacs-lisp
+(use-package vterm
+  :ensure t
+  :config
+  (push '("find-file-other-window" find-file-other-window) vterm-eval-cmds))
+(add-hook 'vterm-mode-hook (lambda()
+							 (goto-address-mode 1)))
+(use-package vterm-toggle
+  :config
+  (setq vtrm-toggle-cd-auto-create-buffer nil))
+;; Bind this custom function to your preferred key
+  (use-package multi-vterm :ensure t)
+#+end_src
+** Restart emacs
+#+begin_src emacs-lisp
+(use-package restart-emacs :defer t)
+#+end_src
+** EMMS
+#+begin_src emacs-lisp
+(use-package emms
+  :config
+  (emms-all)
+  (setq emms-source-file-default-directory '"~/Music/")
+  (emms-default-players)
+  )
+#+end_src
+** PDF-Tools
+#+begin_src emacs-lisp
+(use-package pdf-tools
+  :after general
+  :defer t
+  :mode  ("\\.pdf\\'" . pdf-view-mode)
+  :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1) (auto-revert-mode 1)))
+  :config
+  (pdf-loader-install)
+  (push 'pdf-view-midnight-minor-mode pdf-tools-enabled-modes)
+  (setq pdf-view-use-scaling t
+  		pdf-view-use-imagemagick nil)
+
+  ;; (setq-default pdf-view-display-size 'fit-height)
+  ;; (setq pdf-view-continuous t) ;; Makes it so scrolling down to the bottom/top of a page doesn't switch to the next page
+  (setq pdf-view-midnight-colors '("#ffffff" . "#121212" )) ;; I use midnight mode as dark mode, dark mode doesn't seem to work
+  :general
+  (general-define-key :states 'motion :keymaps 'pdf-view-mode-map
+  					  "j" 'pdf-view-next-page
+  					  "k" 'pdf-view-previous-page
+
+    				  "C-j" 'pdf-view-next-line-or-next-page
+    				  "C-k" 'pdf-view-previous-line-or-previous-page
+
+    				  ;; Arrows for movement as well
+    				  (kbd "<down>") 'pdf-view-next-line-or-next-page
+    				  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
+
+    				  (kbd "<down>") 'pdf-view-next-line-or-next-page
+    				  (kbd "<up>") 'pdf-view-previous-line-or-previous-page
+
+    				  (kbd "<left>") 'image-backward-hscroll
+    				  (kbd "<right>") 'image-forward-hscroll
+
+    				  "H" 'pdf-view-fit-height-to-window
+    				  "0" 'pdf-view-fit-height-to-window
+    				  "W" 'pdf-view-fit-width-to-window
+    				  "=" 'pdf-view-enlarge
+    				  "-" 'pdf-view-shrink
+
+    				  "Q" 'quit-window
+    				  "q" 'kill-this-buffer
+  					  "g" 'revert-buffer
+
+    				  )
+
+
+  )
+#+end_src
+** Command-log-mode
+#+begin_src emacs-lisp
+(use-package command-log-mode)
+#+end_src
+** Crux
 #+begin_src emacs-lisp
 (use-package crux)
 #+end_src
-* Lexic
-#+begin_src emacs-lisp
-(use-package lexic)
-#+end_src
-* String inflection
-#+begin_src emacs-lisp
-(use-package string-inflection)
-#+end_src
-* Polymode
-#+begin_src emacs-lisp
-(use-package poly-markdown
-  :ensure t)
-;; (use-package poly-org
-;; :ensure t)
-#+end_src
-* Keycast
-#+begin_src emacs-lisp
-(defun +toggle-keycast()
-  (interactive)
-  (if (member '("" keycast-mode-line " ") global-mode-string)
-	  (progn (setq global-mode-string (delete '("" keycast-mode-line " ") global-mode-string))
-			 (remove-hook 'pre-command-hook 'keycast--update)
-			 (message "Keycast OFF"))
-	(add-to-list 'global-mode-string '("" keycast-mode-line " "))
-	(add-hook 'pre-command-hook 'keycast--update t)
-	(message "Keycast ON")))
-(use-package keycast
-  :bind ("C-c t k" . +toggle-keycast))
-#+end_src
-* Elfeed
+** Elfeed
 #+begin_src emacs-lisp
 (use-package elfeed)
 (use-package elfeed-goodies)
 (use-package elfeed-org)
 (use-package elfeed-score)
 #+end_src
-* Citproc
+** Plz
 #+begin_src emacs-lisp
-(use-package citeproc)
+(use-package plz)
 #+end_src
-* Claude code
+
+** Dash Docs
+#+begin_src emacs-lisp
+(use-package dash-docs
+  :config
+  (setq dash-docs-docsets-path "~/.docsets")
+  (setq installed-langs (dash-docs-installed-docsets))
+  (setq dash-docs-common-docsets nil)
+  ;;figure out to convert spaces into underscores when installing the docs
+  (setq docset-langs '("Python_3" "Rust" "Emacs_Lisp" "JavaScript" "C" "Bash" "Vim" "SQLite" "PostgreSQL" "LaTeX" "Docker" "C++" "HTML" "SVG" "CSS"  "Haskell"))
+  (dolist (lang docset-langs)
+	(when (null (member lang installed-langs))
+	  (dash-docs-install-docset lang))))
+#+end_src
+* AI Agents
+** Claude code
 #+begin_src emacs-lisp
 ;; install required inheritenv dependency:
 (use-package inheritenv
@@ -3046,53 +3132,7 @@ Setting the pipeline for exporting the notes to the website dir
   (evil-define-key 'insert eat-semi-char-mode-map
     (kbd "C-c <escape>") #'a3madkour/eat-send-escape))
 #+end_src
-* Dape
-Debuging adapter protocol for emacs
-#+begin_src emacs-lisp
-(use-package dape
-  ;; To use window configuration like gud (gdb-mi)
-  :init
-  (setq dape-buffer-window-arrangement 'gud)
-
-  :config
-  ;; Info buffers to the right
-  (setq dape-buffer-window-arrangement 'right)
-
-  ;; To not display info and/or buffers on startup
-  (remove-hook 'dape-on-start-hooks 'dape-info)
-  (remove-hook 'dape-on-start-hooks 'dape-repl)
-
-  ;; To display info and/or repl buffers on stopped
-  (add-hook 'dape-on-stopped-hooks 'dape-info)
-  (add-hook 'dape-on-stopped-hooks 'dape-repl)
-
-  ;; By default dape uses gdb keybinding prefix
-  ;; If you do not want to use any prefix, set it to nil.
-  ;; (setq dape-key-prefix "\C-x\C-a")
-  (setq dape-key-prefix 'nil)
-
-  ;; Kill compile buffer on build success
-  (add-hook 'dape-compile-compile-hooks 'kill-buffer)
-
-  ;; Save buffers on startup, useful for interpreted languages
-  (add-hook 'dape-on-start-hooks
-            (defun dape--save-on-start ()
-              (save-some-buffers t t)))
-
-  (add-to-list 'dape-configs
-               `(rust-gdb
-                 modes (rust-mode rust-ts-mode)
-                 command "rust-gdb"
-                 command-args ("--interpreter=dap")
-                 :type "executable"
-                 :request "launch"
-                 :program (lambda ()
-                            (expand-file-name
-                             (concat "target/debug/" (project-name (project-current)))
-                             (project-root (project-current))))
-                 :cwd dape-cwd-fn)))
-#+end_src
-* Agent shell
+** Agent shell
 #+begin_src emacs-lisp
 (use-package shell-maker)
 (use-package acp)
@@ -3183,27 +3223,6 @@ Debuging adapter protocol for emacs
                       (if (equal (map-elt saved :kind) "execute")
                           (concat "```console\n" command "\n```")
 						command)))))))
-#+end_src
-* Themes
-#+begin_src emacs-lisp
-(use-package doom-themes
-  :defer nil
-  :ensure t
-  :config
-  ;; Global settings (defaults)
-  (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
-		doom-themes-enable-italic t) ; if nil, italics is universally disabled
-  (load-theme 'doom-molokai t)
-
-  ;; Enable flashing mode-line on errors
-  (doom-themes-visual-bell-config)
-  ;; Enable custom neotree theme (all-the-icons must be installed!)
-  (doom-themes-neotree-config)
-  ;; or for treemacs users
-  ;; (setq doom-themes-treemacs-theme "doom-molokai") ; use "doom-colors" for less minimal icon theme
-  (doom-themes-treemacs-config)
-  ;; Corrects (and improves) org-mode's native fontification.
-  (doom-themes-org-config))
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
@@ -4130,9 +4149,4 @@ _SPC_ cancel    _o_nly this      _d_elete
  "TAB"
  '(outshine-cycle :which-key "outshine-cycle"))
 
-#+end_src
-
-* Plz
-#+begin_src emacs-lisp
-(use-package plz)
 #+end_src
