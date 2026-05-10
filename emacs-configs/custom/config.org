@@ -1652,7 +1652,10 @@ Debuging adapter protocol for emacs
                        (cl-remove-if (lambda (tag) (member tag selected)) existing)
                        '("-- Enter new tag --" "-- Done --")))
              (choice (completing-read
-                      (format "Season tags %s: " (or selected '("(none yet)")))
+                      (format "Season tags [%s]: "
+                              (if selected
+                                  (mapconcat #'identity selected ", ")
+                                "none yet"))
                       choices nil nil)))
         (cond
          ((string= choice "-- Done --")
@@ -1687,14 +1690,6 @@ Debuging adapter protocol for emacs
          (when (= 1 (org-current-level))
 		   (cl-incf count)))
 	   "+project+active"))
-    count))
-
-(defun a3madkour/check-wip-limit ()
-  "Error if active project count is at or above the WIP limit."
-  (let ((count (a3madkour/active-project-count)))
-    (when (>= count a3madkour/project-wip-limit)
-	  (user-error "WIP limit reached (%d/%d active). Deactivate one first"
-				  count a3madkour/project-wip-limit))
     count))
 
 (defun a3madkour/reading-queue-active-count ()
@@ -1744,12 +1739,38 @@ Automatically detects the heading type and enforces the appropriate WIP limit."
     (org-toggle-tag "inactive" 'on)))
 
 ;; ---- Project lifecycle ----
+(defun a3madkour/-project-heading-string (name area status done-enough goal repo include-placeholder)
+  "Build the heading + property drawer string for a new project.
+GOAL is used as-is, or replaced with \"exploratory\" if empty.
+REPO is a directory path (string) or nil. INCLUDE-PLACEHOLDER appends an
+empty `** TODO ' line — useful when the caller wants the user to fill it
+in interactively, omitted when the heading will be filled by refile."
+  (format (concat "* %s"
+                  " :%s:%s:project:\n"
+                  ":PROPERTIES:\n"
+                  ":TRIGGER: next-sibling todo!(NEXT)\n"
+                  ":ORDERED: t\n"
+                  ":DONE_ENOUGH: %s\n"
+                  ":GOAL: %s\n"
+                  "%s"
+                  ":END:\n\n"
+                  "%s")
+          name area status
+          done-enough
+          (if (string-empty-p goal) "exploratory" goal)
+          (if repo
+              (format ":REPO: %s\n" (abbreviate-file-name repo))
+            "")
+          (if include-placeholder "** TODO \n" "")))
+
 (defun a3madkour/create-project ()
   "Create a new project heading in projects.org with required properties.
 When called from code, returns a marker to the new project heading.
-When called interactively, also switches to the projects buffer."
+When called interactively, also switches to the projects buffer and
+inserts a placeholder \"** TODO \" line ready for editing."
   (interactive)
-  (let* ((name (read-string "Project name: "))
+  (let* ((interactive-call (called-interactively-p 'any))
+         (name (read-string "Project name: "))
          (done-enough (read-string "Done enough (what does finished look like?): "))
          (goal (read-string "Which goal does this serve? (blank if exploratory): "))
          (area (completing-read "Life area: "
@@ -1757,26 +1778,14 @@ When called interactively, also switches to the projects buffer."
                                 nil t))
          (status (completing-read "Status: " '("active" "inactive") nil t))
          (has-repo (yes-or-no-p "Does this project have a git repo? "))
-         (repo (when has-repo (read-directory-name "Repo path: ")))
-         (goal-value (if (string-empty-p goal) "exploratory" goal)))
+         (repo (when has-repo (read-directory-name "Repo path: "))))
     (when (string= status "active")
-	  (a3madkour/check-wip-limit))
-    (let ((heading (format (concat "* %s"
-								   " :%s:%s:project:\n"
-								   ":PROPERTIES:\n"
-								   ":TRIGGER: next-sibling todo!(NEXT)\n"
-								   ":ORDERED: t\n"
-								   ":DONE_ENOUGH: %s\n"
-								   ":GOAL: %s\n"
-								   "%s"
-								   ":END:\n\n"
-								   "** TODO \n")
-						   name area status
-						   done-enough
-						   goal-value
-						   (if repo
-							   (format ":REPO: %s\n" (abbreviate-file-name repo))
-                             "")))
+      (let ((count (a3madkour/active-project-count)))
+        (when (>= count a3madkour/project-wip-limit)
+          (user-error "WIP limit reached (%d/%d active). Deactivate one first"
+                      count a3madkour/project-wip-limit))))
+    (let ((heading (a3madkour/-project-heading-string
+                    name area status done-enough goal repo interactive-call))
 		  project-marker)
 	  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
         (goto-char (point-max))
@@ -1784,7 +1793,7 @@ When called interactively, also switches to the projects buffer."
         (save-buffer)
         (re-search-backward (format "^\\* %s" (regexp-quote name)))
         (setq project-marker (point-marker)))
-	  (when (called-interactively-p 'any)
+	  (when interactive-call
 		(switch-to-buffer (find-file-noselect (a3madkour/org-file "projects.org")))
         (goto-char (marker-position project-marker))
         (re-search-forward "^\\*\\* TODO ")
@@ -1846,22 +1855,22 @@ When called interactively, also switches to the projects buffer."
                 (point)))
          (body (buffer-substring-no-properties beg end))
          (has-notes (string-match-p "\\[\\[id:" body)))
-    (when (and (not has-notes)
-               (yes-or-no-p "This project has no linked notes. Create one before completing? "))
-      (a3madkour/create-project-notes)
-      (user-error "Created notes — complete the project when you're done writing"))
-    (unless (yes-or-no-p (format "Complete \"%s\"? " title))
-      (user-error "Cancelled"))
-    (let ((accomplished (read-string
-                         (format "What did you accomplish? (Goal was: %s)\n> "
-                                 (or done-enough "not set")))))
-      (org-set-property "ACCOMPLISHED" accomplished)
-      (org-set-property "COMPLETED" (format-time-string "[%Y-%m-%d %a]"))
-      (org-toggle-tag "active" 'off)
-      (org-toggle-tag "resting" 'off)
-      (org-toggle-tag "done" 'on)
-      (a3madkour/archive-subtree-to-file)
-      (message "Completed project: %s" title))))
+    (if (and (not has-notes)
+             (yes-or-no-p "This project has no linked notes. Create one before completing? "))
+        (progn
+          (a3madkour/create-project-notes)
+          (message "Created notes — complete the project when you're done writing"))
+      (unless (yes-or-no-p (format "Complete \"%s\"? " title))
+        (user-error "Cancelled"))
+      (let ((accomplished (read-string
+                           (format "What did you accomplish? (Goal was: %s)\n> "
+                                   (or done-enough "not set")))))
+        (org-set-property "ACCOMPLISHED" accomplished)
+        (org-set-property "COMPLETED" (format-time-string "[%Y-%m-%d %a]"))
+        (org-toggle-tag "active" 'off)
+        (org-toggle-tag "done" 'on)
+        (a3madkour/archive-subtree-to-file)
+        (message "Completed project: %s" title)))))
 
 (defun a3madkour/drop-project ()
   "Drop a project without shame. Record why and archive."
@@ -1878,19 +1887,18 @@ When called interactively, also switches to the projects buffer."
       (org-set-property "DROP_REASON" reason)
       (org-set-property "DROPPED" (format-time-string "[%Y-%m-%d %a]"))
       (org-toggle-tag "active" 'off)
-      (org-toggle-tag "resting" 'off)
       (org-toggle-tag "dropped" 'on)
       (a3madkour/archive-subtree-to-file)
       (message "Dropped project: %s" title))))
 
 ;; Add a task to the current project
 (defun a3madkour/add-project-task ()
-  "Add a new TODO to the current project with energy and effort."
+  "Add a new TODO at the end of the current project, with energy and effort."
   (interactive)
-  (unless (or (member "project" (org-get-tags))
-              (save-excursion
-                (org-up-heading-safe)
-                (member "project" (org-get-tags))))
+  (org-back-to-heading t)
+  (while (and (not (member "project" (org-get-tags nil t)))
+              (org-up-heading-safe)))
+  (unless (member "project" (org-get-tags nil t))
     (user-error "Not inside a project"))
   (let ((task (read-string "Task: ")))
     (org-end-of-subtree t)
@@ -1980,13 +1988,23 @@ When called interactively, also switches to the projects buffer."
               (org-agenda-overriding-header
                (concat "Season: " (a3madkour/get-current-season) "\n"))))))))
 
-(defun a3madkour/rotate-season ()
-  "Archive the current season and start a new one."
-  (interactive)
-  (let* ((name (read-string "New season name: "))
-         (weeks (read-number "How many weeks: " 6))
-         (tags (a3madkour/select-season-tags))
-         (end-time (time-add (current-time) (days-to-time (* weeks 7))))
+(defun a3madkour/-archive-current-season (accomplishments)
+  "Rename the existing `* Current Season:' heading in the current buffer to
+ARCHIVE and set its ACCOMPLISHED property. Returns t if a season was
+archived, nil if none was found."
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward "^\\* Current Season:" nil t)
+      (replace-match "* ARCHIVE Season:")
+      (org-back-to-heading t)
+      (org-set-property "ACCOMPLISHED" accomplishments)
+      t)))
+
+(defun a3madkour/-insert-new-season (name weeks tags)
+  "Insert a fresh `* Current Season:' heading at the top of the current buffer.
+The heading carries TAGS (a list of strings) and a property drawer with
+START/END date stamps based on WEEKS from today."
+  (let* ((end-time (time-add (current-time) (days-to-time (* weeks 7))))
          (start-str (format-time-string "[%Y-%m-%d %a]"))
          (end-str (format-time-string "[%Y-%m-%d %a]" end-time))
          (start-month (format-time-string "%B %Y"))
@@ -1994,28 +2012,29 @@ When called interactively, also switches to the projects buffer."
          (tag-string (if tags
                          (concat "  :" (mapconcat #'identity tags ":") ":")
                        "")))
+    (save-excursion
+      (goto-char (point-min))
+      (while (looking-at "^[#]")
+        (forward-line 1))
+      (when (looking-at "^$") (forward-line 1))
+      (insert (format "* Current Season: %s (%s — %s)%s\n"
+                      name start-month end-month tag-string))
+      (insert (format "  :PROPERTIES:\n  :START: %s\n  :END:   %s\n  :END:\n"
+                      start-str end-str)))))
+
+(defun a3madkour/rotate-season ()
+  "Archive the current season and start a new one."
+  (interactive)
+  (let ((name (read-string "New season name: "))
+        (weeks (read-number "How many weeks: " 6))
+        (tags (a3madkour/select-season-tags)))
     (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-      (save-excursion
-        (goto-char (point-min))
-        ;; Archive old season if it exists
-        (when (re-search-forward "^\\* Current Season:" nil t)
-          (beginning-of-line)
-          (let ((accomplished (read-string "What did you accomplish this season? ")))
-            (re-search-forward "Current Season:" nil t)
-            (replace-match "ARCHIVE Season:")
-            (if (re-search-forward "^\\*" nil t)
-                (progn (beginning-of-line) (forward-line -1))
-              (goto-char (point-max)))
-            (end-of-line)
-            (insert "\n  Accomplished: " accomplished)))
-        (goto-char (point-min))
-        (while (looking-at "^[#]")
-          (forward-line 1))
-        (when (looking-at "^$") (forward-line 1))
-        (insert (format "* Current Season: %s (%s — %s)%s\n"
-                        name start-month end-month tag-string))
-        (insert (format "  :PROPERTIES:\n  :START: %s\n  :END:   %s\n  :END:\n"
-                        start-str end-str)))
+      (when (save-excursion
+              (goto-char (point-min))
+              (re-search-forward "^\\* Current Season:" nil t))
+        (let ((accomplished (read-string "What did you accomplish this season? ")))
+          (a3madkour/-archive-current-season accomplished)))
+      (a3madkour/-insert-new-season name weeks tags)
       (save-buffer)
       (message "Started season: %s" name)
       (a3madkour/setup-agenda-commands))))
@@ -2068,7 +2087,7 @@ BASE-FN takes a color and returns the base face plist."
 (defun a3madkour/force-time-after-todo ()
   (interactive)
   (when (equal org-state "DONE")
-    (unless (equal (org-entry-get (org-element-at-point) "STYLE") "habit")
+    (unless (equal (org-entry-get nil "STYLE") "habit")
 	  (unless (a3madkour/has-logbook-p)
         (let ((duration-str (read-string "Time taken (HH:MM or minutes):  ")))
 		  (unless (string-empty-p duration-str)
@@ -2158,19 +2177,19 @@ because `org-todo' runs `org-blocker-hook' directly, not through
     ))
 
 (defun a3madkour/refile-to (file headline selected-date)
-  "Move current headline to specified location"
-  (let ((pos (save-excursion
-    		   (find-file file)
-    		   (let ((new_pos (org-find-exact-headline-in-buffer headline)))
-    			 (org-schedule nil selected-date)
-    			 new_pos)
-    		   )))
+  "Schedule the heading at point for SELECTED-DATE and refile it under HEADLINE in FILE."
+  (org-schedule nil selected-date)
+  (let ((pos (with-current-buffer (find-file-noselect file)
+               (or (org-find-exact-headline-in-buffer headline)
+                   (user-error "Heading %S not found in %s" headline file)))))
     (org-refile nil nil (list headline file nil pos))))
 
 (defun a3madkour/refile-and-schedule ()
+  "Refile the heading at point under a datetree node in the current file."
   (interactive)
-  (let ((selected-date (org-read-date)))
-    (a3madkour/refile-to buffer-file-name (a3madkour/add-new-org-datetree-headline selected-date) selected-date)))
+  (let* ((selected-date (org-read-date))
+         (headline (a3madkour/add-new-org-datetree-headline selected-date)))
+    (a3madkour/refile-to buffer-file-name headline selected-date)))
 
 (use-package org
   :hook (org-mode . a3madkour/org-font-setup)
@@ -2282,9 +2301,30 @@ because `org-todo' runs `org-blocker-hook' directly, not through
   (org-cut-subtree)
   (message "Deleted"))
 
+(defvar a3madkour--inbox-to-roam-marker nil
+  "Marker to the inbox subtree being sent to org-roam, removed on capture finalize.")
+
+(defun a3madkour--inbox-to-roam-finalize ()
+  "Hook: cut the pending inbox subtree if the org-roam capture finalized successfully."
+  (unwind-protect
+      (when (and (not org-note-abort)
+                 (markerp a3madkour--inbox-to-roam-marker)
+                 (marker-buffer a3madkour--inbox-to-roam-marker))
+        (with-current-buffer (marker-buffer a3madkour--inbox-to-roam-marker)
+          (save-excursion
+            (goto-char a3madkour--inbox-to-roam-marker)
+            (org-cut-subtree))))
+    (when (markerp a3madkour--inbox-to-roam-marker)
+      (set-marker a3madkour--inbox-to-roam-marker nil))
+    (setq a3madkour--inbox-to-roam-marker nil)
+    (remove-hook 'org-capture-after-finalize-hook
+                 #'a3madkour--inbox-to-roam-finalize)))
+
 (defun a3madkour/inbox-to-org-roam ()
   "Send the current inbox item to org-roam as a Zettelkasten seed.
-Preserves the inbox item's body as initial content of the new node."
+Preserves the inbox item's body as initial content of the new node.
+The inbox subtree is removed only after the capture finalizes successfully;
+on abort, the inbox item stays where it was."
   (org-back-to-heading t)
   (let* ((title (org-get-heading t t t t))
          (body (save-excursion
@@ -2293,7 +2333,9 @@ Preserves the inbox item's body as initial content of the new node."
                   (buffer-substring-no-properties
                    (point)
                    (org-entry-end-position))))))
-    (org-cut-subtree)
+    (setq a3madkour--inbox-to-roam-marker (copy-marker (point) t))
+    (add-hook 'org-capture-after-finalize-hook
+              #'a3madkour--inbox-to-roam-finalize)
     (org-roam-capture-
      :node (org-roam-node-create :title title)
      :templates `(("d" "default" plain
@@ -2303,8 +2345,7 @@ Preserves the inbox item's body as initial content of the new node."
                    :target (file+head
                             "${slug}.org"
                             "#+title: ${title}\n#+filetags: :TODO:\n")
-                   :unnarrowed t)))
-    (message "Sent to org-roam")))
+                   :unnarrowed t)))))
 
 (defun a3madkour/inbox-to-someday ()
   "Refile the current inbox item to someday.org under a chosen heading."
@@ -2315,19 +2356,41 @@ Preserves the inbox item's body as initial content of the new node."
                      (org-map-entries
                       (lambda () (nth 4 (org-heading-components)))
                       "LEVEL=1")))
-         (choice (completing-read "Refile under heading (blank for Parking Lot): "
-                                  headings nil nil))
-         (target (if (string= choice "") "Parking Lot" choice))
-         (pos (with-current-buffer buf
-                (goto-char (point-min))
-                (if (re-search-forward
-                     (format org-complex-heading-regexp-format
-                             (regexp-quote target))
-                     nil t)
-                    (line-beginning-position)
-                  (user-error "Heading \"%s\" not found in %s" target file)))))
-    (org-refile nil nil (list target file nil pos)))
+         (choice (string-trim
+                  (completing-read "Refile under heading (blank for Parking Lot): "
+                                   headings nil nil)))
+         (target (if (string-empty-p choice) "Parking Lot" choice))
+         (marker (with-current-buffer buf
+                   (save-excursion
+                     (goto-char (point-min))
+                     (if (re-search-forward
+                          (format org-complex-heading-regexp-format
+                                  (regexp-quote target))
+                          nil t)
+                         (move-marker (make-marker) (line-beginning-position) buf)
+                       (user-error "Heading \"%s\" not found in %s" target file))))))
+    (unwind-protect
+        (org-refile nil nil (list target file nil marker))
+      (set-marker marker nil)))
   (message "Sent to someday"))
+
+(defun a3madkour/-build-habit-repeater (frequency flexibility)
+  "Compute the org-mode repeater string for a habit.
+FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
+\"weekly\", \"biweekly\", \"monthly\". FLEXIBILITY (a string) appends a
+`/Nd' tolerance window but only for the daily/every-N-days frequencies."
+  (let ((base (cond
+               ((string= frequency "daily") ".+1d")
+               ((string= frequency "every 2 days") ".+2d")
+               ((string= frequency "every 3 days") ".+3d")
+               ((string= frequency "weekly") ".+1w")
+               ((string= frequency "biweekly") ".+2w")
+               ((string= frequency "monthly") ".+1m"))))
+    (if (and flexibility
+             (not (string-empty-p flexibility))
+             (member frequency '("daily" "every 2 days" "every 3 days")))
+        (format "%s/%sd" base (string-to-number flexibility))
+      base)))
 
 (defun a3madkour/inbox-to-habit ()
   "Process the current inbox item as a recurring habit."
@@ -2335,18 +2398,9 @@ Preserves the inbox item's body as initial content of the new node."
                                      '("daily" "every 2 days" "every 3 days"
                                        "weekly" "biweekly" "monthly")
                                      nil t))
-         (repeater (cond
-                    ((string= frequency "daily") ".+1d")
-                    ((string= frequency "every 2 days") ".+2d")
-                    ((string= frequency "every 3 days") ".+3d")
-                    ((string= frequency "weekly") ".+1w")
-                    ((string= frequency "biweekly") ".+2w")
-                    ((string= frequency "monthly") ".+1m")))
          (flexibility (when (member frequency '("daily" "every 2 days" "every 3 days"))
                         (read-string "Max days before overdue (blank for same): ")))
-         (full-repeater (if (and flexibility (not (string-empty-p flexibility)))
-                            (format "%s/%sd" repeater (string-to-number flexibility))
-                          repeater))
+         (full-repeater (a3madkour/-build-habit-repeater frequency flexibility))
          (marker (a3madkour/get-refile-marker (a3madkour/org-file "actions.org") "Habits")))
     (org-set-property "STYLE" "habit")
     (org-schedule nil (format "<%s %s>"
@@ -2407,7 +2461,8 @@ Preserves the inbox item's body as initial content of the new node."
                                              nil t)))
         (if (string= project-action "create new project")
             (a3madkour/inbox-to-new-project)
-          (a3madkour/inbox-to-existing-project)))))))
+          (a3madkour/inbox-to-existing-project))))
+     (t (user-error "Unknown destination: %s" destination)))))
 #+end_src
 *** Org-habits-stats
 #+begin_src emacs-lisp
