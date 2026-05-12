@@ -1952,6 +1952,7 @@ inserts a placeholder \"** TODO \" line ready for editing."
 (defun a3madkour/setup-agenda-commands ()
   "Set up agenda commands with current season context."
   (let* ((season-tags (a3madkour/get-current-season-tags))
+         (in-season-regex (mapconcat #'identity (cons "core" season-tags) "|"))
          (core-group '(:name "🔁 Core Habits" :and (:habit t :tag "core") :order 1))
          (seasonal-group (when season-tags
                            `(:name "🔁 Seasonal Habits"
@@ -1962,6 +1963,8 @@ inserts a placeholder \"** TODO \" line ready for editing."
 							  '(:name "⏰ Scheduled" :and (:time-grid t :scheduled today :not (:habit t)) :order 0)
 							  core-group
 							  seasonal-group
+							  `(:discard (:and (:scheduled past :not (:tag ,in-season-regex))))
+							  `(:discard (:and (:deadline past :not (:tag ,in-season-regex))))
 							  '(:name "⚠️ Overdue" :scheduled past :deadline past :order 3)
 							  '(:discard (:habit t))))))
     (setq org-agenda-custom-commands
@@ -2103,6 +2106,11 @@ BASE-FN takes a color and returns the base face plist."
              (member org-state org-done-keywords))
     (org-reset-checkbox-state-subtree)))
 
+(defun a3madkour/checkbox-block-with-override (orig-fn change-plist)
+  "Allow overriding checkbox-dependency blocking with a y-or-n prompt."
+  (or (funcall orig-fn change-plist)
+      (y-or-n-p "Unchecked checkboxes remain. Mark as done anyway? ")))
+
 ;; Don't hide/dim tasks that are only blocked by checkboxes
 (defun a3madkour/ignore-checkbox-blocking-for-agenda (orig-fn &rest args)
   "Run `org-entry-blocked-p' with checkbox dependencies temporarily off.
@@ -2240,6 +2248,7 @@ because `org-todo' runs `org-blocker-hook' directly, not through
   
   (setq org-agenda-dim-blocked-tasks 'invisible)
   (advice-add 'org-entry-blocked-p :around #'a3madkour/ignore-checkbox-blocking-for-agenda)
+  (advice-add 'org-block-todo-from-checkboxes :around #'a3madkour/checkbox-block-with-override)
   (setq org-capture-templates
 		`(("i" "Inbox" entry (file ,(a3madkour/org-file "inbox.org"))
            "* TODO %?\n:PROPERTIES:\n:CAPTURED: %U\n:END:\n"
