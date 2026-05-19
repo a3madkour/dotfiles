@@ -2933,6 +2933,29 @@ Prompts for the link type interactively."
 	 "⭠ now ─────────────────────────────────────────────────")
 
 	(global-org-modern-mode))
+
+;; org-modern-agenda's tag regex requires tags to be at end-of-line,
+;; but org-habit-insert-consistency-graphs runs first and appends the
+;; graph after the tags. Re-run the tag styling on habit lines with a
+;; regex that allows trailing graph content.
+(defun a3madkour/org-modern-style-habit-tags ()
+  (when org-modern-tag
+    (save-excursion
+      (save-match-data
+        (let (case-fold-search)
+          (goto-char (point-min))
+          (while (not (eobp))
+            (when (get-text-property (line-beginning-position) 'org-habit-p)
+              (save-excursion
+                (beginning-of-line)
+                (let ((re (concat "\\( \\)\\(:\\(?:" org-tag-re
+                                  "::?\\)+\\)\\(?:[ \t]\\|$\\)")))
+                  (when (re-search-forward re (line-end-position) 'noerror)
+                    (org-modern--tag)))))
+            (forward-line 1)))))))
+
+(advice-add 'org-modern-agenda :after
+            #'a3madkour/org-modern-style-habit-tags)
 #+end_src
 *** Exporting to website
 Setting the pipeline for exporting the notes to the website dir
