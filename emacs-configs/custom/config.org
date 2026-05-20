@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-05-07 Thu]
+:LAST_MODIFIED: [2026-05-19 Tue]
 :END:
 
 * TODO Go through the config and cite all the sources of information
@@ -1553,6 +1553,7 @@ Debuging adapter protocol for emacs
 (defun a3madkour/citar-add-to-reading-queue ()
   "Select a citar reference and add it to queue.org."
   (interactive)
+  (require 'citar)
   (let ((count (a3madkour/reading-queue-active-count)))
     (when (>= count a3madkour/reading-queue-wip-limit)
 	  (user-error "Reading queue WIP limit reached (%d/%d active). Finish something first"
@@ -1616,21 +1617,21 @@ Debuging adapter protocol for emacs
 ;; ---- Season queries ----
 (defun a3madkour/get-current-season ()
   "Get the current season heading from projects.org."
-  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-    (save-excursion
-      (goto-char (point-min))
-      (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
-		  (replace-regexp-in-string "\\s-*:[[:alnum:]_@:]+:$" "" (match-string 1))
-		"No season set"))))
+  (with-temp-buffer
+    (insert-file-contents (a3madkour/org-file "projects.org"))
+    (goto-char (point-min))
+    (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
+		(replace-regexp-in-string "\\s-*:[[:alnum:]_@:]+:$" "" (match-string 1))
+	  "No season set")))
 
 (defun a3madkour/get-current-season-tags ()
   "Get the tags from the current season heading in projects.org."
-  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-    (save-excursion
-      (goto-char (point-min))
-      (if (re-search-forward "^\\* Current Season:" nil t)
-          (org-get-tags)
-        nil))))
+  (with-temp-buffer
+    (insert-file-contents (a3madkour/org-file "projects.org"))
+    (delay-mode-hooks (org-mode))
+    (goto-char (point-min))
+    (when (re-search-forward "^\\* Current Season:" nil t)
+      (org-get-tags))))
 
 (defun a3madkour/get-habit-tags ()
   "Collect all unique tags from habit entries in actions.org."
@@ -2905,9 +2906,10 @@ Prompts for the link type interactively."
 #+begin_src emacs-lisp
 (use-package org-modern
    :after org
+   :demand t
 	:hook
 	(org-mode . org-modern-mode)
-	(org-agenda-finalize org-modern-agenda)
+	(org-agenda-finalize . org-modern-agenda)
 	:config
 	(setq
 	 ;; Edit settings
