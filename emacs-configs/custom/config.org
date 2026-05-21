@@ -2709,6 +2709,38 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
       (org-set-property "PROGRESS" next))
     (message "Progress: %s → %s" current next)))
 
+(defun a3madkour/org-roam-insert-heading-link ()
+  "Insert a link to a specific heading inside an org-roam node.
+Prompts for a roam node (via the usual `org-roam-node-read'),
+then for one of that node's headings, and inserts a
+`[[file:PATH::#custom-id][heading]]' link (falling back to
+`::*Heading' if the heading has no CUSTOM_ID). The target
+heading is NOT made into a roam node, so the graph stays
+clean. Use this to cite a specific lecture/chapter inside a
+per-source reference file."
+  (interactive)
+  (let* ((node (org-roam-node-read))
+         (file (org-roam-node-file node))
+         (headings
+          (with-current-buffer (find-file-noselect file)
+            (org-with-wide-buffer
+             (org-map-entries
+              (lambda ()
+                (let* ((heading   (org-get-heading t t t t))
+                       (path      (org-get-outline-path t))
+                       (display   (mapconcat #'identity path " / "))
+                       (custom-id (org-entry-get nil "CUSTOM_ID"))
+                       (anchor    (if custom-id
+                                      (concat "#" custom-id)
+                                    (concat "*" heading))))
+                  (list display heading anchor)))
+              nil 'file))))
+         (choice  (completing-read "Heading: " (mapcar #'car headings) nil t))
+         (entry   (assoc choice headings))
+         (heading (nth 1 entry))
+         (anchor  (nth 2 entry)))
+    (insert (format "[[file:%s::%s][%s]]" file anchor heading))))
+
 ;; ---- Tag index notes ----
 (defun a3madkour/org-roam-nodes-by-tag (tag)
   "Return a list of org-roam nodes that have TAG."
@@ -3703,6 +3735,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "rm" #'org-roam-buffer-toggle
  "rM" #'org-roam-buffer-display-dedicated
  "rp" #'(a3madkour/org-roam-advance-pipeline :which-key "advance the current node's progress")
+ "rh" #'(a3madkour/org-roam-insert-heading-link :which-key "insert link to a heading inside a node")
  "rc" #'(a3madkour/org-roam-find-in-progress :which-key "notes currently being in progress")
  "rF" #'org-roam-refile
  "rR" #'org-roam-link-replace-all
