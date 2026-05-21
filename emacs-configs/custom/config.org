@@ -1574,6 +1574,90 @@ Debuging adapter protocol for emacs
         (save-buffer))
 	  (message "Added \"%s\" to reading queue (%d/%d active)"
 			   display (1+ count) a3madkour/reading-queue-wip-limit))))
+
+(defcustom a3madkour/supernote-outbox-path
+  (expand-file-name "~/SupernoteOutbox/")
+  "Local staging directory for PDFs queued for the Supernote.
+The directory is created if it does not exist.  After staging, drag
+its contents into OpenMTP → Document/Inbox."
+  :type 'directory
+  :group 'a3madkour)
+
+(defcustom a3madkour/supernote-reveal-outbox-after-sync t
+  "When non-nil, reveal the outbox in the system file manager after syncing.
+Uses `open' on darwin and `xdg-open' on gnu/linux."
+  :type 'boolean
+  :group 'a3madkour)
+
+(defun a3madkour/supernote--queue-citekeys ()
+  "Return CITEKEYs of all :active: TODO entries in queue.org."
+  (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
+    (delq nil
+          (org-map-entries
+           (lambda () (org-entry-get nil "CITEKEY"))
+           "+active" 'file))))
+
+(defun a3madkour/supernote--pdf-for-key (key)
+  "Return the first .pdf path attached to KEY in Citar, or nil."
+  (when-let* ((entry (citar-get-entry key))
+              (file (alist-get "file" entry nil nil #'string=)))
+    (car (seq-filter (lambda (p) (string-match-p "\\.pdf\\'" (string-trim p)))
+                     (split-string file ";")))))
+
+(defun a3madkour/supernote-sync-active-queue ()
+  "Stage PDFs for every :active: entry in queue.org into the Supernote outbox.
+Files are copied to `a3madkour/supernote-outbox-path'; drag them into
+OpenMTP → Document/Inbox to transfer.  Skips files already present
+in the outbox.  Shows a summary buffer listing copied, skipped, and
+missing items."
+  (interactive)
+  (require 'citar)
+  (let* ((dest-dir (file-name-as-directory
+                    (expand-file-name a3madkour/supernote-outbox-path)))
+         (keys (a3madkour/supernote--queue-citekeys))
+         copied skipped missing)
+    (unless (file-directory-p dest-dir)
+      (make-directory dest-dir t))
+    (dolist (key keys)
+      (let ((src (a3madkour/supernote--pdf-for-key key)))
+        (cond
+         ((or (null src) (not (file-readable-p src)))
+          (push key missing))
+         (t
+          (let ((dest (expand-file-name (file-name-nondirectory src) dest-dir)))
+            (if (file-exists-p dest)
+                (push (cons key (file-name-nondirectory src)) skipped)
+              (copy-file src dest)
+              (push (cons key (file-name-nondirectory src)) copied)))))))
+    (with-current-buffer (get-buffer-create "*Supernote Sync*")
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "Supernote outbox: %s\n" dest-dir))
+        (insert "Drag the staged files into OpenMTP → Document/Inbox.\n\n")
+        (insert (format "Copied: %d   Skipped: %d   Missing: %d\n\n"
+                        (length copied) (length skipped) (length missing)))
+        (when copied
+          (insert "Copied:\n")
+          (dolist (it (nreverse copied))
+            (insert (format "  %s  (%s)\n" (cdr it) (car it))))
+          (insert "\n"))
+        (when skipped
+          (insert "Skipped (already in outbox):\n")
+          (dolist (it (nreverse skipped))
+            (insert (format "  %s  (%s)\n" (cdr it) (car it))))
+          (insert "\n"))
+        (when missing
+          (insert "Missing PDF:\n")
+          (dolist (k (nreverse missing))
+            (insert (format "  %s\n" k)))))
+      (special-mode))
+    (display-buffer "*Supernote Sync*")
+    (when (and a3madkour/supernote-reveal-outbox-after-sync copied)
+      (pcase system-type
+        ('darwin    (call-process "open" nil 0 nil dest-dir))
+        ('gnu/linux (call-process "xdg-open" nil 0 nil dest-dir))))
+    (message "Supernote outbox: %d copied, %d skipped, %d missing (drag from %s into OpenMTP)"
+             (length copied) (length skipped) (length missing) dest-dir)))
 #+end_src
 ** Citproc
 #+begin_src emacs-lisp
