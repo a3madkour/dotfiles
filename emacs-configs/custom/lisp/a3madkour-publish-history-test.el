@@ -132,6 +132,41 @@
    (lambda (_)
      (should (null (a3madkour-pub-history/aliases-for "no-such-id"))))))
 
+(ert-deftest a3madkour-pub-history-test/record-publish-slug-override-reason ()
+  "Same-section URL change with `:had-slug-override-p t' → reason='slug_override'."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'live)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo-renamed/" 'live
+                                           :had-slug-override-p t)
+     (let* ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+            (history (alist-get 'history note))
+            (entry (aref history (1- (length history)))))
+       (should (equal "slug_override" (alist-get 'reason entry)))))))
+
+(ert-deftest a3madkour-pub-history-test/record-publish-title-change-reason ()
+  "Same-section URL change without the flag → reason='title_change'."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'live)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo-renamed/" 'live)
+     (let* ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+            (history (alist-get 'history note))
+            (entry (aref history (1- (length history)))))
+       (should (equal "title_change" (alist-get 'reason entry)))))))
+
+(ert-deftest a3madkour-pub-history-test/record-publish-section-change-wins ()
+  "Section change beats `:had-slug-override-p t' → reason='section_change'."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'live)
+     (a3madkour-pub-history/record-publish "abc-123" "/essays/foo/" 'live
+                                           :had-slug-override-p t)
+     (let* ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+            (history (alist-get 'history note))
+            (entry (aref history (1- (length history)))))
+       (should (equal "section_change" (alist-get 'reason entry)))))))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here
