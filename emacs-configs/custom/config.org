@@ -426,6 +426,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (global-treesit-auto-mode))
 #+end_src
 ** Undo-fu
+Limit values sourced from the [[https://codeberg.org/ideasman42/emacs-undo-fu][undo-fu README]] (64mb/96mb/960mb recommended sizes).
 #+begin_src emacs-lisp
 (use-package undo-fu
   :config
@@ -452,6 +453,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 
 #+end_src
 ** Super-save
+Adapted from the [[https://github.com/bbatsov/super-save][super-save README]] by Bozhidar Batsov; trigger list extended with Evil window navigation.
 #+begin_src emacs-lisp
 (use-package super-save
   :diminish super-save-mode
@@ -478,6 +480,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (editorconfig-mode 1))
 #+end_src
 ** Smart-parens
+Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config/default/config.el][Doom Emacs's smartparens config]] (=modules/config/default/config.el=); the =(dolist (brace ...))= block and =:unless= rationale are verbatim.
 #+begin_src emacs-lisp
 (use-package smartparens
   :diminish smartparens-mode
@@ -556,7 +559,8 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 #+begin_src emacs-lisp
 (use-package centered-cursor-mode :diminish centered-cursor-mode)
 #+end_src
-** Insert file path (from Doom)
+** Insert file path
+Verbatim from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config/default/autoload/text.el][Doom Emacs's =modules/config/default/autoload/text.el=]].
 #+begin_src emacs-lisp
 ;;;###autoload
 (defun +default/insert-file-path (arg)
