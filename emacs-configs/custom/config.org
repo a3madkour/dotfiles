@@ -3296,6 +3296,7 @@ Setting the pipeline for exporting the notes to the website dir
 #+end_src
 * AI Agents
 ** Claude code
+The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and the Monet integration hook) is from [[https://github.com/stevemolitor/claude-code.el][stevemolitor/claude-code.el]]'s README. The =inheritenv=, =monet=, and =eat= installs follow the README's documented dependency setup. The =a3madkour/eat-send-escape= function is personal.
 #+begin_src emacs-lisp
 ;; install required inheritenv dependency:
 (use-package inheritenv
