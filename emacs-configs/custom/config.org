@@ -9,6 +9,7 @@
 * TODO Go through the config and cite all the sources of information
 * Bootstrap
 ** Early Init
+Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs's startup optimizations]] and [[https://github.com/jamescherti/minimal-emacs.d][jamescherti/minimal-emacs.d]]; the Android/Termux branch is original.
 #+begin_src emacs-lisp :tangle "./early-init.el"
 ;;Phone config
 (when (eq system-type 'android)
@@ -52,6 +53,7 @@
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
 ** Compile-angel
+Sourced from the [[https://github.com/jamescherti/compile-angel.el][compile-angel README]] by jamescherti.
 #+begin_src emacs-lisp
 (use-package compile-angel
   :ensure t
@@ -79,6 +81,7 @@
   (compile-angel-on-load-mode 1))
 #+end_src
 ** GCMH
+Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning values and startup-time message pattern adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs]].
 #+begin_src emacs-lisp
 (use-package gcmh
   :diminish gcmh-mode
