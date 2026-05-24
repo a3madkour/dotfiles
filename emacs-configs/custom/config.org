@@ -1150,6 +1150,7 @@ Activation from the [[https://github.com/dgutov/diff-hl][diff-hl README]] by Dmi
 #+end_src
 * Writing
 ** Jinx
+Adapted from the [[https://github.com/minad/jinx][Jinx README]] by Daniel Mendler; the =gnu/linux= guard and =[remap ispell-word]= binding are personal.
 #+begin_src emacs-lisp
 (pcase system-type
 	('gnu/linux
