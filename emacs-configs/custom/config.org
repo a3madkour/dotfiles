@@ -1142,6 +1142,7 @@ The xref hook and =xref-show-definitions-function= setting follow the [[https://
 #+end_src
 ** Diff-hl
 Highlight the diffs of the past commit in a file
+Activation from the [[https://github.com/dgutov/diff-hl][diff-hl README]] by Dmitry Gutov.
 #+begin_src emacs-lisp
 (use-package diff-hl
   :config
