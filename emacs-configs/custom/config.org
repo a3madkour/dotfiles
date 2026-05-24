@@ -1504,6 +1504,7 @@ Adapted from the [[https://github.com/svaante/dape][dape README]] by svaante; ma
 (use-package zotra)
 #+end_src
 ** Citar
+The =org-cite-*-processor= setup and =citar-embark= activation follow the [[https://github.com/emacs-citar/citar][citar README]] by Bruce D'Arcus; the =a3madkour/citar-org-format-note=, =a3madkour/citar-add-to-reading-queue=, and =a3madkour/supernote-*= helpers are personal.
 #+begin_src emacs-lisp
 
 (defun a3madkour/citar-org-format-note(key entry)
