@@ -870,6 +870,7 @@ Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; 
 #+end_src
 * UI
 ** All the icons
+The marginalia integration is from the [[https://github.com/iyefrat/all-the-icons-completion][all-the-icons-completion README]].
 #+begin_src emacs-lisp
 (use-package all-the-icons
   :if (display-graphic-p))
@@ -884,6 +885,7 @@ Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; 
   :commands (hide-mode-line-mode))
 #+end_src
 ** Doom modeline
+Settings drawn from the [[https://github.com/seagle0128/doom-modeline][doom-modeline README]] customization examples; the grouping into one =setq= block is personal.
 #+begin_src emacs-lisp
 (use-package doom-modeline
   :defer nil
@@ -899,6 +901,7 @@ Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; 
 		doom-modeline-bar-width 3))
 #+end_src
 ** Themes
+Adapted from the [[https://github.com/doomemacs/themes][doom-themes README]] installation example; loads =doom-molokai= in place of the README's =doom-one=.
 #+begin_src emacs-lisp
 (use-package doom-themes
   :defer nil
@@ -920,6 +923,7 @@ Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; 
   (doom-themes-org-config))
 #+end_src
 ** Pulsar
+Adapted from [[https://protesilaos.com/emacs/pulsar][Prot's pulsar manual]]; the =pulsar-pulse-functions= list comes from an earlier README example pre-dating the =pulsar-pulse-on-window-change= option (see inline NOTE).
 #+begin_src emacs-lisp
 (use-package pulsar
   :config
@@ -1002,6 +1006,7 @@ Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; 
 (use-package hydra)
 #+end_src
 ** Which key
+Adapted from the [[https://github.com/justbur/emacs-which-key][which-key README]]; specific delay and sort-order values are personal.
 #+begin_src emacs-lisp
 (use-package which-key
   :diminish which-key-mode
