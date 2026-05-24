@@ -1026,6 +1026,7 @@ Adapted from the [[https://github.com/justbur/emacs-which-key][which-key README]
 (use-package ace-window)
 #+end_src
 ** Perspective
+Verbatim from the [[https://github.com/nex3/perspective-el][perspective-el README]] by Natalie Weizenbaum.
 #+begin_src emacs-lisp
 (use-package perspective
   :bind
