@@ -2,20 +2,24 @@
 
 ;;; Commentary:
 
-;; Implements parent-spec §6 link rewriting contract for A.1.b.
+;; Implements parent-spec §6 link rewriting contract for A.1.b / A.1.c.
 ;; - `a3madkour-pub/rewrite-link' — per-link-type dispatcher.
 ;; - `a3madkour-pub--heading-anchor' — Hugo `github`-style heading anchor slug.
 ;; - `a3madkour-pub-typed-link-types' — defcustom listing recognized custom
 ;;   typed-link types (e.g., `supports`, `contradicts`).
 ;;
-;; Asset-shaped links return `:pending-asset` in A.1.b; A.1.c upgrades
-;; to real handling.
+;; Asset-shaped links dispatch to `a3madkour-pub/rewrite-asset-link' (A.1.c).
 
 ;;; Code:
 
 (require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-id)
+
+;; Forward declaration: rewrite-asset-link is in a3madkour-publish-assets.el,
+;; which itself requires this file (for --html-escape).  Avoid the circular
+;; require by autoloading the symbol.
+(autoload 'a3madkour-pub/rewrite-asset-link "a3madkour-publish-assets")
 
 (defgroup a3madkour-pub-rewrite nil
   "Link rewriter for the a3madkour-publish library."
@@ -65,6 +69,27 @@ Nl (letter-number, e.g. Roman numerals) and No (other-number, e.g.
     (if (string-empty-p hyphenated)
         "heading"
       hyphenated)))
+
+(defun a3madkour-pub--html-escape (s)
+  "Escape `&', `<', `>', `\"', `'' in S for HTML attribute + element-body context.
+
+This is the single chokepoint for HTML escaping in the publish-rewrite
++ publish-assets modules.  Per parent spec §6 (HTML escaping contract),
+every `:html' emit's interpolated values route through this helper.
+
+`&' is escaped FIRST to avoid double-encoding the other entities'
+ampersands.  Returns the empty string when S is nil (defensive; some
+upstream parsers may pass nil)."
+  (if (or (null s) (string-empty-p s))
+      ""
+    (let ((out s))
+      ;; Order matters: & must come first.
+      (setq out (replace-regexp-in-string "&" "&amp;" out t t))
+      (setq out (replace-regexp-in-string "<" "&lt;" out t t))
+      (setq out (replace-regexp-in-string ">" "&gt;" out t t))
+      (setq out (replace-regexp-in-string "\"" "&quot;" out t t))
+      (setq out (replace-regexp-in-string "'" "&#39;" out t t))
+      out)))
 
 (defun a3madkour-pub--parse-org-link (org-link)
   "Parse an org link form `[[<path>][<text>]]` (or `[[<path>]]`) into a plist.
@@ -173,7 +198,9 @@ time once published, or may 404; the WARN surfaces the risk)."
                                       target-file heading-text)))
                        (format "heading %S not found in target id:%s"
                                heading-text target-id))))))
-        (list :html (format "<a href=\"%s\">%s</a>" href display)
+        (list :html (format "<a href=\"%s\">%s</a>"
+                            (a3madkour-pub--html-escape href)
+                            (a3madkour-pub--html-escape display))
               :warnings warnings))))))
 
 (defun a3madkour-pub--file-top-level-id (file)
@@ -249,7 +276,6 @@ SOURCE-NOTE-ID is the id of the org file containing ORG-LINK
 Returns one of:
   (:html HTML-STRING :warnings (WARN ...))    ; rendered anchor
   (:inert TEXT-STRING :warnings (WARN ...))   ; link erased; text preserved
-  (:pending-asset ORIG-LINK :warnings (...))  ; A.1.b stub; A.1.c upgrades
 
 See parent spec §6 for the per-link-type rules."
   (let* ((parsed (a3madkour-pub--parse-org-link org-link))
@@ -272,14 +298,13 @@ See parent spec §6 for the per-link-type rules."
        text source-note-id))
      ;; External URL scheme — pass through unchanged.
      ((a3madkour-pub--external-scheme-p scheme)
-      (list :html (format "<a href=\"%s\">%s</a>" path text)
+      (list :html (format "<a href=\"%s\">%s</a>"
+                          (a3madkour-pub--html-escape path)
+                          (a3madkour-pub--html-escape text))
             :warnings nil))
-     ;; Asset-shaped link (no scheme, non-`.org` extension) — A.1.b stub;
-     ;; A.1.c will replace with canonical-root resolution.
+     ;; Asset-shaped link (no scheme, non-`.org` extension) — A.1.c dispatch.
      ((a3madkour-pub--asset-shaped-link-p path)
-      (list :pending-asset org-link
-            :warnings (list (format "asset link %S; rewriting deferred to A.1.c"
-                                    org-link))))
+      (a3madkour-pub/rewrite-asset-link path text source-note-id))
      ;; Other branches added in later tasks.
      (t
       (error "rewrite-link: scheme %S not yet handled (this branch lands in a later task)"

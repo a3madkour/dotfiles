@@ -425,34 +425,185 @@ one.  Spec wording amendment is deferred to Task 19."
        (should (equal (plist-get result :html)
                       "<a class=\"link-cites\" href=\"/garden/y/\">reference</a>"))))))
 
-;; -- rewrite-link: asset-shaped link stubs --
+;; -- rewrite-link: asset-shaped link dispatch (A.1.c) --
+;; These tests exercise that asset-shaped links route through rewrite-asset-link.
+;; All fixtures use non-existent files → rewrite-asset-link's :missing → :inert.
+;; note-slug + --id-to-file are stubbed (real impls require org-roam DB + readable files).
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-relative ()
-  "[[./assets/page/foo/x.png]] → :pending-asset + WARN."
-  (let ((result (a3madkour-pub/rewrite-link
-                 "[[./assets/page/foo/diagram.png]]" "source-id")))
-    (should (equal (plist-get result :pending-asset)
-                   "[[./assets/page/foo/diagram.png]]"))
-    (should (= 1 (length (plist-get result :warnings))))
-    (should (string-match-p "asset" (car (plist-get result :warnings))))
-    (should (string-match-p "A.1.c" (car (plist-get result :warnings))))))
+  "[[./assets/page/foo/diagram.png]] → :inert (missing); no :pending-asset."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+    (let ((result (a3madkour-pub/rewrite-link
+                   "[[./assets/page/foo/diagram.png]]" "source-id")))
+      (should (plist-get result :inert))
+      (should-not (plist-get result :pending-asset)))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-relative-shared ()
-  (let ((result (a3madkour-pub/rewrite-link
-                 "[[./assets/shared/common.svg]]" "source-id")))
-    (should (plist-get result :pending-asset))))
+  "[[./assets/shared/common.svg]] → :inert (missing); no :pending-asset."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+    (let ((result (a3madkour-pub/rewrite-link
+                   "[[./assets/shared/common.svg]]" "source-id")))
+      (should (plist-get result :inert))
+      (should-not (plist-get result :pending-asset)))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-absolute ()
-  "Absolute path outside canonical root also returns :pending-asset."
-  (let ((result (a3madkour-pub/rewrite-link
-                 "[[/home/user/some/path/screenshot.jpg]]" "source-id")))
-    (should (plist-get result :pending-asset))))
+  "Absolute path to non-existent file → :inert (missing); no :pending-asset."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+    (let ((result (a3madkour-pub/rewrite-link
+                   "[[/home/user/some/path/screenshot.jpg]]" "source-id")))
+      (should (plist-get result :inert))
+      (should-not (plist-get result :pending-asset)))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-tilde ()
-  "Tilde-paths to canonical root also detected."
+  "Tilde-path to non-existent file → :inert (missing); no :pending-asset."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+    (let ((result (a3madkour-pub/rewrite-link
+                   "[[~/org/notes/assets/page/foo/x.png]]" "source-id")))
+      (should (plist-get result :inert))
+      (should-not (plist-get result :pending-asset)))))
+
+;; -- --html-escape helper --
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-ampersand ()
+  "& → &amp;."
+  (should (equal (a3madkour-pub--html-escape "a & b") "a &amp; b")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-angle-brackets ()
+  "< and > escape."
+  (should (equal (a3madkour-pub--html-escape "<x>") "&lt;x&gt;")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-double-quote ()
+  "\" → &quot;."
+  (should (equal (a3madkour-pub--html-escape "say \"hi\"")
+                 "say &quot;hi&quot;")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-apostrophe ()
+  "' → &#39;."
+  (should (equal (a3madkour-pub--html-escape "it's") "it&#39;s")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-all-five ()
+  "All five characters in a combined input escape correctly — ampersand-first
+order prevents the `&' inside emitted entities (e.g., `&lt;') from being
+double-encoded to `&amp;lt;'."
+  (should (equal (a3madkour-pub--html-escape "<a href=\"&\">'</a>")
+                 "&lt;a href=&quot;&amp;&quot;&gt;&#39;&lt;/a&gt;")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-empty ()
+  "Empty string passes through."
+  (should (equal (a3madkour-pub--html-escape "") "")))
+
+(ert-deftest a3madkour-pub-rewrite-test/html-escape-nil-coerces-to-empty ()
+  "nil input → empty string (defensive; some callers pass nil through)."
+  (should (equal (a3madkour-pub--html-escape nil) "")))
+
+;; -- id-link emit escape retrofit --
+
+(ert-deftest a3madkour-pub-rewrite-test/id-link-display-text-escaped ()
+  "Display text containing < > & gets escaped in the rendered anchor."
+  (cl-letf (((symbol-function 'a3madkour-pub/published-p)
+             (lambda (_) 'live))
+            ((symbol-function 'a3madkour-pub/note-url)
+             (lambda (_) "/garden/x/")))
+    (let* ((uuid "00000000-0000-0000-0000-000000000001")
+           (link (format "[[id:%s][a < b & c > d]]" uuid))
+           (result (a3madkour-pub/rewrite-link link "src")))
+      (should (equal (plist-get result :html)
+                     "<a href=\"/garden/x/\">a &lt; b &amp; c &gt; d</a>")))))
+
+(ert-deftest a3madkour-pub-rewrite-test/id-link-href-with-quote-escaped ()
+  "Resolved URL containing \" (pathological) gets &quot; in href context."
+  (cl-letf (((symbol-function 'a3madkour-pub/published-p)
+             (lambda (_) 'live))
+            ((symbol-function 'a3madkour-pub/note-url)
+             (lambda (_) "/garden/odd\"slug/")))
+    (let* ((uuid "00000000-0000-0000-0000-000000000002")
+           (link (format "[[id:%s][text]]" uuid))
+           (result (a3madkour-pub/rewrite-link link "src")))
+      (should (string-match-p "href=\"/garden/odd&quot;slug/\""
+                              (plist-get result :html))))))
+
+;; -- typed-link emit (class inheritance from id-link) --
+
+(ert-deftest a3madkour-pub-rewrite-test/typed-link-display-text-escaped ()
+  "Class injection MUST preserve the escape applied by id-link's emit."
+  (cl-letf (((symbol-function 'a3madkour-pub/published-p)
+             (lambda (_) 'live))
+            ((symbol-function 'a3madkour-pub/note-url)
+             (lambda (_) "/garden/y/")))
+    (let* ((uuid "00000000-0000-0000-0000-000000000003")
+           (link (format "[[supports:%s][a < b]]" uuid))
+           (result (a3madkour-pub/rewrite-link link "src")))
+      (should (equal (plist-get result :html)
+                     "<a class=\"link-supports\" href=\"/garden/y/\">a &lt; b</a>")))))
+
+;; -- external link emit escape retrofit --
+
+(ert-deftest a3madkour-pub-rewrite-test/external-link-display-text-escaped ()
+  "External link display text with < > & escapes properly."
   (let ((result (a3madkour-pub/rewrite-link
-                 "[[~/org/notes/assets/page/foo/x.png]]" "source-id")))
-    (should (plist-get result :pending-asset))))
+                 "[[https://example.com/x][a & b]]" "src")))
+    (should (equal (plist-get result :html)
+                   "<a href=\"https://example.com/x\">a &amp; b</a>"))))
+
+(ert-deftest a3madkour-pub-rewrite-test/external-link-href-with-amp-escaped ()
+  "URL with & in querystring escapes to &amp; in href."
+  (let ((result (a3madkour-pub/rewrite-link
+                 "[[https://example.com/?a=1&b=2][text]]" "src")))
+    (should (equal (plist-get result :html)
+                   "<a href=\"https://example.com/?a=1&amp;b=2\">text</a>"))))
+
+;; -- rewrite-link asset-branch integration --
+
+(ert-deftest a3madkour-pub-rewrite-test/asset-dispatch-page ()
+  "Asset-shaped link dispatches to rewrite-asset-link (no :pending-asset)."
+  (let* ((root (make-temp-file "a3-pub-disp-" t))
+         (a3madkour-pub-canonical-asset-root root))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "page/foo" root) t)
+          (with-temp-file (expand-file-name "page/foo/x.png" root) (insert "d"))
+          (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                     (lambda (_) nil))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_) "foo")))
+            (let* ((link (format "[[%s][alt]]"
+                                  (expand-file-name "page/foo/x.png" root)))
+                   (result (a3madkour-pub/rewrite-link link "src")))
+              (should (plist-get result :html))
+              (should-not (plist-get result :pending-asset)))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-rewrite-test/asset-dispatch-missing ()
+  "Missing file routed to rewrite-asset-link's :inert path."
+  (let* ((root (make-temp-file "a3-pub-dispm-" t))
+         (a3madkour-pub-canonical-asset-root root))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+                  ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+          (let* ((link (format "[[%s/page/foo/missing.png]]" root))
+                 (result (a3madkour-pub/rewrite-link link "src")))
+            (should (plist-get result :inert))
+            (should-not (plist-get result :pending-asset))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-rewrite-test/pending-asset-shape-removed ()
+  "After A.1.c integration, no return path produces :pending-asset."
+  ;; Walk through several asset shapes; none should return :pending-asset.
+  (let* ((root (make-temp-file "a3-pub-noprev-" t))
+         (a3madkour-pub-canonical-asset-root root))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+                  ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+          (dolist (link '("[[./assets/page/foo/x.png]]"
+                           "[[./assets/shared/y.svg]]"
+                           "[[/tmp/somewhere/z.pdf]]"))
+            (let ((result (a3madkour-pub/rewrite-link link "src")))
+              (should-not (plist-get result :pending-asset)))))
+      (delete-directory root t))))
 
 (provide 'a3madkour-publish-rewrite-test)
 

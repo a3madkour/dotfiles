@@ -34,5 +34,6 @@ exec emacs --batch \
   -L "$LISP_DIR" \
   -l a3madkour-publish \
   -l a3madkour-publish-rewrite \
+  -l a3madkour-publish-assets \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"
