@@ -332,6 +332,21 @@ calls and observing the original value still returned)."
     (should-not (a3madkour-pub/note-slug
                  "55555555-5555-5555-5555-555555555555"))))
 
+;; -- A.1.d: publish-run-accumulator + begin-publish extension --
+
+(ert-deftest a3madkour-pub-test/publish-run-accumulator-is-hash-table ()
+  "The accumulator defvar is bound to a hash table with equal test."
+  (should (hash-table-p a3madkour-pub--publish-run-accumulator))
+  (should (eq (hash-table-test a3madkour-pub--publish-run-accumulator) 'equal)))
+
+(ert-deftest a3madkour-pub-test/begin-publish-clears-accumulator ()
+  "`begin-publish' empties the accumulator alongside the metadata cache."
+  (puthash "stale-id" '("/garden/old/" . live) a3madkour-pub--publish-run-accumulator)
+  (should (> (hash-table-count a3madkour-pub--publish-run-accumulator) 0))
+  (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
+    (a3madkour-pub/begin-publish))
+  (should (= 0 (hash-table-count a3madkour-pub--publish-run-accumulator))))
+
 (provide 'a3madkour-publish-test)
 
 ;;; a3madkour-publish-test.el ends here

@@ -35,5 +35,6 @@ exec emacs --batch \
   -l a3madkour-publish \
   -l a3madkour-publish-rewrite \
   -l a3madkour-publish-assets \
+  -l a3madkour-publish-unpublish \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"

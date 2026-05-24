@@ -154,6 +154,21 @@ publish run (called from `a3madkour-pub/begin-publish').")
   "Clear the per-publish metadata cache.  Idempotent."
   (setq a3madkour-pub--metadata-cache (make-hash-table :test 'equal)))
 
+(defvar a3madkour-pub--publish-run-accumulator
+  (make-hash-table :test 'equal)
+  "Per-publish-run accumulator of id → (current-url . state) for notes that
+`a3madkour-pub-history/record-publish' processed during this publish.
+
+Populated incrementally by B's per-content-type publisher (via record-publish);
+consumed by `a3madkour-pub/finish-publish' to compute the new live+draft set
+without re-walking the source tree.
+
+When empty at the time `finish-publish' runs, the orchestrator falls back to
+`a3madkour-pub/walk-published-source-set' (standalone mode — used today,
+before B ships).
+
+Reset explicitly via `a3madkour-pub/begin-publish' at the start of each run.")
+
 (defun a3madkour-pub--resolve-file-or-id (file-or-id)
   "If FILE-OR-ID is a UUID (looks like an org-roam ID), resolve via
 `a3madkour-pub--id-to-file' and return the file path.  Otherwise return
@@ -231,14 +246,17 @@ See `a3madkour-pub/note-metadata` for snapshot/caching behavior."
     (format "/%s/%s/" section slug)))
 
 (defun a3madkour-pub/begin-publish ()
-  "Take per-publish snapshots: reset metadata cache; sync org-roam DB.
+  "Take per-publish snapshots: reset metadata cache; clear accumulator;
+sync org-roam DB.
 
 Call this at the start of any publish run (shell or interactive).
 Both A's accessors and the link rewriter rely on these snapshots being
 fresh; edits made after this call are NOT picked up until the next
 `begin-publish' call.
 
-See parent spec §11 (snapshot-at-publish-start subsection).
+See parent spec §11 (snapshot-at-publish-start subsection).  A.1.d adds
+the publish-run-accumulator clear (the accumulator backs `finish-publish'
+in B-coupled mode).
 
 NOTE: `org-roam' is required lazily via `autoload'/dynamic load on first
 use of `org-roam-db-sync'.  Tests stub `org-roam-db-sync' via `cl-letf'
@@ -247,6 +265,7 @@ in effect across the call, org-roam must already be loaded (so that
 `require' here is a no-op).  The test file pre-requires `org-roam' for
 that reason."
   (a3madkour-pub--reset-metadata-cache)
+  (clrhash a3madkour-pub--publish-run-accumulator)
   (require 'org-roam)
   (org-roam-db-sync))
 
