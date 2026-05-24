@@ -583,6 +583,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 #+end_src
 * Completion
 ** Vertico
+Adapted from the [[https://github.com/minad/vertico][Vertico README]] example, including the savehist and =crm-indicator= minibuffer setup.
 #+begin_src emacs-lisp
 ;; Enable vertico
 (use-package vertico
@@ -634,6 +635,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (setq enable-recursive-minibuffers t))
 #+end_src
 ** Marginalia
+Sourced from the [[https://github.com/minad/marginalia][Marginalia README]].
 #+begin_src emacs-lisp
 (use-package marginalia
   :ensure t
@@ -641,6 +643,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (marginalia-mode))
 #+end_src
 ** Consult
+Bindings and configuration adapted from the [[https://github.com/minad/consult][Consult README example configuration]]; the =a3madkour/consult-line-evil-sync= advice is original.
 #+begin_src emacs-lisp
 ;; Example configuration for Consult
 (use-package consult
@@ -716,6 +719,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
    (advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync))
 #+end_src
 ** Consult-dash
+The =consult-customize= line is from the [[https://codeberg.org/ravi/consult-dash][consult-dash README]]; the =counsel-dash-*= variables carry over from the [[https://github.com/dash-docs-el/counsel-dash][counsel-dash]] package.
 #+begin_src emacs-lisp
 (use-package consult-dash
   :config
@@ -729,6 +733,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (consult-customize consult-dash :initial (thing-at-point 'symbol)))
 #+end_src
 ** Embark
+Adapted from the [[https://github.com/oantolin/embark][Embark README]]; =embark-dwim= is bound to =C-/= instead of the README's =C-;=.
 #+begin_src emacs-lisp
 (use-package embark
   :ensure t
@@ -754,6 +759,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 										;
 #+end_src
 ** Embark-consult
+From the [[https://github.com/oantolin/embark][Embark README]]'s embark-consult section.
 #+begin_src emacs-lisp
 ;; Consult users will also want the embark-consult package.
 (use-package embark-consult
@@ -766,6 +772,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (embark-collect-mode . consult-preview-at-point-mode))
 #+end_src
 ** Orderless
+Adapted from the [[https://github.com/oantolin/orderless][Orderless README]] example; the dispatcher comment references the [[https://github.com/minad/consult/wiki][Consult wiki]].
 #+begin_src emacs-lisp
 ;; Optionally use the `orderless' completion style.
 (use-package orderless
@@ -778,6 +785,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 		completion-category-overrides '((file (styles partial-completion)))))
 #+end_src
 ** Corfu
+Sourced from the [[https://github.com/minad/corfu][Corfu README]] minimal example.
 #+begin_src emacs-lisp
 (use-package corfu
   :custom
@@ -786,6 +794,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
   (global-corfu-mode))
 #+end_src
 ** Cape
+Adapted from the [[https://github.com/minad/cape][Cape README]] example, including the eglot =cape-wrap-buster=/=cape-wrap-nonexclusive= advice from its Eglot section.
 #+begin_src emacs-lisp
 ;; Add extensions
 (use-package cape
@@ -827,6 +836,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 (use-package yasnippet-snippets)
 #+end_src
 ** Auto activating snippets
+Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; the LaTeX snippet collection is the example configuration from the [[https://github.com/tecosaur/LaTeX-auto-activating-snippets][LaTeX-auto-activating-snippets README]].
 #+begin_src emacs-lisp
 (use-package aas
   :hook (LaTeX-mode . aas-activate-for-major-mode)
