@@ -537,5 +537,174 @@
       (delete-directory asset-root t)
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
+;; -- unpublish--recheck-live-note-links helper --
+
+(defmacro a3-pub-unpublish-test--with-tmp-source (file-var body-content &rest setup-body)
+  "Write BODY-CONTENT to a tmpfile bound to FILE-VAR; run SETUP-BODY; cleanup."
+  (declare (indent 2))
+  `(let ((,file-var (make-temp-file "a3-pub-source-" nil ".org")))
+     (unwind-protect
+         (progn
+           (with-temp-file ,file-var (insert ,body-content))
+           ,@setup-body)
+       (when (file-exists-p ,file-var) (delete-file ,file-var)))))
+
+(ert-deftest a3madkour-pub-unpublish-test/recheck-live-link-to-removed-warns ()
+  "Live note with [[id:...]] link to removed target produces WARN."
+  (a3-pub-unpublish-test--with-tmp-source src
+      "Some text [[id:tgt-removed][link]] more text.\n"
+    (let ((removed-set (make-hash-table :test 'equal)))
+      (puthash "tgt-removed" t removed-set)
+      (cl-letf (((symbol-function 'a3madkour-pub-history/read-manifest)
+                 (lambda ()
+                   `((notes . [((id . "live-note") (current_url . "/garden/x/")
+                                (history . []) (state . "live"))
+                               ((id . "tgt-removed") (current_url . nil)
+                                (history . [((url . "/garden/old/") (replaced_at . "t")
+                                             (reason . "removed"))])
+                                (state . "removed"))]))))
+                ((symbol-function 'org-roam-id-find)
+                 (lambda (id &optional _)
+                   (when (equal id "live-note") (cons src 1)))))
+        (let ((warnings (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
+          (should (= 1 (length warnings)))
+          (should (string-match-p "live-note" (car warnings)))
+          (should (string-match-p "tgt-removed" (car warnings))))))))
+
+(ert-deftest a3madkour-pub-unpublish-test/recheck-link-to-live-no-warn ()
+  "Live note with link to another live target → no WARN."
+  (a3-pub-unpublish-test--with-tmp-source src
+      "[[id:tgt-live][link]]\n"
+    (let ((removed-set (make-hash-table :test 'equal)))
+      (cl-letf (((symbol-function 'a3madkour-pub-history/read-manifest)
+                 (lambda ()
+                   `((notes . [((id . "live-note") (current_url . "/garden/x/")
+                                (history . []) (state . "live"))]))))
+                ((symbol-function 'org-roam-id-find)
+                 (lambda (id &optional _)
+                   (when (equal id "live-note") (cons src 1)))))
+        (should (null (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))))))
+
+(ert-deftest a3madkour-pub-unpublish-test/recheck-unparseable-source-warns ()
+  "If source file is missing, WARN names the file but continues."
+  (let ((removed-set (make-hash-table :test 'equal)))
+    (cl-letf (((symbol-function 'a3madkour-pub-history/read-manifest)
+               (lambda ()
+                 `((notes . [((id . "ghost") (current_url . "/garden/g/")
+                              (history . []) (state . "live"))]))))
+              ((symbol-function 'org-roam-id-find)
+               (lambda (id &optional _)
+                 (when (equal id "ghost") (cons "/nonexistent/path.org" 1)))))
+      (let ((warnings (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
+        (should (= 1 (length warnings)))
+        (should (string-match-p "ghost" (car warnings)))))))
+
+(ert-deftest a3madkour-pub-unpublish-test/recheck-multi-link-per-note ()
+  "Multiple links per note are all checked; each removed target → own WARN."
+  (a3-pub-unpublish-test--with-tmp-source src
+      "[[id:rem-1][a]] and [[id:rem-2][b]] and [[id:live-tgt][c]]\n"
+    (let ((removed-set (make-hash-table :test 'equal)))
+      (puthash "rem-1" t removed-set)
+      (puthash "rem-2" t removed-set)
+      (cl-letf (((symbol-function 'a3madkour-pub-history/read-manifest)
+                 (lambda ()
+                   `((notes . [((id . "src-note") (current_url . "/garden/s/")
+                                (history . []) (state . "live"))]))))
+                ((symbol-function 'org-roam-id-find)
+                 (lambda (id &optional _)
+                   (when (equal id "src-note") (cons src 1)))))
+        (let ((warnings (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
+          (should (= 2 (length warnings))))))))
+
+;; -- finish-publish: Step C integration --
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-c-orphan-warn ()
+  "End-to-end: removed note linked from a live note → :orphan-warnings populated."
+  (let* ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (live-src (make-temp-file "a3-pub-src-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file live-src
+            (insert "Hello, see [[id:tgt-id][gone]] now.\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                     (lambda () manifest-path))
+                    ((symbol-function 'org-roam-id-find)
+                     (lambda (id &optional _)
+                       (when (equal id "live-id") (cons live-src 1)))))
+            (a3madkour-pub-history/write-manifest
+             '((notes . [((id . "live-id") (current_url . "/garden/live/")
+                          (history . []) (state . "live"))
+                         ((id . "tgt-id") (current_url . "/garden/tgt/")
+                          (history . []) (state . "live"))])))
+            (clrhash a3madkour-pub--publish-run-accumulator)
+            (puthash "live-id" '("/garden/live/" . live)
+                     a3madkour-pub--publish-run-accumulator)
+            ;; tgt-id NOT in accumulator → will be classified as removed.
+            (cl-letf (((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                       (lambda (&rest _) nil)))  ; stub FS delete
+              (let* ((result (a3madkour-pub/finish-publish))
+                     (warnings (plist-get result :orphan-warnings)))
+                (should (= 1 (length warnings)))
+                (should (string-match-p "live-id" (car warnings)))
+                (should (string-match-p "tgt-id" (car warnings)))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (when (file-exists-p live-src) (delete-file live-src)))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-c-dry-run-still-warns ()
+  "Step C is read-only; dry-run still produces :orphan-warnings."
+  (let* ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (live-src (make-temp-file "a3-pub-src-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file live-src (insert "[[id:tgt-id][x]]\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                     (lambda () manifest-path))
+                    ((symbol-function 'org-roam-id-find)
+                     (lambda (id &optional _)
+                       (when (equal id "live-id") (cons live-src 1)))))
+            (a3madkour-pub-history/write-manifest
+             '((notes . [((id . "live-id") (current_url . "/garden/live/")
+                          (history . []) (state . "live"))
+                         ((id . "tgt-id") (current_url . "/garden/tgt/")
+                          (history . []) (state . "live"))])))
+            (clrhash a3madkour-pub--publish-run-accumulator)
+            (puthash "live-id" '("/garden/live/" . live)
+                     a3madkour-pub--publish-run-accumulator)
+            (let ((result (a3madkour-pub/finish-publish :dry-run t)))
+              (should (= 1 (length (plist-get result :orphan-warnings)))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (when (file-exists-p live-src) (delete-file live-src)))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-empty-removed-empty-warnings ()
+  "Empty :removed → :orphan-warnings nil (Step C short-circuits)."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path)))
+          (a3madkour-pub-history/write-manifest '((notes . [])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                     (lambda () (make-hash-table :test 'equal))))
+            (let ((result (a3madkour-pub/finish-publish)))
+              (should (null (plist-get result :orphan-warnings))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
+;; -- check-orphans thin alias --
+
+(ert-deftest a3madkour-pub-unpublish-test/check-orphans-parity-with-dry-run ()
+  "`check-orphans' is identical to `(finish-publish :dry-run t)'."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path)))
+          (a3madkour-pub-history/write-manifest '((notes . [])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                     (lambda () (make-hash-table :test 'equal))))
+            (let ((a (a3madkour-pub/finish-publish :dry-run t))
+                  (b (a3madkour-pub/check-orphans)))
+              (should (equal a b)))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

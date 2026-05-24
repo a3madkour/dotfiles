@@ -706,6 +706,43 @@
         (let ((result (a3madkour-pub/asset-validate-and-copy org-file bundle)))
           (should (plist-get result :warnings)))))))
 
+;; -- A.1.d carry-forward #1: --asset-normalize-link-path dedicated unit tests --
+
+(ert-deftest a3madkour-pub-assets-test/normalize-link-path-dot-assets-resolves-canonical ()
+  "`./assets/<rest>' resolves against canonical-root, not the org file's dir."
+  (a3-pub-assets-test--with-tmp-root root
+    (let* ((a3madkour-pub-canonical-asset-root root)
+           (org-file (expand-file-name "notes/sub/a.org" root))
+           (input "./assets/page/foo/x.png"))
+      (make-directory (file-name-directory org-file) t)
+      (with-temp-file org-file (insert "stub"))
+      (let ((normalized (a3madkour-pub--asset-normalize-link-path input org-file)))
+        (should (string-prefix-p (expand-file-name root) normalized))
+        (should (string-suffix-p "page/foo/x.png" normalized))))))
+
+(ert-deftest a3madkour-pub-assets-test/normalize-link-path-other-relative-resolves-org-dir ()
+  "Relative paths NOT starting with `./assets/' resolve against org-file dir."
+  (a3-pub-assets-test--with-tmp-root root
+    (let* ((a3madkour-pub-canonical-asset-root root)
+           (org-file (expand-file-name "notes/sub/a.org" root))
+           (input "../shared/sibling.png"))
+      (make-directory (file-name-directory org-file) t)
+      (with-temp-file org-file (insert "stub"))
+      (let ((normalized (a3madkour-pub--asset-normalize-link-path input org-file)))
+        ;; Should resolve to <root>/notes/shared/sibling.png (org-file dir + ../).
+        (should (string-suffix-p "notes/shared/sibling.png" normalized))))))
+
+(ert-deftest a3madkour-pub-assets-test/normalize-link-path-absolute-passes-through ()
+  "Absolute path is returned as-is (after expand-file-name normalization)."
+  (a3-pub-assets-test--with-tmp-root root
+    (let* ((a3madkour-pub-canonical-asset-root root)
+           (org-file (expand-file-name "notes/a.org" root))
+           (input "/tmp/some-external-asset.png"))
+      (make-directory (file-name-directory org-file) t)
+      (with-temp-file org-file (insert "stub"))
+      (let ((normalized (a3madkour-pub--asset-normalize-link-path input org-file)))
+        (should (equal normalized "/tmp/some-external-asset.png"))))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here

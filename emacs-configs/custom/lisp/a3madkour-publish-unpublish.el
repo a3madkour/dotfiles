@@ -164,7 +164,7 @@ yield (\"research/questions\" . \"q\")."
   "Orchestrate the unpublish flow.  Returns a plist.
 
 When DRY-RUN is non-nil: no FS writes, no manifest mutation.  Useful for
-`--check-orphans' preview.
+`--check-orphans' preview.  Step C still runs in dry-run (it's read-only).
 
 Sub-steps (in fixed order):
   Step A — unpublish sweep: diff new live-set vs manifest live+draft;
@@ -172,7 +172,7 @@ Sub-steps (in fixed order):
            call `record-publish' with state `removed' to mutate manifest.
   Step B — slug-shift sync: rename `<asset-root>/page/<old-slug>/' →
            `<new-slug>/' and bulk-rewrite source .org link references.
-  Step C — re-link-check (Task 13): scan live notes' outgoing org links;
+  Step C — re-link-check: scan live notes' outgoing [[id:...]] links;
            WARN for any link resolving into removed-this-publish-set.
 
 New-set is read from `a3madkour-pub--publish-run-accumulator' (B-coupled
@@ -193,9 +193,11 @@ Returns:
          (shifts (plist-get diff :slug-shifted))
          (manifest (a3madkour-pub-history/read-manifest))
          (notes (alist-get 'notes manifest))
-         slug-shifted-result)
+         (removed-set (make-hash-table :test 'equal))
+         slug-shifted-result orphan-warnings)
     ;; Step A: sweep.
     (dolist (id removed)
+      (puthash id t removed-set)
       (let* ((idx (a3madkour-pub-history--find-note-by-id notes id))
              (entry (when idx (aref notes idx)))
              (url (when entry (alist-get 'current_url entry)))
@@ -216,12 +218,15 @@ Returns:
               (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
               (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug))
             (push (cons old-slug new-slug) slug-shifted-result)))))
-    ;; Step C lands in Task 13.
+    ;; Step C: re-link-check (read-only; runs in dry-run too).
+    (when (> (hash-table-count removed-set) 0)
+      (setq orphan-warnings
+            (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
     (list :added (plist-get diff :added)
           :stayed (plist-get diff :stayed)
           :removed removed
           :slug-shifted (nreverse slug-shifted-result)
-          :orphan-warnings nil)))
+          :orphan-warnings orphan-warnings)))
 
 (defun a3madkour-pub--unpublish-rename-asset-dir (old-slug new-slug &optional canonical-root)
   "Rename `<CANONICAL-ROOT>/page/<OLD-SLUG>/' → `<NEW-SLUG>/'.
@@ -312,6 +317,77 @@ Idempotent: re-runs after a successful pass produce zero modifications
                    warnings))))))
     (list :modified (nreverse modified)
           :warnings (nreverse warnings))))
+
+(defun a3madkour-pub--unpublish-recheck-live-note-links (removed-this-publish-set)
+  "For each live manifest entry, scan outgoing [[id:...]] links.
+Emit WARN for each link whose target id is in REMOVED-THIS-PUBLISH-SET.
+
+REMOVED-THIS-PUBLISH-SET is a hash table id → t (or any truthy value).
+
+Returns a list of WARN strings.  Format:
+  \"WARN: live note <id> (<url>) outgoing link to <removed-id> (was <old-url>) — republish recommended\"
+
+Source files are located via `org-roam-id-find' — which returns `(file . pos)';
+we unwrap via `car' (per memory `reference_org_roam_id_find_returns_cons').
+Source files that don't exist or can't be read produce their own WARN."
+  (let* ((manifest (a3madkour-pub-history/read-manifest))
+         (notes (alist-get 'notes manifest))
+         warnings)
+    (cl-loop for i from 0 below (length notes)
+             for entry = (aref notes i)
+             when (and (equal (alist-get 'state entry) "live")
+                       ;; Skip sources that are themselves being removed this
+                       ;; publish — no value checking their outgoing links
+                       ;; (relevant in dry-run, where manifest still shows
+                       ;; them as live).
+                       (not (gethash (alist-get 'id entry)
+                                     removed-this-publish-set)))
+             do
+             (let* ((src-id (alist-get 'id entry))
+                    (src-url (alist-get 'current_url entry))
+                    (found (org-roam-id-find src-id))
+                    (src-file (when (consp found) (car found))))
+               (cond
+                ((or (null src-file) (not (file-readable-p src-file)))
+                 (push (format "WARN: live note %s (%s) source file unreadable"
+                               src-id src-url)
+                       warnings))
+                (t
+                 (let ((content (with-temp-buffer
+                                  (insert-file-contents src-file)
+                                  (buffer-string)))
+                       (link-re "\\[\\[id:\\([^]]+\\)\\]"))
+                   (with-temp-buffer
+                     (insert content)
+                     (goto-char (point-min))
+                     (while (re-search-forward link-re nil t)
+                       (let ((target-id (match-string 1)))
+                         (when (gethash target-id removed-this-publish-set)
+                           (let* ((tgt-idx (a3madkour-pub-history--find-note-by-id
+                                            notes target-id))
+                                  (tgt-entry (when tgt-idx (aref notes tgt-idx)))
+                                  (tgt-hist (when tgt-entry
+                                              (alist-get 'history tgt-entry)))
+                                  (tgt-old-url
+                                   (when (and tgt-hist (> (length tgt-hist) 0))
+                                     (alist-get 'url (aref tgt-hist
+                                                           (1- (length tgt-hist)))))))
+                             (push (format
+                                    "WARN: live note %s (%s) outgoing link to %s (was %s) — republish recommended"
+                                    src-id src-url target-id (or tgt-old-url "?"))
+                                   warnings)))))))))))
+    (nreverse warnings)))
+
+(defun a3madkour-pub/check-orphans ()
+  "Dry-run preview of `a3madkour-pub/finish-publish'.
+
+Thin alias for `(a3madkour-pub/finish-publish :dry-run t)'.  Exists
+because parent spec §10 named it explicitly.
+
+No FS or manifest mutation.  Returns the same plist shape as
+`finish-publish' (with the same diagnostic content; only the side
+effects differ between the two calls)."
+  (a3madkour-pub/finish-publish :dry-run t))
 
 (provide 'a3madkour-publish-unpublish)
 
