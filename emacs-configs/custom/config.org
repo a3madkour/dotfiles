@@ -1213,6 +1213,7 @@ Adapted from the [[https://github.com/minad/jinx][Jinx README]] by Daniel Mendle
   (setq eldoc-idle-delay 0.5))
 #+end_src
 ** Format all
+Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
 #+begin_src emacs-lisp
 (use-package format-all
  :commands format-all-mode
@@ -1362,6 +1363,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package poly-R)
 #+end_src
 *** Latex
+The =auctex= configuration block is adapted from [[https://github.com/doomemacs/doomemacs/blob/master/modules/lang/latex/config.el][Doom Emacs's latex module]] (the =;; Don't start the Emacs server when correlating sources.= and =;; Just save, don't ask before each compilation.= comments are verbatim); XeTeX engine, =:general= keybindings, and the extra settings (=TeX-show-compilation=, =TeX-electric-sub-and-superscript=) are personal.
 #+begin_src emacs-lisp
 ;reftex
 (add-hook 'org-mode-hook 'reftex-mode)
@@ -1447,6 +1449,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 ** Dape
 Debuging adapter protocol for emacs
+Adapted from the [[https://github.com/svaante/dape][dape README]] by svaante; many of the inline comments are uncommented from the README's example. The =rust-gdb= entry added to =dape-configs= is personal.
 #+begin_src emacs-lisp
 (use-package dape
   ;; To use window configuration like gud (gdb-mi)
