@@ -1074,6 +1074,7 @@ Verbatim from the [[https://github.com/nex3/perspective-el][perspective-el READM
 ** Dired stuff
 *** diredfl
 front lock rules for colorful dired
+Activates [[https://github.com/purcell/diredfl][diredfl]] by Steve Purcell; per-buffer hook instead of the README's =diredfl-global-mode= recommendation.
 #+begin_src emacs-lisp
 (use-package diredfl
   :hook (dired-mode . diredfl-mode)
@@ -1081,6 +1082,7 @@ front lock rules for colorful dired
 #+end_src
 *** dired-git-info
 Simple package for showing git info
+Auto-enable hook from the [[https://github.com/clemera/dired-git-info][dired-git-info README]] by clemera.
 #+begin_src emacs-lisp
 (use-package dired-git-info
   :config
@@ -1088,6 +1090,7 @@ Simple package for showing git info
   )
 #+end_src
 *** Dired rsync
+Both =dired-rsync= and =dired-rsync-transient= bindings are the example configurations from the [[https://github.com/stsquad/dired-rsync][dired-rsync README]] by Alex Bennée.
 #+begin_src emacs-lisp
 (use-package dired-rsync
   :bind (:map dired-mode-map
@@ -1101,6 +1104,7 @@ Simple package for showing git info
 #+end_src
 *** Nerd icons dired
 Nerd icons for dired
+Verbatim from the [[https://github.com/rainstormstudio/nerd-icons-dired][nerd-icons-dired README]].
 #+begin_src emacs-lisp
 (use-package nerd-icons-dired
   :hook
@@ -1108,6 +1112,7 @@ Nerd icons for dired
 #+end_src
 *** Fd for dired
 Fd support for dired
+The =find-dired= remap follows the recommended setup from the [[https://github.com/yqrashawn/fd-dired][fd-dired README]].
 #+begin_src emacs-lisp
 (use-package fd-dired
   :config
