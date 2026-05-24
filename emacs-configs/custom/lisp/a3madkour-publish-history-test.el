@@ -4,6 +4,9 @@
 
 (require 'ert)
 (require 'a3madkour-publish-history)
+;; A.1.d: bring in the publish-run-accumulator defvar so the new
+;; record-publish tests below can clear/inspect it explicitly.
+(require 'a3madkour-publish)
 
 (defun a3madkour-pub-history-test--with-tmp-data-dir (thunk)
   "Create a tmp dir; let-bind `a3madkour-pub/site-data-dir' to it; call THUNK."
@@ -12,6 +15,20 @@
         (let ((a3madkour-pub/site-data-dir tmp-dir))
           (funcall thunk tmp-dir))
       (delete-directory tmp-dir t))))
+
+(defmacro a3-pub-history-test--with-tmp-manifest (path-sym &rest body)
+  "Create a tmp data dir + bind PATH-SYM to the manifest path; eval BODY.
+A.1.d helper that mirrors the plan's BDD-style block form (vs. the older
+thunk-based `--with-tmp-data-dir').  Sets `a3madkour-pub/site-data-dir' to
+a fresh tmp dir; binds PATH-SYM to the resolved manifest path; tears down
+the dir on exit."
+  (declare (indent 1) (debug (sexp body)))
+  `(let ((tmp-dir (file-name-as-directory (make-temp-file "a3-pub-data-" t))))
+     (unwind-protect
+         (let* ((a3madkour-pub/site-data-dir tmp-dir)
+                (,path-sym (a3madkour-pub-history--manifest-path)))
+           ,@body)
+       (delete-directory tmp-dir t))))
 
 (ert-deftest a3madkour-pub-history-test/site-data-dir-required ()
   "Manifest path requires `a3madkour-pub/site-data-dir' to be set."
@@ -166,6 +183,134 @@
             (history (alist-get 'history note))
             (entry (aref history (1- (length history)))))
        (should (equal "section_change" (alist-get 'reason entry)))))))
+
+;; -- A.1.d: republished reason path + accumulator append --
+
+(ert-deftest a3madkour-pub-history-test/republished-flips-state-and-appends-event ()
+  "A removed -> live transition flips state, appends a `republished' event."
+  (a3-pub-history-test--with-tmp-manifest path
+    ;; Seed manifest with one removed note (URL was /garden/foo/).
+    (let ((m `((notes . [((id . "rep-id-1")
+                          (current_url . nil)
+                          (history . [((url . "/garden/foo/")
+                                       (replaced_at . "2026-05-22T10:00:00Z")
+                                       (reason . "removed"))])
+                          (state . "removed"))]))))
+      (a3madkour-pub-history/write-manifest m))
+    ;; Clear accumulator (test isolation per Task 3 code-review minor).
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          ;; Republish at the same URL.
+          (cl-letf (((symbol-function 'a3madkour-pub-history--now-iso)
+                     (lambda () "2026-05-24T12:00:00Z")))
+            (a3madkour-pub-history/record-publish "rep-id-1" "/garden/foo/" 'live))
+          ;; Check.
+          (let* ((m (a3madkour-pub-history/read-manifest))
+                 (note (aref (alist-get 'notes m) 0))
+                 (hist (alist-get 'history note)))
+            (should (equal (alist-get 'state note) "live"))
+            (should (equal (alist-get 'current_url note) "/garden/foo/"))
+            (should (= 2 (length hist)))
+            (should (equal (alist-get 'reason (aref hist 1)) "republished"))
+            (should (equal (alist-get 'url (aref hist 1)) nil))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
+(ert-deftest a3madkour-pub-history-test/republished-aliases-re-merged-from-prior ()
+  "After republish, aliases-for surfaces the prior URL from history."
+  (a3-pub-history-test--with-tmp-manifest path
+    (let ((m `((notes . [((id . "rep-id-2")
+                          (current_url . nil)
+                          (history . [((url . "/garden/old/")
+                                       (replaced_at . "2026-05-22T10:00:00Z")
+                                       (reason . "removed"))])
+                          (state . "removed"))]))))
+      (a3madkour-pub-history/write-manifest m))
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub-history--now-iso)
+                     (lambda () "2026-05-24T12:00:00Z")))
+            (a3madkour-pub-history/record-publish "rep-id-2" "/garden/new/" 'live))
+          (should (member "/garden/old/" (a3madkour-pub-history/aliases-for "rep-id-2"))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
+(ert-deftest a3madkour-pub-history-test/record-publish-appends-to-accumulator ()
+  "Every record-publish call pushes (id . (url . state)) into the accumulator."
+  (a3-pub-history-test--with-tmp-manifest path
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (a3madkour-pub-history/record-publish "acc-id-1" "/garden/x/" 'live)
+          (a3madkour-pub-history/record-publish "acc-id-2" "/garden/y/" 'draft)
+          (a3madkour-pub-history/record-publish "acc-id-3" nil 'removed)
+          (should (= 3 (hash-table-count a3madkour-pub--publish-run-accumulator)))
+          (should (equal (gethash "acc-id-1" a3madkour-pub--publish-run-accumulator)
+                         '("/garden/x/" . live)))
+          (should (equal (gethash "acc-id-2" a3madkour-pub--publish-run-accumulator)
+                         '("/garden/y/" . draft)))
+          (should (equal (gethash "acc-id-3" a3madkour-pub--publish-run-accumulator)
+                         '(nil . removed))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
+(ert-deftest a3madkour-pub-history-test/republished-at-new-url-still-republished ()
+  "Republishing a removed note at a DIFFERENT URL still emits `republished'
+(not `title_change' / `slug_override' / `section_change') — the cond branch
+that catches the removed → live transition takes precedence over the
+bare url-changed-p branch."
+  (a3-pub-history-test--with-tmp-manifest path
+    (let ((m `((notes . [((id . "rep-new-url-id")
+                          (current_url . nil)
+                          (history . [((url . "/garden/old/")
+                                       (replaced_at . "2026-05-22T10:00:00Z")
+                                       (reason . "removed"))])
+                          (state . "removed"))]))))
+      (a3madkour-pub-history/write-manifest m))
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub-history--now-iso)
+                     (lambda () "2026-05-24T12:00:00Z")))
+            (a3madkour-pub-history/record-publish "rep-new-url-id" "/garden/new/" 'live))
+          (let* ((m (a3madkour-pub-history/read-manifest))
+                 (note (aref (alist-get 'notes m) 0))
+                 (hist (alist-get 'history note)))
+            (should (equal (alist-get 'state note) "live"))
+            (should (equal (alist-get 'current_url note) "/garden/new/"))
+            ;; Exactly 2 events: the original removed + the new republished.
+            ;; NOT 3 (would happen if both republished AND a url-change event fired).
+            (should (= 2 (length hist)))
+            (should (equal (alist-get 'reason (aref hist 1)) "republished"))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
+(ert-deftest a3madkour-pub-history-test/removed-to-draft-no-republished ()
+  "Removed → draft transition is a state change only — no `republished'
+event is appended. (Author's draft preview hasn't truly republished from
+a live-site perspective.)"
+  (a3-pub-history-test--with-tmp-manifest path
+    (let ((m `((notes . [((id . "rem-to-draft-id")
+                          (current_url . nil)
+                          (history . [((url . "/garden/x/")
+                                       (replaced_at . "2026-05-22T10:00:00Z")
+                                       (reason . "removed"))])
+                          (state . "removed"))]))))
+      (a3madkour-pub-history/write-manifest m))
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub-history--now-iso)
+                     (lambda () "2026-05-24T12:00:00Z")))
+            (a3madkour-pub-history/record-publish "rem-to-draft-id" "/garden/x/" 'draft))
+          (let* ((m (a3madkour-pub-history/read-manifest))
+                 (note (aref (alist-get 'notes m) 0))
+                 (hist (alist-get 'history note)))
+            ;; State flipped.
+            (should (equal (alist-get 'state note) "draft"))
+            (should (equal (alist-get 'current_url note) "/garden/x/"))
+            ;; But NO new event — history still has just the original removed entry.
+            (should (= 1 (length hist)))
+            (should (equal (alist-get 'reason (aref hist 0)) "removed"))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
 
 (provide 'a3madkour-publish-history-test)
 

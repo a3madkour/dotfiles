@@ -144,7 +144,14 @@ Keyword args:
     URL changes between author-driven slug overrides (\"slug_override\") and
     title-derived ones (\"title_change\").  Section changes always win regardless.
     Defaults to nil, preserving the prior behavior of classifying same-section
-    changes as \"title_change\"."
+    changes as \"title_change\".
+
+A.1.d additions:
+  - `republished' reason: emitted on a removed → live transition.
+  - Every call appends (id . (new-url . state)) to
+    `a3madkour-pub--publish-run-accumulator' for `finish-publish' consumption.
+    Caller must ensure `begin-publish' was invoked at the start of the publish
+    run; the accumulator is not cleared on each call."
   (let* ((manifest (a3madkour-pub-history/read-manifest))
          (notes (alist-get 'notes manifest))
          (idx (a3madkour-pub-history--find-note-by-id notes id))
@@ -169,6 +176,20 @@ Keyword args:
         (when (or url-changed-p state-changed-p)
           (let* ((reason (cond
                           ((and url-changed-p (null new-url)) "removed")
+                          ;; A.1.d: republish — removed → live transition.
+                          ;; Takes precedence over the bare url-changed-p
+                          ;; branch so republishing at a NEW URL still gets
+                          ;; the `republished' label (not `title_change').
+                          ((and state-changed-p
+                                (equal old-state "removed")
+                                (equal state-str "live"))
+                           "republished")
+                          ;; A.1.d: removed → draft (or any other non-live
+                          ;; state) is state-only — no event appended.  The
+                          ;; current_url update still happens (state change
+                          ;; is real), but history stays quiet until the
+                          ;; note actually republishes as live.
+                          ((equal old-state "removed") nil)
                           (url-changed-p (a3madkour-pub-history--diff-reason
                                           old-url new-url had-slug-override-p))
                           (t nil)))  ; state-only change
@@ -184,7 +205,12 @@ Keyword args:
                             (history . ,new-history)
                             (state . ,state-str))))
             (aset notes idx updated)
-            (a3madkour-pub-history/write-manifest manifest))))))))
+            (a3madkour-pub-history/write-manifest manifest))))))
+    ;; A.1.d: accumulator append (always, regardless of which branch above
+    ;; mutated the manifest).  Stores the SYMBOL form of state so that
+    ;; `a3madkour-pub/diff-published-set' can compare cdr against `live' /
+    ;; `draft' symbols (Task 5 contract).
+    (puthash id (cons new-url state) a3madkour-pub--publish-run-accumulator)))
 
 (defun a3madkour-pub-history/aliases-for (id)
   "Return all prior URLs recorded for ID, oldest-first.  Nil if ID unknown.

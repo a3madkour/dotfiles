@@ -3,10 +3,9 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-05-19 Tue]
+:LAST_MODIFIED: [2026-05-24 Sun]
 :END:
 
-* TODO Go through the config and cite all the sources of information
 * Bootstrap
 ** Early Init
 Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs's startup optimizations]] and [[https://github.com/jamescherti/minimal-emacs.d][jamescherti/minimal-emacs.d]]; the Android/Termux branch is original.
