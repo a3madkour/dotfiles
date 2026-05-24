@@ -2608,6 +2608,7 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
 #+end_src
 
 **** Final Setup
+The =setq= block comments (=use native major-mode indentation=, =we do this ourselves=, =You don't need my permission (just be careful, mkay?)=, =Our :lang common-lisp module uses sly, so...=) are verbatim from [[https://github.com/doomemacs/doomemacs/blob/master/modules/lang/org/config.el][Doom Emacs's =modules/lang/org/config.el=]]. The =org-babel-load-languages= list is personal.
 #+begin_src emacs-lisp
 (org-babel-do-load-languages
  'org-babel-load-languages
@@ -3054,6 +3055,7 @@ Prompts for the link type interactively."
   (setq org-appear-autolinks t))
 #+end_src
 *** Org modern
+Edit-settings block (=org-auto-align-tags=, =org-catch-invisible-edits=, =org-special-ctrl-a/e=, =org-insert-heading-respect-content=, =org-ellipsis=) is from the [[https://github.com/minad/org-modern][org-modern README]] by Daniel Mendler; the agenda time-grid styling with unicode separators and the =a3madkour/org-modern-style-habit-tags= advice are personal.
 #+begin_src emacs-lisp
 (use-package org-modern
    :after org
