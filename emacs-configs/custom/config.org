@@ -1125,6 +1125,7 @@ The =find-dired= remap follows the recommended setup from the [[https://github.c
 (use-package rg)
 #+end_src
 ** Dumb Jump
+The xref hook and =xref-show-definitions-function= setting follow the [[https://github.com/jacktasia/dumb-jump][dumb-jump README]] by jacktasia.
 #+begin_src emacs-lisp
 (use-package dumb-jump
   :config
