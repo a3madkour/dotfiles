@@ -694,7 +694,6 @@
 		 :map minibuffer-local-map
 		 ("M-s" . consult-history)                 ;; orig. next-matching-history-element
 		 ("M-r" . consult-history))                ;; orig. previous-matching-history-element
-  :hook (completion-list-mode . consult-preview-at-point-mode)
   :init
   (setq register-preview-delay 0.5
 		register-preview-function #'consult-register-format)
@@ -752,15 +751,14 @@
 #+end_src
 ** Embark-consult
 #+begin_src emacs-lisp
-;; Consult users will also want the embark-consult package.
-(use-package embark-consult
-  :ensure t
-  :after (embark consult)
-  :demand t ; only necessary if you have the hook below
-  ;; if you want to have consult previews as you move around an
-  ;; auto-updating embark collect buffer
-  :hook
-  (embark-collect-mode . consult-preview-at-point-mode))
+  ;; Consult users will also want the embark-consult package.
+  (use-package embark-consult
+    :ensure t
+    :after (embark consult)
+    :demand t ; only necessary if you have the hook below
+    ;; if you want to have consult previews as you move around an
+    ;; auto-updating embark collect buffer
+    )
 #+end_src
 ** Orderless
 #+begin_src emacs-lisp
@@ -1551,29 +1549,35 @@ Debuging adapter protocol for emacs
 (setq citar-at-point-function 'embark-act)
 
 (defun a3madkour/citar-add-to-reading-queue ()
-  "Select a citar reference and add it to queue.org."
+  "Select one or more citar references and add them to queue.org."
   (interactive)
   (require 'citar)
-  (let ((count (a3madkour/reading-queue-active-count)))
-    (when (>= count a3madkour/reading-queue-wip-limit)
-	  (user-error "Reading queue WIP limit reached (%d/%d active). Finish something first"
-				  count a3madkour/reading-queue-wip-limit))
+  (let* ((count (a3madkour/reading-queue-active-count))
+         (limit a3madkour/reading-queue-wip-limit))
+    (when (>= count limit)
+      (user-error "Reading queue WIP limit reached (%d/%d active). Finish something first"
+                  count limit))
     (let* ((keys (citar-select-refs))
-		   (key (car keys))
-		   (entry (citar-get-entry key))
-		   (title (alist-get "title" entry nil nil #'string=))
-		   (author (alist-get "author" entry nil nil #'string=))
-		   (year (when-let ((date (alist-get "date" entry nil nil #'string=)))
-				   (substring date 0 4)))
-		   (display (format "%s (%s)" (or title "Untitled") (or year "")))
-		   (text (format "* TODO Read %s :active:toread:\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
-                         display key (or author "") key)))
-	  (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
+           (n (length keys))
+           (room (- limit count)))
+      (when (> n room)
+        (user-error "Selected %d ref(s) but only %d slot(s) left under WIP limit (%d/%d active)"
+                    n room count limit))
+      (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
         (goto-char (point-max))
-        (insert text)
+        (dolist (key keys)
+          (let* ((entry (citar-get-entry key))
+                 (title (alist-get "title" entry nil nil #'string=))
+                 (author (alist-get "author" entry nil nil #'string=))
+                 (year (when-let ((date (alist-get "date" entry nil nil #'string=)))
+                         (substring date 0 4)))
+                 (display (format "%s (%s)" (or title "Untitled") (or year "")))
+                 (text (format "* TODO Read %s :active:toread:\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
+                               display key (or author "") key)))
+            (insert text)))
         (save-buffer))
-	  (message "Added \"%s\" to reading queue (%d/%d active)"
-			   display (1+ count) a3madkour/reading-queue-wip-limit))))
+      (message "Added %d ref(s) to reading queue (%d/%d active)"
+               n (+ count n) limit))))
 
 (defcustom a3madkour/supernote-outbox-path
   (expand-file-name "~/SupernoteOutbox/")
