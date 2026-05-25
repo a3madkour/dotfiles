@@ -54,6 +54,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
     --eval "(straight-use-package 'org-roam)" \
+    --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
@@ -93,6 +94,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
     --eval "(straight-use-package 'org-roam)" \
+    --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
@@ -136,6 +138,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
     --eval "(straight-use-package 'org-roam)" \
+    --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
@@ -166,6 +169,7 @@ exec emacs --batch \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \
   --eval "(straight-use-package 'org-roam)" \
+  --eval "(straight-use-package 'yaml)" \
   --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
   -L "$LISP_DIR" \
   -l a3madkour-publish \
