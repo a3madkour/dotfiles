@@ -28,6 +28,7 @@ exec emacs --batch \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \
+  --eval "(straight-use-package 'org-roam)" \
   --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
   -L "$LISP_DIR" \
   -l ert \

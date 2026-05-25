@@ -19,6 +19,36 @@ LISP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUSTOM_DIR="$(dirname "$LISP_DIR")"
 STRAIGHT_BOOTSTRAP="$CUSTOM_DIR/straight/repos/straight.el/bootstrap.el"
 
+# A.1.d: --check-orphans flag intercept.  Runs (begin-publish) + (check-orphans)
+# in standalone mode (walks source tree), prints the dry-run plist, exits 0.
+if [ "${1:-}" = "--check-orphans" ]; then
+  shift
+  if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
+    echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
+    exit 2
+  fi
+  exec emacs --batch \
+    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
+    --eval "(setq straight-base-dir user-emacs-directory)" \
+    -l "$STRAIGHT_BOOTSTRAP" \
+    --eval "(straight-use-package 'org-roam)" \
+    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
+    -L "$LISP_DIR" \
+    -l a3madkour-publish \
+    -l a3madkour-publish-rewrite \
+    -l a3madkour-publish-assets \
+    -l a3madkour-publish-unpublish \
+    --eval "(a3madkour-pub/begin-publish)" \
+    --eval "(let ((result (a3madkour-pub/check-orphans)))
+              (princ (format \"removed: %S\\n\" (plist-get result :removed)))
+              (princ (format \"slug-shifted: %S\\n\" (plist-get result :slug-shifted)))
+              (princ \"orphan-warnings:\\n\")
+              (dolist (w (plist-get result :orphan-warnings))
+                (princ (format \"  %s\\n\" w)))
+              (kill-emacs 0))" \
+    "$@"
+fi
+
 if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
   echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
   echo "a3-pub.sh: check that straight.el is installed under $CUSTOM_DIR/straight/" >&2
@@ -29,8 +59,12 @@ exec emacs --batch \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \
+  --eval "(straight-use-package 'org-roam)" \
   --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
   -L "$LISP_DIR" \
   -l a3madkour-publish \
+  -l a3madkour-publish-rewrite \
+  -l a3madkour-publish-assets \
+  -l a3madkour-publish-unpublish \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"

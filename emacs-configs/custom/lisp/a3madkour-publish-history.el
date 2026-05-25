@@ -99,28 +99,32 @@ For nested sections like `/research/questions/q/' returns `research/questions'."
       (when (>= (length parts) 2)
         (mapconcat #'identity (butlast parts) "/")))))
 
-(defun a3madkour-pub-history--diff-reason (old-url new-url)
+(defun a3madkour-pub-history--diff-reason (old-url new-url &optional had-slug-override-p)
   "Classify the URL change between OLD-URL and NEW-URL.
-Returns one of \"section_change\" or \"title_change\" (the latter is a
-catch-all for either an actual title change or a `#+HUGO_SLUG:' override —
-this stub doesn't distinguish them because it lacks source-file context).
+Returns one of \"section_change\", \"slug_override\", or \"title_change\".
 
-A.1.b can add finer-grained reason detection if useful; the spec lists
-`title_change' / `slug_override' / `section_change' / `removed' as the canonical
-vocabulary.  This stub picks the safest classification."
+Precedence:
+  - Section differs → \"section_change\" (wins over the slug-override flag).
+  - Same section + HAD-SLUG-OVERRIDE-P non-nil → \"slug_override\"
+    (the source `.org' had `#+HUGO_SLUG:' set, so the URL change is driven
+    by an explicit author choice rather than a title edit).
+  - Same section + flag nil → \"title_change\".
+
+Callers guard the `\"removed\"' case (NEW-URL is nil) and the no-change
+case (OLD-URL equals NEW-URL) before invoking this helper, so it only
+sees genuine same-id URL transitions where both URLs are non-nil."
   (let* ((old-section (a3madkour-pub-history--section-of-url old-url))
          (new-section (a3madkour-pub-history--section-of-url new-url)))
     (cond
      ((not (equal old-section new-section)) "section_change")
-     ;; Same section, different slug → can't distinguish title-vs-override here.
-     ;; A.1.b/F will pass an extra :had-slug-override-p hint to refine this.
+     (had-slug-override-p "slug_override")
      (t "title_change"))))
 
 (defun a3madkour-pub-history--now-iso ()
   "Return current time as an ISO-8601 UTC string."
   (format-time-string "%FT%TZ" nil t))
 
-(defun a3madkour-pub-history/record-publish (id new-url state)
+(cl-defun a3madkour-pub-history/record-publish (id new-url state &key had-slug-override-p)
   "Update the manifest entry for ID.
 
 Cases:
@@ -132,7 +136,22 @@ Cases:
     differs, append history with reason=\"removed\" when new-url is nil,
     otherwise per `--diff-reason'.
 
-STATE is `live', `draft', or `removed' (string or symbol accepted)."
+STATE is `live', `draft', or `removed' (string or symbol accepted).
+
+Keyword args:
+  :HAD-SLUG-OVERRIDE-P — when non-nil, signals that the source `.org' file
+    had `#+HUGO_SLUG:' set on this publish.  Used to disambiguate same-section
+    URL changes between author-driven slug overrides (\"slug_override\") and
+    title-derived ones (\"title_change\").  Section changes always win regardless.
+    Defaults to nil, preserving the prior behavior of classifying same-section
+    changes as \"title_change\".
+
+A.1.d additions:
+  - `republished' reason: emitted on a removed → live transition.
+  - Every call appends (id . (new-url . state)) to
+    `a3madkour-pub--publish-run-accumulator' for `finish-publish' consumption.
+    Caller must ensure `begin-publish' was invoked at the start of the publish
+    run; the accumulator is not cleared on each call."
   (let* ((manifest (a3madkour-pub-history/read-manifest))
          (notes (alist-get 'notes manifest))
          (idx (a3madkour-pub-history--find-note-by-id notes id))
@@ -157,8 +176,22 @@ STATE is `live', `draft', or `removed' (string or symbol accepted)."
         (when (or url-changed-p state-changed-p)
           (let* ((reason (cond
                           ((and url-changed-p (null new-url)) "removed")
+                          ;; A.1.d: republish — removed → live transition.
+                          ;; Takes precedence over the bare url-changed-p
+                          ;; branch so republishing at a NEW URL still gets
+                          ;; the `republished' label (not `title_change').
+                          ((and state-changed-p
+                                (equal old-state "removed")
+                                (equal state-str "live"))
+                           "republished")
+                          ;; A.1.d: removed → draft (or any other non-live
+                          ;; state) is state-only — no event appended.  The
+                          ;; current_url update still happens (state change
+                          ;; is real), but history stays quiet until the
+                          ;; note actually republishes as live.
+                          ((equal old-state "removed") nil)
                           (url-changed-p (a3madkour-pub-history--diff-reason
-                                          old-url new-url))
+                                          old-url new-url had-slug-override-p))
                           (t nil)))  ; state-only change
                  (new-history
                   (if reason
@@ -172,7 +205,12 @@ STATE is `live', `draft', or `removed' (string or symbol accepted)."
                             (history . ,new-history)
                             (state . ,state-str))))
             (aset notes idx updated)
-            (a3madkour-pub-history/write-manifest manifest))))))))
+            (a3madkour-pub-history/write-manifest manifest))))))
+    ;; A.1.d: accumulator append (always, regardless of which branch above
+    ;; mutated the manifest).  Stores the SYMBOL form of state so that
+    ;; `a3madkour-pub/diff-published-set' can compare cdr against `live' /
+    ;; `draft' symbols (Task 5 contract).
+    (puthash id (cons new-url state) a3madkour-pub--publish-run-accumulator)))
 
 (defun a3madkour-pub-history/aliases-for (id)
   "Return all prior URLs recorded for ID, oldest-first.  Nil if ID unknown.

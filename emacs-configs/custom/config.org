@@ -3,12 +3,12 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-05-19 Tue]
+:LAST_MODIFIED: [2026-05-24 Sun]
 :END:
 
-* TODO Go through the config and cite all the sources of information
 * Bootstrap
 ** Early Init
+Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs's startup optimizations]] and [[https://github.com/jamescherti/minimal-emacs.d][jamescherti/minimal-emacs.d]]; the Android/Termux branch is original.
 #+begin_src emacs-lisp :tangle "./early-init.el"
 ;;Phone config
 (when (eq system-type 'android)
@@ -52,6 +52,7 @@
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
 ** Compile-angel
+Sourced from the [[https://github.com/jamescherti/compile-angel.el][compile-angel README]] by jamescherti.
 #+begin_src emacs-lisp
 (use-package compile-angel
   :ensure t
@@ -79,6 +80,7 @@
   (compile-angel-on-load-mode 1))
 #+end_src
 ** GCMH
+Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning values and startup-time message pattern adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs]].
 #+begin_src emacs-lisp
 (use-package gcmh
   :diminish gcmh-mode
@@ -423,6 +425,7 @@
   (global-treesit-auto-mode))
 #+end_src
 ** Undo-fu
+Limit values sourced from the [[https://codeberg.org/ideasman42/emacs-undo-fu][undo-fu README]] (64mb/96mb/960mb recommended sizes).
 #+begin_src emacs-lisp
 (use-package undo-fu
   :config
@@ -449,6 +452,7 @@
 
 #+end_src
 ** Super-save
+Adapted from the [[https://github.com/bbatsov/super-save][super-save README]] by Bozhidar Batsov; trigger list extended with Evil window navigation.
 #+begin_src emacs-lisp
 (use-package super-save
   :diminish super-save-mode
@@ -475,6 +479,7 @@
   (editorconfig-mode 1))
 #+end_src
 ** Smart-parens
+Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config/default/config.el][Doom Emacs's smartparens config]] (=modules/config/default/config.el=); the =(dolist (brace ...))= block and =:unless= rationale are verbatim.
 #+begin_src emacs-lisp
 (use-package smartparens
   :diminish smartparens-mode
@@ -553,7 +558,8 @@
 #+begin_src emacs-lisp
 (use-package centered-cursor-mode :diminish centered-cursor-mode)
 #+end_src
-** Insert file path (from Doom)
+** Insert file path
+Verbatim from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config/default/autoload/text.el][Doom Emacs's =modules/config/default/autoload/text.el=]].
 #+begin_src emacs-lisp
 ;;;###autoload
 (defun +default/insert-file-path (arg)
@@ -580,6 +586,7 @@
 #+end_src
 * Completion
 ** Vertico
+Adapted from the [[https://github.com/minad/vertico][Vertico README]] example, including the savehist and =crm-indicator= minibuffer setup.
 #+begin_src emacs-lisp
 ;; Enable vertico
 (use-package vertico
@@ -631,6 +638,7 @@
   (setq enable-recursive-minibuffers t))
 #+end_src
 ** Marginalia
+Sourced from the [[https://github.com/minad/marginalia][Marginalia README]].
 #+begin_src emacs-lisp
 (use-package marginalia
   :ensure t
@@ -638,6 +646,7 @@
   (marginalia-mode))
 #+end_src
 ** Consult
+Bindings and configuration adapted from the [[https://github.com/minad/consult][Consult README example configuration]]; the =a3madkour/consult-line-evil-sync= advice is original.
 #+begin_src emacs-lisp
 ;; Example configuration for Consult
 (use-package consult
@@ -712,6 +721,7 @@
    (advice-add #'consult-line :after #'a3madkour/consult-line-evil-sync))
 #+end_src
 ** Consult-dash
+The =consult-customize= line is from the [[https://codeberg.org/ravi/consult-dash][consult-dash README]]; the =counsel-dash-*= variables carry over from the [[https://github.com/dash-docs-el/counsel-dash][counsel-dash]] package.
 #+begin_src emacs-lisp
 (use-package consult-dash
   :config
@@ -725,6 +735,7 @@
   (consult-customize consult-dash :initial (thing-at-point 'symbol)))
 #+end_src
 ** Embark
+Adapted from the [[https://github.com/oantolin/embark][Embark README]]; =embark-dwim= is bound to =C-/= instead of the README's =C-;=.
 #+begin_src emacs-lisp
 (use-package embark
   :ensure t
@@ -750,6 +761,7 @@
 										;
 #+end_src
 ** Embark-consult
+From the [[https://github.com/oantolin/embark][Embark README]]'s embark-consult section.
 #+begin_src emacs-lisp
   ;; Consult users will also want the embark-consult package.
   (use-package embark-consult
@@ -761,6 +773,7 @@
     )
 #+end_src
 ** Orderless
+Adapted from the [[https://github.com/oantolin/orderless][Orderless README]] example; the dispatcher comment references the [[https://github.com/minad/consult/wiki][Consult wiki]].
 #+begin_src emacs-lisp
 ;; Optionally use the `orderless' completion style.
 (use-package orderless
@@ -773,6 +786,7 @@
 		completion-category-overrides '((file (styles partial-completion)))))
 #+end_src
 ** Corfu
+Sourced from the [[https://github.com/minad/corfu][Corfu README]] minimal example.
 #+begin_src emacs-lisp
 (use-package corfu
   :custom
@@ -781,6 +795,7 @@
   (global-corfu-mode))
 #+end_src
 ** Cape
+Adapted from the [[https://github.com/minad/cape][Cape README]] example, including the eglot =cape-wrap-buster=/=cape-wrap-nonexclusive= advice from its Eglot section.
 #+begin_src emacs-lisp
 ;; Add extensions
 (use-package cape
@@ -822,6 +837,7 @@
 (use-package yasnippet-snippets)
 #+end_src
 ** Auto activating snippets
+Built on [[https://github.com/ymarco/auto-activating-snippets][aas]] by ymarco; the LaTeX snippet collection is the example configuration from the [[https://github.com/tecosaur/LaTeX-auto-activating-snippets][LaTeX-auto-activating-snippets README]].
 #+begin_src emacs-lisp
 (use-package aas
   :hook (LaTeX-mode . aas-activate-for-major-mode)
@@ -851,6 +867,7 @@
 #+end_src
 * UI
 ** All the icons
+The marginalia integration is from the [[https://github.com/iyefrat/all-the-icons-completion][all-the-icons-completion README]].
 #+begin_src emacs-lisp
 (use-package all-the-icons
   :if (display-graphic-p))
@@ -865,6 +882,7 @@
   :commands (hide-mode-line-mode))
 #+end_src
 ** Doom modeline
+Settings drawn from the [[https://github.com/seagle0128/doom-modeline][doom-modeline README]] customization examples; the grouping into one =setq= block is personal.
 #+begin_src emacs-lisp
 (use-package doom-modeline
   :defer nil
@@ -880,6 +898,7 @@
 		doom-modeline-bar-width 3))
 #+end_src
 ** Themes
+Adapted from the [[https://github.com/doomemacs/themes][doom-themes README]] installation example; loads =doom-molokai= in place of the README's =doom-one=.
 #+begin_src emacs-lisp
 (use-package doom-themes
   :defer nil
@@ -901,6 +920,7 @@
   (doom-themes-org-config))
 #+end_src
 ** Pulsar
+Adapted from [[https://protesilaos.com/emacs/pulsar][Prot's pulsar manual]]; the =pulsar-pulse-functions= list comes from an earlier README example pre-dating the =pulsar-pulse-on-window-change= option (see inline NOTE).
 #+begin_src emacs-lisp
 (use-package pulsar
   :config
@@ -983,6 +1003,7 @@
 (use-package hydra)
 #+end_src
 ** Which key
+Adapted from the [[https://github.com/justbur/emacs-which-key][which-key README]]; specific delay and sort-order values are personal.
 #+begin_src emacs-lisp
 (use-package which-key
   :diminish which-key-mode
@@ -1002,6 +1023,7 @@
 (use-package ace-window)
 #+end_src
 ** Perspective
+Verbatim from the [[https://github.com/nex3/perspective-el][perspective-el README]] by Natalie Weizenbaum.
 #+begin_src emacs-lisp
 (use-package perspective
   :bind
@@ -1049,6 +1071,7 @@
 ** Dired stuff
 *** diredfl
 front lock rules for colorful dired
+Activates [[https://github.com/purcell/diredfl][diredfl]] by Steve Purcell; per-buffer hook instead of the README's =diredfl-global-mode= recommendation.
 #+begin_src emacs-lisp
 (use-package diredfl
   :hook (dired-mode . diredfl-mode)
@@ -1056,6 +1079,7 @@ front lock rules for colorful dired
 #+end_src
 *** dired-git-info
 Simple package for showing git info
+Auto-enable hook from the [[https://github.com/clemera/dired-git-info][dired-git-info README]] by clemera.
 #+begin_src emacs-lisp
 (use-package dired-git-info
   :config
@@ -1063,6 +1087,7 @@ Simple package for showing git info
   )
 #+end_src
 *** Dired rsync
+Both =dired-rsync= and =dired-rsync-transient= bindings are the example configurations from the [[https://github.com/stsquad/dired-rsync][dired-rsync README]] by Alex Bennée.
 #+begin_src emacs-lisp
 (use-package dired-rsync
   :bind (:map dired-mode-map
@@ -1076,6 +1101,7 @@ Simple package for showing git info
 #+end_src
 *** Nerd icons dired
 Nerd icons for dired
+Verbatim from the [[https://github.com/rainstormstudio/nerd-icons-dired][nerd-icons-dired README]].
 #+begin_src emacs-lisp
 (use-package nerd-icons-dired
   :hook
@@ -1083,6 +1109,7 @@ Nerd icons for dired
 #+end_src
 *** Fd for dired
 Fd support for dired
+The =find-dired= remap follows the recommended setup from the [[https://github.com/yqrashawn/fd-dired][fd-dired README]].
 #+begin_src emacs-lisp
 (use-package fd-dired
   :config
@@ -1095,6 +1122,7 @@ Fd support for dired
 (use-package rg)
 #+end_src
 ** Dumb Jump
+The xref hook and =xref-show-definitions-function= setting follow the [[https://github.com/jacktasia/dumb-jump][dumb-jump README]] by jacktasia.
 #+begin_src emacs-lisp
 (use-package dumb-jump
   :config
@@ -1111,6 +1139,7 @@ Fd support for dired
 #+end_src
 ** Diff-hl
 Highlight the diffs of the past commit in a file
+Activation from the [[https://github.com/dgutov/diff-hl][diff-hl README]] by Dmitry Gutov.
 #+begin_src emacs-lisp
 (use-package diff-hl
   :config
@@ -1118,6 +1147,7 @@ Highlight the diffs of the past commit in a file
 #+end_src
 * Writing
 ** Jinx
+Adapted from the [[https://github.com/minad/jinx][Jinx README]] by Daniel Mendler; the =gnu/linux= guard and =[remap ispell-word]= binding are personal.
 #+begin_src emacs-lisp
 (pcase system-type
 	('gnu/linux
@@ -1180,6 +1210,7 @@ Highlight the diffs of the past commit in a file
   (setq eldoc-idle-delay 0.5))
 #+end_src
 ** Format all
+Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
 #+begin_src emacs-lisp
 (use-package format-all
  :commands format-all-mode
@@ -1329,6 +1360,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 (use-package poly-R)
 #+end_src
 *** Latex
+The =auctex= configuration block is adapted from [[https://github.com/doomemacs/doomemacs/blob/master/modules/lang/latex/config.el][Doom Emacs's latex module]] (the =;; Don't start the Emacs server when correlating sources.= and =;; Just save, don't ask before each compilation.= comments are verbatim); XeTeX engine, =:general= keybindings, and the extra settings (=TeX-show-compilation=, =TeX-electric-sub-and-superscript=) are personal.
 #+begin_src emacs-lisp
 ;reftex
 (add-hook 'org-mode-hook 'reftex-mode)
@@ -1414,6 +1446,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 ** Dape
 Debuging adapter protocol for emacs
+Adapted from the [[https://github.com/svaante/dape][dape README]] by svaante; many of the inline comments are uncommented from the README's example. The =rust-gdb= entry added to =dape-configs= is personal.
 #+begin_src emacs-lisp
 (use-package dape
   ;; To use window configuration like gud (gdb-mi)
@@ -1468,6 +1501,7 @@ Debuging adapter protocol for emacs
 (use-package zotra)
 #+end_src
 ** Citar
+The =org-cite-*-processor= setup and =citar-embark= activation follow the [[https://github.com/emacs-citar/citar][citar README]] by Bruce D'Arcus; the =a3madkour/citar-org-format-note=, =a3madkour/citar-add-to-reading-queue=, and =a3madkour/supernote-*= helpers are personal.
 #+begin_src emacs-lisp
 
 (defun a3madkour/citar-org-format-note(key entry)
@@ -2577,6 +2611,7 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
 #+end_src
 
 **** Final Setup
+The =setq= block comments (=use native major-mode indentation=, =we do this ourselves=, =You don't need my permission (just be careful, mkay?)=, =Our :lang common-lisp module uses sly, so...=) are verbatim from [[https://github.com/doomemacs/doomemacs/blob/master/modules/lang/org/config.el][Doom Emacs's =modules/lang/org/config.el=]]. The =org-babel-load-languages= list is personal.
 #+begin_src emacs-lisp
 (org-babel-do-load-languages
  'org-babel-load-languages
@@ -3023,6 +3058,7 @@ Prompts for the link type interactively."
   (setq org-appear-autolinks t))
 #+end_src
 *** Org modern
+Edit-settings block (=org-auto-align-tags=, =org-catch-invisible-edits=, =org-special-ctrl-a/e=, =org-insert-heading-respect-content=, =org-ellipsis=) is from the [[https://github.com/minad/org-modern][org-modern README]] by Daniel Mendler; the agenda time-grid styling with unicode separators and the =a3madkour/org-modern-style-habit-tags= advice are personal.
 #+begin_src emacs-lisp
 (use-package org-modern
    :after org
@@ -3263,6 +3299,7 @@ Setting the pipeline for exporting the notes to the website dir
 #+end_src
 * AI Agents
 ** Claude code
+The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and the Monet integration hook) is from [[https://github.com/stevemolitor/claude-code.el][stevemolitor/claude-code.el]]'s README. The =inheritenv=, =monet=, and =eat= installs follow the README's documented dependency setup. The =a3madkour/eat-send-escape= function is personal.
 #+begin_src emacs-lisp
 ;; install required inheritenv dependency:
 (use-package inheritenv
