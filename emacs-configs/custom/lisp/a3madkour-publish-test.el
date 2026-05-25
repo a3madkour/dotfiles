@@ -232,16 +232,78 @@ calls and observing the original value still returned)."
 (ert-deftest a3madkour-pub-test/begin-publish-resets-cache ()
   "begin-publish clears the metadata cache."
   (puthash "/some/file" '(:title "stale") a3madkour-pub--metadata-cache)
-  (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
-    (a3madkour-pub/begin-publish))
+  (let ((a3madkour-pub--manifest-snapshot nil))
+    (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil))
+              ((symbol-function 'a3madkour-pub-history/read-manifest)
+               (lambda () '((notes . [])))))
+      (a3madkour-pub/begin-publish)))
   (should (zerop (hash-table-count a3madkour-pub--metadata-cache))))
 
 (ert-deftest a3madkour-pub-test/begin-publish-invokes-org-roam-db-sync ()
-  "begin-publish calls (org-roam-db-sync) to snapshot ID resolution state."
-  (let ((called nil))
-    (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () (setq called t))))
-      (a3madkour-pub/begin-publish))
-    (should called)))
+  "begin-publish calls (org-roam-db-sync) to snapshot ID resolution state.
+Binds `org-roam-directory' to a real tmp dir so the missing-dir gate
+introduced in `begin-publish' doesn't short-circuit the sync call."
+  (let* ((real-dir (file-name-as-directory
+                    (make-temp-file "a3-pub-org-roam-dir-" t)))
+         (org-roam-directory real-dir)
+         (a3madkour-pub--manifest-snapshot nil)
+         (called nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () (setq called t)))
+                    ((symbol-function 'a3madkour-pub-history/read-manifest)
+                     (lambda () '((notes . [])))))
+            (a3madkour-pub/begin-publish))
+          (should called))
+      (delete-directory real-dir t))))
+
+(ert-deftest a3madkour-pub-test/begin-publish-skips-org-roam-db-sync-when-dir-missing ()
+  "begin-publish must NOT call `org-roam-db-sync' when `org-roam-directory'
+does not point to an existing directory on disk.
+
+This guards the batch-publish path: shell/CI invocations of the publisher
+run via `emacs --batch' without the author's interactive config, so
+`org-roam-directory' may still be the package default (~/org-roam/) even
+when the real notes live elsewhere.  Calling `org-roam-db-sync' against a
+non-existent dir crashes the run.  See A.1.d known limitations."
+  (let* ((bogus-dir (expand-file-name
+                     (format "definitely-does-not-exist-%d-%d/"
+                             (emacs-pid) (random 1000000))
+                     temporary-file-directory))
+         (org-roam-directory bogus-dir)
+         (a3madkour-pub--manifest-snapshot nil))
+    (should-not (file-directory-p bogus-dir))
+    (cl-letf (((symbol-function 'org-roam-db-sync)
+               (lambda ()
+                 (error "org-roam-db-sync was called despite missing dir %s"
+                        bogus-dir)))
+              ((symbol-function 'a3madkour-pub-history/read-manifest)
+               (lambda () '((notes . [])))))
+      ;; Should complete cleanly; the tripwire would raise if the gate is missing.
+      (a3madkour-pub/begin-publish))))
+
+(ert-deftest a3madkour-pub-test/begin-publish-calls-org-roam-db-sync-when-dir-exists ()
+  "begin-publish must still call `org-roam-db-sync' when `org-roam-directory'
+points to a real directory on disk.
+
+Complements the missing-dir test: confirms the gate doesn't accidentally
+suppress the sync in the normal author workflow where ~/org-roam/ (or the
+configured equivalent) does exist."
+  (let* ((real-dir (file-name-as-directory
+                    (make-temp-file "a3-pub-org-roam-dir-" t)))
+         (org-roam-directory real-dir)
+         (a3madkour-pub--manifest-snapshot nil)
+         (called nil))
+    (unwind-protect
+        (progn
+          (should (file-directory-p real-dir))
+          (cl-letf (((symbol-function 'org-roam-db-sync)
+                     (lambda () (setq called t)))
+                    ((symbol-function 'a3madkour-pub-history/read-manifest)
+                     (lambda () '((notes . [])))))
+            (a3madkour-pub/begin-publish))
+          (should called))
+      (delete-directory real-dir t))))
 
 ;; -- file-or-id dispatch --
 ;;
@@ -343,9 +405,39 @@ calls and observing the original value still returned)."
   "`begin-publish' empties the accumulator alongside the metadata cache."
   (puthash "stale-id" '("/garden/old/" . live) a3madkour-pub--publish-run-accumulator)
   (should (> (hash-table-count a3madkour-pub--publish-run-accumulator) 0))
-  (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
-    (a3madkour-pub/begin-publish))
+  (let ((a3madkour-pub--manifest-snapshot nil))
+    (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil))
+              ((symbol-function 'a3madkour-pub-history/read-manifest)
+               (lambda () '((notes . [])))))
+      (a3madkour-pub/begin-publish)))
   (should (= 0 (hash-table-count a3madkour-pub--publish-run-accumulator))))
+
+;; -- B.0: manifest-snapshot defvar --
+
+(ert-deftest a3madkour-pub-test/manifest-snapshot-defvar-exists ()
+  "B.0 — `a3madkour-pub--manifest-snapshot' defvar is defined and starts nil."
+  (should (boundp 'a3madkour-pub--manifest-snapshot))
+  (should (null a3madkour-pub--manifest-snapshot)))
+
+(ert-deftest a3madkour-pub-test/begin-publish-populates-manifest-snapshot ()
+  "B.0 — `begin-publish' reads url-history.yaml into the snapshot defvar.
+Uses a temp data dir with a seeded manifest; stubs org-roam-db-sync."
+  (let ((tmp-data (make-temp-file "b0-snapshot-" t))
+        (a3madkour-pub--manifest-snapshot nil))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir tmp-data))
+          ;; Seed a minimal manifest on disk.
+          (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
+            (insert "notes:\n  - id: abc-123\n    current_url: /garden/foo/\n    history: []\n    state: live\n"))
+          ;; Stub org-roam to avoid touching the user's real DB.
+          (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
+            (a3madkour-pub/begin-publish))
+          ;; Snapshot should now hold the manifest alist.
+          (should a3madkour-pub--manifest-snapshot)
+          (let* ((notes (alist-get 'notes a3madkour-pub--manifest-snapshot)))
+            (should (= 1 (length notes)))
+            (should (equal "abc-123" (alist-get 'id (aref notes 0))))))
+      (delete-directory tmp-data t))))
 
 (provide 'a3madkour-publish-test)
 

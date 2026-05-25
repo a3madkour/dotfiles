@@ -312,6 +312,40 @@ a live-site perspective.)"
             (should (equal (alist-get 'reason (aref hist 0)) "removed"))))
       (clrhash a3madkour-pub--publish-run-accumulator))))
 
+;; -- B.0: read-manifest-snapshot-or-disk --
+
+(ert-deftest a3madkour-pub-hist-test/read-manifest-snapshot-or-disk-prefers-snapshot ()
+  "B.0 — `read-manifest-snapshot-or-disk' returns the snapshot defvar
+when non-nil, ignoring disk."
+  (let ((tmp-data (make-temp-file "b0-snapshot-prefer-" t))
+        (a3madkour-pub--manifest-snapshot
+         '((notes . [((id . "snap-id") (current_url . "/garden/from-snap/")
+                      (history . []) (state . "live"))]))))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir tmp-data))
+          ;; Write a different manifest to disk to prove snapshot wins.
+          (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
+            (insert "notes:\n  - id: disk-id\n    current_url: /garden/from-disk/\n    history: []\n    state: live\n"))
+          (let* ((m (a3madkour-pub-history/read-manifest-snapshot-or-disk))
+                 (notes (alist-get 'notes m)))
+            (should (= 1 (length notes)))
+            (should (equal "snap-id" (alist-get 'id (aref notes 0))))))
+      (delete-directory tmp-data t))))
+
+(ert-deftest a3madkour-pub-hist-test/read-manifest-snapshot-or-disk-falls-back ()
+  "B.0 — `read-manifest-snapshot-or-disk' falls back to disk when snapshot is nil."
+  (let ((tmp-data (make-temp-file "b0-snapshot-fallback-" t))
+        (a3madkour-pub--manifest-snapshot nil))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir tmp-data))
+          (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
+            (insert "notes:\n  - id: disk-only\n    current_url: /garden/disk-only/\n    history: []\n    state: live\n"))
+          (let* ((m (a3madkour-pub-history/read-manifest-snapshot-or-disk))
+                 (notes (alist-get 'notes m)))
+            (should (= 1 (length notes)))
+            (should (equal "disk-only" (alist-get 'id (aref notes 0))))))
+      (delete-directory tmp-data t))))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here

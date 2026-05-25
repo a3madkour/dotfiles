@@ -706,5 +706,60 @@
               (should (equal a b)))))
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
+(ert-deftest a3madkour-pub-unpub-test/finish-publish-clears-manifest-snapshot ()
+  "B.0 — `finish-publish' clears `a3madkour-pub--manifest-snapshot' at end.
+Set up a tmp data dir, run begin-publish (which populates the snapshot),
+then finish-publish, then assert snapshot is nil."
+  (let ((tmp-data (make-temp-file "b0-snapshot-clear-" t))
+        (a3madkour-pub--manifest-snapshot nil))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir tmp-data)
+              (a3madkour-pub/org-notes-dir tmp-data))  ; redirect walk away from real notes
+          (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
+            (insert "notes: []\n"))
+          (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
+            (a3madkour-pub/begin-publish)
+            (should a3madkour-pub--manifest-snapshot)
+            (a3madkour-pub/finish-publish)
+            (should-not a3madkour-pub--manifest-snapshot)))
+      (delete-directory tmp-data t))))
+
+(ert-deftest a3madkour-pub-unpub-test/snapshot-fix-preserves-slug-shift-detection ()
+  "B.0 regression — calling record-publish mid-publish (B-coupled mode)
+must NOT prevent diff-published-set from seeing the old URL.
+
+Scenario:
+  - Manifest has note ID 'shifter at /garden/old-name/.
+  - During a publish run, we call record-publish to move it to /garden/new-name/.
+  - Then we call diff-published-set with a new-set that still has 'shifter
+    (because the source file still exists, just under a new slug).
+  - Expectation: :slug-shifted contains ('shifter \"/garden/old-name/\" \"/garden/new-name/\").
+
+Pre-fix: this would have reported the URL as unchanged because
+diff-published-set re-read disk and saw the new URL already there."
+  (let ((tmp-data (make-temp-file "b0-regression-" t))
+        (a3madkour-pub--manifest-snapshot nil))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir tmp-data))
+          ;; Seed manifest at the OLD url.
+          (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
+            (insert "notes:\n  - id: shifter\n    current_url: /garden/old-name/\n    history: []\n    state: live\n"))
+          (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
+            (a3madkour-pub/begin-publish))
+          ;; Mid-publish: record-publish writes the new URL to disk eagerly.
+          (a3madkour-pub-history/record-publish "shifter" "/garden/new-name/" 'live)
+          ;; Build new-set for diff-published-set (B handlers would do this
+          ;; via the accumulator in real publish; here we construct one
+          ;; directly for the test).
+          (let* ((new-set (make-hash-table :test 'equal)))
+            (puthash "shifter" (cons "/garden/new-name/" 'live) new-set)
+            (let* ((diff (a3madkour-pub/diff-published-set new-set))
+                   (shifted (plist-get diff :slug-shifted)))
+              (should (= 1 (length shifted)))
+              (should (equal '("shifter" "/garden/old-name/" "/garden/new-name/")
+                             (car shifted)))))
+          (a3madkour-pub/finish-publish))
+      (delete-directory tmp-data t))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

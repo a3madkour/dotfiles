@@ -169,6 +169,26 @@ before B ships).
 
 Reset explicitly via `a3madkour-pub/begin-publish' at the start of each run.")
 
+(defvar a3madkour-pub--manifest-snapshot nil
+  "Snapshot of the URL-history manifest taken at `begin-publish'.
+
+`a3madkour-pub/diff-published-set' reads from this snapshot instead of
+re-reading `data/url-history.yaml' off disk, so that `record-publish'
+calls made mid-publish (by B's per-note publishers) do not poison the
+slug-shift detection in `diff-published-set'.
+
+nil means \"no snapshot active\" — `read-manifest-snapshot-or-disk' will
+fall back to reading the manifest off disk.  Set at the top of
+`begin-publish' (next to the metadata-cache reset); cleared at the bottom
+of `finish-publish' (after Step C).
+
+Lives in `a3madkour-publish.el' next to the publish-run-accumulator so the
+two publish-run snapshots (accumulator, manifest) are colocated.
+
+See parent design spec §6 (B-coupling fix); the design memo
+`memory/project_a1d_complete.md' 'Architectural findings' section
+documents why the snapshot approach was chosen over the alternatives.")
+
 (defun a3madkour-pub--resolve-file-or-id (file-or-id)
   "If FILE-OR-ID is a UUID (looks like an org-roam ID), resolve via
 `a3madkour-pub--id-to-file' and return the file path.  Otherwise return
@@ -247,7 +267,8 @@ See `a3madkour-pub/note-metadata` for snapshot/caching behavior."
 
 (defun a3madkour-pub/begin-publish ()
   "Take per-publish snapshots: reset metadata cache; clear accumulator;
-sync org-roam DB.
+read URL-history manifest into `a3madkour-pub--manifest-snapshot'; sync
+org-roam DB.
 
 Call this at the start of any publish run (shell or interactive).
 Both A's accessors and the link rewriter rely on these snapshots being
@@ -266,8 +287,20 @@ in effect across the call, org-roam must already be loaded (so that
 that reason."
   (a3madkour-pub--reset-metadata-cache)
   (clrhash a3madkour-pub--publish-run-accumulator)
+  ;; B.0: snapshot the URL-history manifest so diff-published-set reads
+  ;; pre-publish state regardless of mid-publish record-publish calls.
+  (setq a3madkour-pub--manifest-snapshot
+        (a3madkour-pub-history/read-manifest))
   (require 'org-roam)
-  (org-roam-db-sync))
+  ;; Gate `org-roam-db-sync' on the directory actually existing.  In batch
+  ;; publish contexts (`emacs --batch'), the author's interactive config
+  ;; that points `org-roam-directory' at the real notes tree may not be
+  ;; loaded, leaving the package default (~/org-roam/) — which often does
+  ;; not exist and causes `org-roam-db-sync' to crash the run.  A.1.d
+  ;; known limitation.
+  (when (and (boundp 'org-roam-directory)
+             (file-directory-p org-roam-directory))
+    (org-roam-db-sync)))
 
 (provide 'a3madkour-publish)
 

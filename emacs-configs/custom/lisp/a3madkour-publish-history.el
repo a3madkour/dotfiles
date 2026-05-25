@@ -38,6 +38,13 @@ manifest reads/writes are attempted.  Set in your emacs config:
   :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub)
 
+;; Forward declaration: the real defvar lives in `a3madkour-publish.el',
+;; which already `require's this file (so we can't `require' it back without
+;; a circular dependency).  No initform here so we don't override the real
+;; defvar's value when both files load.  Used by
+;; `read-manifest-snapshot-or-disk' below; see parent design spec §6.
+(defvar a3madkour-pub--manifest-snapshot)
+
 (defun a3madkour-pub-history--manifest-path ()
   "Return the absolute path to `url-history.yaml', or signal user-error."
   (unless a3madkour-pub/site-data-dir
@@ -66,6 +73,25 @@ vars `yaml--parsing-*' are internal and may not be honoured by callers)."
                              :null-object nil
                              :false-object nil))
       (copy-tree a3madkour-pub-history--empty-manifest))))
+
+(defun a3madkour-pub-history/read-manifest-snapshot-or-disk ()
+  "Return `a3madkour-pub--manifest-snapshot' when non-nil; otherwise read disk.
+
+Use this from any function that needs the URL-history manifest as it
+existed AT THE START of the current publish run (as opposed to whatever
+state `record-publish' has eagerly written to disk mid-run).  Currently
+the sole caller is `a3madkour-pub/diff-published-set' (the slug-shift
+detector); other A.1 readers continue to call `read-manifest' directly
+because they don't care about run boundaries.
+
+The snapshot defvar lives in `a3madkour-publish.el' (colocated with the
+publish-run-accumulator); it is populated by `a3madkour-pub/begin-publish'
+and cleared by `a3madkour-pub/finish-publish'.
+
+See parent design spec §6 (B-coupling fix)."
+  (if a3madkour-pub--manifest-snapshot
+      a3madkour-pub--manifest-snapshot
+    (a3madkour-pub-history/read-manifest)))
 
 (defun a3madkour-pub-history/write-manifest (manifest)
   "Serialize MANIFEST (an alist) to `url-history.yaml' as block-style YAML.

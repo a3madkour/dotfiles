@@ -44,9 +44,11 @@ this defcustom inside a fixture."
 
 NEW-SET is a hash table id → (url . state) where state is `live' or `draft'.
 The old set is computed by reading the manifest via
-`a3madkour-pub-history/read-manifest' and filtering to entries with
-`state ∈ {live, draft}' (manifest entries already in `removed' are
-excluded from the old set, so re-removing them is a no-op).
+`a3madkour-pub-history/read-manifest-snapshot-or-disk' (which prefers
+`a3madkour-pub--manifest-snapshot' when set, i.e. during a B.0+ publish
+run) and filtering to entries with `state ∈ {live, draft}' (manifest
+entries already in `removed' are excluded from the old set, so
+re-removing them is a no-op).
 
 Returns a plist:
   :added         (id ...)
@@ -58,7 +60,7 @@ Returns a plist:
 appears in BOTH (in :stayed because it's still published; in :slug-shifted
 because the URL also changed).  Step B (in `finish-publish') consumes
 :slug-shifted to drive asset-dir + source-link migration."
-  (let* ((manifest (a3madkour-pub-history/read-manifest))
+  (let* ((manifest (a3madkour-pub-history/read-manifest-snapshot-or-disk))
          (notes (alist-get 'notes manifest))
          (old-set (make-hash-table :test 'equal))
          added removed stayed slug-shifted)
@@ -222,6 +224,9 @@ Returns:
     (when (> (hash-table-count removed-set) 0)
       (setq orphan-warnings
             (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
+    ;; B.0: clear manifest snapshot now that the publish run is over.
+    ;; Next publish run's begin-publish will populate it fresh.
+    (setq a3madkour-pub--manifest-snapshot nil)
     (list :added (plist-get diff :added)
           :stayed (plist-get diff :stayed)
           :removed removed
