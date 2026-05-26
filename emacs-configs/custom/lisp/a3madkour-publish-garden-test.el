@@ -2,10 +2,119 @@
 
 (require 'ert)
 (require 'a3madkour-publish-garden)
+(require 'a3madkour-publish-history)
 
 (ert-deftest a3madkour-pub-garden--module-loads ()
   "Smoke: module is loadable and exposes publish-garden-file."
   (should (fboundp 'a3madkour-pub-garden/publish-garden-file)))
+
+(ert-deftest a3madkour-pub-garden--render-yaml-value-strings ()
+  "render-yaml-value handles strings, numbers, booleans, lists."
+  (should (equal (a3madkour-pub-garden--render-yaml-value "hello") "\"hello\""))
+  (should (equal (a3madkour-pub-garden--render-yaml-value 42) "42"))
+  (should (equal (a3madkour-pub-garden--render-yaml-value t) "true"))
+  (should (equal (a3madkour-pub-garden--render-yaml-value nil) "false"))
+  (should (equal (a3madkour-pub-garden--render-yaml-value '("a" "b"))
+                 "[\"a\", \"b\"]")))
+
+(ert-deftest a3madkour-pub-garden--render-frontmatter-sorted ()
+  "render-frontmatter emits alphabetical keys with ---delimiters."
+  (let* ((alist '((title . "Z Note") (draft . nil) (growth_stage . "seedling")))
+         (rendered (a3madkour-pub-garden--render-frontmatter alist)))
+    (should (string-prefix-p "---\n" rendered))
+    (should (string-suffix-p "---\n" rendered))
+    ;; Keys must appear in alphabetical order.
+    (let ((draft-pos   (string-search "draft:" rendered))
+          (growth-pos  (string-search "growth_stage:" rendered))
+          (title-pos   (string-search "title:" rendered)))
+      (should (< draft-pos growth-pos))
+      (should (< growth-pos title-pos)))))
+
+(ert-deftest a3madkour-pub-garden--write-if-different-writes-new ()
+  "write-if-different creates a new file and returns t."
+  (let* ((dir (make-temp-file "a3-pub-test-" t))
+         (path (expand-file-name "test.md" dir)))
+    (unwind-protect
+        (progn
+          (should (eq t (a3madkour-pub-garden--write-if-different path "content")))
+          (should (file-exists-p path))
+          (with-temp-buffer
+            (insert-file-contents path)
+            (should (equal (buffer-string) "content"))))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-garden--write-if-different-noop-on-match ()
+  "write-if-different returns nil and does not rewrite when content matches."
+  (let* ((dir (make-temp-file "a3-pub-test-" t))
+         (path (expand-file-name "test.md" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file path (insert "same content"))
+          ;; First call: already matches → no-op.
+          (should (eq nil (a3madkour-pub-garden--write-if-different path "same content")))
+          ;; File still exists with unchanged content.
+          (with-temp-buffer
+            (insert-file-contents path)
+            (should (equal (buffer-string) "same content"))))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-garden--site-root-from-data-dir ()
+  "site-root returns the parent of the data/ dir."
+  (let* ((dir (make-temp-file "a3-pub-site-" t))
+         (data-dir (file-name-as-directory (expand-file-name "data" dir)))
+         (a3madkour-pub/site-data-dir data-dir))
+    (unwind-protect
+        (progn
+          (make-directory data-dir t)
+          (let ((root (a3madkour-pub-garden--site-root)))
+            ;; Root should be the parent of data/, i.e. dir itself.
+            (should (equal (file-name-as-directory root)
+                           (file-name-as-directory dir)))))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-garden--publish-garden-file-end-to-end ()
+  "publish-garden-file writes content/garden/<slug>/index.md with
+normalized frontmatter + body + record-publish call."
+  (let* ((notes-dir (make-temp-file "a3-pub-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-site-" t))
+         (src       (expand-file-name "example-note.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n"
+                    ":END:\n"
+                    "#+title: Example Note\n"
+                    "#+filetags: :alpha:\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "* The Heading\n"
+                    "  :PROPERTIES:\n"
+                    "  :PROGRESS: ref-notes\n"
+                    "  :END:\n"
+                    "Body text.\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            ;; Stub org-roam-db-sync so we don't touch the real DB.
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-garden/publish-garden-file src)
+              (a3madkour-pub/finish-publish)))
+          (let ((out (expand-file-name
+                      "content/garden/example-note/index.md" site-dir)))
+            (should (file-exists-p out))
+            (with-temp-buffer
+              (insert-file-contents out)
+              (should (string-match-p "title:" (buffer-string)))
+              (should (string-match-p "growth_stage:" (buffer-string)))
+              (should (string-match-p "budding" (buffer-string)))
+              (should (string-match-p "Body text" (buffer-string))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
 
 (provide 'a3madkour-publish-garden-test)
 
