@@ -29,5 +29,47 @@ No commits to the manifest; snapshot is cleared at end."
           (should (zerop (hash-table-count a3madkour-pub--publish-run-accumulator))))
       (delete-directory tmp-data t))))
 
+(ert-deftest a3madkour-pub-living-test/garden-handler-registered ()
+  "B.1 — loading a3madkour-publish-garden registers the garden handler in
+`a3madkour-pub-living--handlers' via the after-load form at the bottom of
+this file's parent module."
+  (require 'a3madkour-publish-garden)
+  (should (eq (cdr (assq 'garden a3madkour-pub-living--handlers))
+              'a3madkour-pub-garden/publish-garden-file)))
+
+(ert-deftest a3madkour-pub-living-test/walk-section-dispatches-symbol-vs-string ()
+  "B.1 regression — walk-section compares the section SYMBOL key
+to `note-section''s STRING value via symbol-name; a naive `(eq ...)' check
+would never match and silently drop every file."
+  (require 'a3madkour-publish-garden)
+  (let* ((notes-dir (make-temp-file "living-dispatch-" t))
+         (site-dir  (make-temp-file "living-dispatch-site-" t))
+         (src       (expand-file-name "dispatch-note.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: cccccccc-dddd-eeee-ffff-000000000000\n"
+                    ":END:\n"
+                    "#+title: Dispatch Note\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "/\n"
+                    "* Body\nDispatch test body.\n"))
+          (with-temp-file (expand-file-name "data/url-history.yaml" site-dir)
+            (insert "notes: []\n"))
+          (let ((a3madkour-pub/site-data-dir (file-name-as-directory
+                                              (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
+              (a3-publish-living)))
+          (should (file-exists-p
+                   (expand-file-name "content/garden/dispatch-note/index.md"
+                                     site-dir))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

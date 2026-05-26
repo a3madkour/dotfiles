@@ -66,10 +66,21 @@ files are skipped.
 
 B.0: never called (handlers list is empty).  Tests exercise this via
 direct invocation with a mock handler if desired."
-  (dolist (file (directory-files-recursively
-                 a3madkour-pub/org-notes-dir "\\.org\\'"))
-    (when (eq section (a3madkour-pub/note-section file))
-      (funcall handler file))))
+  ;; SECTION is a symbol (alist key); `note-section' returns a string (raw
+  ;; `#+HUGO_SECTION:' value).  Compare by symbol-name to bridge the types.
+  (let ((target (symbol-name section)))
+    (dolist (file (directory-files-recursively
+                   a3madkour-pub/org-notes-dir "\\.org\\'"))
+      (when (equal target (a3madkour-pub/note-section file))
+        (funcall handler file)))))
+
+;; B.1: garden handler registration.  Uses `with-eval-after-load' so this
+;; module stays unaware of garden's exact symbol until garden is loaded —
+;; each B.x slice that ships a living-section handler adds its own
+;; after-load form via this pattern.
+(with-eval-after-load 'a3madkour-publish-garden
+  (add-to-list 'a3madkour-pub-living--handlers
+               '(garden . a3madkour-pub-garden/publish-garden-file)))
 
 (provide 'a3madkour-publish-living)
 
