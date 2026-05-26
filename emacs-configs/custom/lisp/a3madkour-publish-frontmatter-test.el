@@ -93,5 +93,73 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
                          "budding")))
       (delete-file src))))
 
+(ert-deftest a3madkour-pub-frontmatter--garden-flavor-inference ()
+  "media_type passes through; flavor is inferred per spec §7."
+  (let ((src (make-temp-file "garden-" nil ".org")))
+    (unwind-protect
+        (let ((cases '((nil       . "concept")
+                       ("book"    . "media") ("album"  . "media")
+                       ("track"   . "media") ("game"   . "media")
+                       ("film"    . "media") ("series" . "media")
+                       ("paper"   . "reference") ("video"   . "reference")
+                       ("article" . "reference") ("talk"    . "reference"))))
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          (dolist (case cases)
+            (let* ((mt (car case))
+                   (expected-flavor (cdr case))
+                   (raw (if mt `((media_type . ,mt)) '()))
+                   (out (a3madkour-pub-frontmatter/normalize 'garden raw src)))
+              (when mt
+                (should (equal (alist-get 'media_type out) mt)))
+              (should (equal (alist-get 'flavor out) expected-flavor)))))
+      (delete-file src))))
+
+(ert-deftest a3madkour-pub-frontmatter--garden-topic-map-list ()
+  "topic_map: list pass-through; string split on whitespace; missing → no key emitted."
+  (let ((src (make-temp-file "garden-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          ;; List form pass-through.
+          (should (equal (alist-get 'topic_map
+                                    (a3madkour-pub-frontmatter/normalize
+                                     'garden '((topic_map . ("a" "b" "c"))) src))
+                         '("a" "b" "c")))
+          ;; String form split on whitespace.
+          (should (equal (alist-get 'topic_map
+                                    (a3madkour-pub-frontmatter/normalize
+                                     'garden '((topic_map . "a b c")) src))
+                         '("a" "b" "c")))
+          ;; Missing → not emitted at all.
+          (should-not (assq 'topic_map
+                            (a3madkour-pub-frontmatter/normalize
+                             'garden '() src))))
+      (delete-file src))))
+
+(ert-deftest a3madkour-pub-frontmatter--garden-passthrough-keywords ()
+  "Per-keyword string fields pass through; year and weight coerce string→int."
+  (let* ((src (make-temp-file "garden-" nil ".org"))
+         (raw '((creator       . "Jane Austen")
+                (status        . "finished")
+                (started       . "2024-11-02")
+                (finished      . "2024-12-15")
+                (spoiler_level . "mild")
+                (original_url  . "https://example.com/post")
+                (year          . "1813")
+                (weight        . "5"))))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize 'garden raw src)))
+            (should (equal (alist-get 'creator out) "Jane Austen"))
+            (should (equal (alist-get 'status out) "finished"))
+            (should (equal (alist-get 'started out) "2024-11-02"))
+            (should (equal (alist-get 'finished out) "2024-12-15"))
+            (should (equal (alist-get 'spoiler_level out) "mild"))
+            (should (equal (alist-get 'original_url out) "https://example.com/post"))
+            (should (eq (alist-get 'year out) 1813))
+            (should (eq (alist-get 'weight out) 5))))
+      (delete-file src))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

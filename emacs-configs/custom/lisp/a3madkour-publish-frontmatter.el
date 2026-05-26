@@ -73,6 +73,28 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
   "Mapping from org `:PROGRESS:' property to Hugo `growth_stage'.
 Unset / unrecognized → \"seedling\" (per spec §7).")
 
+(defconst a3madkour-pub-frontmatter--media-flavors
+  '(("book" . "media") ("album" . "media") ("track" . "media")
+    ("game" . "media") ("film"  . "media") ("series" . "media")
+    ("paper" . "reference") ("video" . "reference")
+    ("article" . "reference") ("talk" . "reference"))
+  "Map garden `media_type' values to `flavor' per spec §7.")
+
+(defun a3madkour-pub-frontmatter--infer-flavor (media-type)
+  "Return flavor for MEDIA-TYPE per spec §7.
+nil/unrecognized media_type → \"concept\"."
+  (or (cdr (assoc media-type a3madkour-pub-frontmatter--media-flavors))
+      "concept"))
+
+(defun a3madkour-pub-frontmatter--coerce-slug-list (raw)
+  "Coerce RAW (string or list-of-strings or nil) to a list of strings.
+Strings split on whitespace.  nil stays nil."
+  (cond
+   ((null raw) nil)
+   ((listp raw) raw)
+   ((stringp raw) (split-string raw "[ \t]+" t))
+   (t nil)))
+
 (defun a3madkour-pub-frontmatter--read-org-property (file property)
   "Read PROPERTY (a string like \"PROGRESS\") from the first heading in FILE.
 Returns nil if FILE does not exist or PROPERTY is not set.
@@ -94,10 +116,26 @@ Returns the first occurrence only."
             "seedling"))))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
-  "B.1: garden frontmatter normalizer.  Filled in by Tasks 5-8."
+  "B.1: garden frontmatter normalizer.  Covers Tasks 5-8."
   (let ((out (copy-alist raw-alist)))
+    ;; Task 5: growth_stage derivation.
     (setf (alist-get 'growth_stage out)
           (a3madkour-pub-frontmatter--derive-growth-stage raw-alist source-file))
+    ;; Task 6: flavor inference (media_type already in `out' via copy-alist).
+    (setf (alist-get 'flavor out)
+          (a3madkour-pub-frontmatter--infer-flavor (alist-get 'media_type out)))
+    ;; Task 7: topic_map coerce to slug list; only emit when non-nil.
+    (let ((tm (a3madkour-pub-frontmatter--coerce-slug-list
+               (alist-get 'topic_map raw-alist))))
+      (if tm
+          (setf (alist-get 'topic_map out) tm)
+        ;; Ensure absent input produces no key in output.
+        (setq out (assq-delete-all 'topic_map out))))
+    ;; Task 8: coerce year and weight from string to int.
+    (dolist (k '(year weight))
+      (let ((v (alist-get k out)))
+        (when (stringp v)
+          (setf (alist-get k out) (string-to-number v)))))
     out))
 
 (provide 'a3madkour-publish-frontmatter)
