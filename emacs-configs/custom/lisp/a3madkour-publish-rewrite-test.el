@@ -628,27 +628,34 @@ double-encoded to `&amp;lt;'."
      (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
        (should (equal (buffer-string) "alpha missing omega"))
        (should (= 1 (length warnings)))
-       (should (string-match-p "private\\|unknown" (car warnings)))))))
+       (should (string-match-p "private\\|unpublished\\|unknown" (car warnings)))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-multiple-on-one-line ()
-  "Three links on one line all rewrite correctly (covers the MAP case)."
+  "Three links on one line all rewrite correctly (covers the MAP case).
+The unresolved [[id:missing]] case also confirms the warnings list
+accumulates across multiple per-link rewrites in one scan."
   (a3madkour-pub-rewrite-test--with-stubbed
    (("t1" :state live :section "garden" :slug "one")
     ("t2" :state live :section "garden" :slug "two")
     ("source-id" :state live :section "garden" :slug "src"))
    (with-temp-buffer
      (insert "see [[id:t1][One]] and [[id:t2][Two]] and [[id:missing][Three]] end")
-     (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
-     (should (equal (buffer-string)
-                    (concat "see "
-                            "<a href=\"/garden/one/\">One</a>"
-                            " and "
-                            "<a href=\"/garden/two/\">Two</a>"
-                            " and Three end"))))))
+     (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
+       (should (equal (buffer-string)
+                      (concat "see "
+                              "<a href=\"/garden/one/\">One</a>"
+                              " and "
+                              "<a href=\"/garden/two/\">Two</a>"
+                              " and Three end")))
+       (should (= 1 (length warnings)))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-external-url-untouched ()
   "External URL `[[https://...]]' passes through unchanged (ox-hugo handles it)."
   (with-temp-buffer
+    ;; No `with-stubbed' here: the external-URL branch of `rewrite-link'
+    ;; fires before any note-metadata / published-p lookup, so no stub is
+    ;; needed.  rewrite-buffer-links should also short-circuit external
+    ;; schemes via its own scheme-guard before invoking rewrite-link.
     (insert "see [[https://example.com][Example]] for details")
     (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
       (should (equal (buffer-string)
@@ -658,6 +665,8 @@ double-encoded to `&amp;lt;'."
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-asset-untouched ()
   "Asset-shaped link `[[./assets/...]]' passes through unchanged."
   (with-temp-buffer
+    ;; No `with-stubbed' here: asset-shaped links are skipped by
+    ;; rewrite-buffer-links' scheme-guard before rewrite-link is called.
     (insert "fig: [[./assets/page/foo/x.png]]")
     (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
       (should (equal (buffer-string)
@@ -675,16 +684,38 @@ double-encoded to `&amp;lt;'."
      (should (equal (buffer-string)
                     "<a class=\"link-supports\" href=\"/garden/ev/\">evidence</a>")))))
 
+(ert-deftest a3madkour-pub-rewrite-test/buffer-links-file-link ()
+  "[[file:target.org][text]] dispatches via `file' scheme arm — recursing
+into id-link semantics after resolving the target's top-level :ID:.
+
+The buffer scanner's only contribution for `file:' is the dispatch guard
+in the `when' clause; this test pins that the `file' arm is wired (a typo
+or omitted-arm regression would leave the link untouched)."
+  ;; Stub --file-top-level-id so we don't need a real .org file on disk.
+  (cl-letf (((symbol-function 'a3madkour-pub--file-top-level-id)
+             (lambda (_file) "target-id"))
+            ((symbol-function 'a3madkour-pub--id-to-file)
+             (lambda (_id) nil)))  ; no heading-suffix in this test → unused
+    (a3madkour-pub-rewrite-test--with-stubbed
+     (("target-id" :state live :section "garden" :slug "foo")
+      ("source-id" :state live :section "garden" :slug "src"))
+     (with-temp-buffer
+       (insert "see [[file:target.org][Target]] for context")
+       (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
+       (should (equal (buffer-string)
+                      "see <a href=\"/garden/foo/\">Target</a> for context"))))))
+
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-id-without-display-text ()
-  "[[id:UUID]] (no text) → href uses resolved URL as display text."
+  "[[id:UUID]] (no text) → href uses resolved URL as display text; no warnings."
   (a3madkour-pub-rewrite-test--with-stubbed
    (("target-id" :state live :section "garden" :slug "foo")
     ("source-id" :state live :section "garden" :slug "src"))
    (with-temp-buffer
      (insert "see [[id:target-id]] for context")
-     (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
-     (should (equal (buffer-string)
-                    "see <a href=\"/garden/foo/\">/garden/foo/</a> for context")))))
+     (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
+       (should (equal (buffer-string)
+                      "see <a href=\"/garden/foo/\">/garden/foo/</a> for context"))
+       (should-not warnings)))))
 
 (provide 'a3madkour-publish-rewrite-test)
 
