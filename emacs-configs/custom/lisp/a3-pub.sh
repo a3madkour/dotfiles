@@ -27,7 +27,12 @@ STRAIGHT_BOOTSTRAP="$CUSTOM_DIR/straight/repos/straight.el/bootstrap.el"
 # Used by all three publish-side intercepts.
 a3_pub_resolve_site_data_dir() {
   if [ -n "${A3_PUB_SITE_DATA_DIR:-}" ]; then
-    printf '%s\n' "$A3_PUB_SITE_DATA_DIR"
+    if [ ! -d "$A3_PUB_SITE_DATA_DIR" ]; then
+      echo "a3-pub.sh: A3_PUB_SITE_DATA_DIR=$A3_PUB_SITE_DATA_DIR does not exist." >&2
+      return 1
+    fi
+    # Normalise trailing slash so callers can interpolate uniformly.
+    printf '%s/\n' "${A3_PUB_SITE_DATA_DIR%/}"
     return 0
   fi
   local repo_root
