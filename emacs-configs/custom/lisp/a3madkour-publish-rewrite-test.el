@@ -608,7 +608,7 @@ double-encoded to `&amp;lt;'."
 ;; -- rewrite-buffer-links --
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-resolved-id ()
-  "Resolved id-link in buffer → replaced by <a href> anchor."
+  "Resolved id-link in buffer → replaced by @@html:<a href>@@ export snippet."
   (a3madkour-pub-rewrite-test--with-stubbed
    (("target-id" :state live :section "garden" :slug "foo")
     ("source-id" :state live :section "garden" :slug "src"))
@@ -616,7 +616,7 @@ double-encoded to `&amp;lt;'."
      (insert "prefix [[id:target-id][text]] suffix")
      (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
      (should (equal (buffer-string)
-                    "prefix <a href=\"/garden/foo/\">text</a> suffix")))))
+                    "prefix @@html:<a href=\"/garden/foo/\">text</a>@@ suffix")))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-unresolved-id-inert ()
   "Unresolved id-link in buffer → replaced by inert plain text + warning."
@@ -643,9 +643,9 @@ accumulates across multiple per-link rewrites in one scan."
      (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
        (should (equal (buffer-string)
                       (concat "see "
-                              "<a href=\"/garden/one/\">One</a>"
+                              "@@html:<a href=\"/garden/one/\">One</a>@@"
                               " and "
-                              "<a href=\"/garden/two/\">Two</a>"
+                              "@@html:<a href=\"/garden/two/\">Two</a>@@"
                               " and Three end")))
        (should (= 1 (length warnings)))))))
 
@@ -674,7 +674,7 @@ accumulates across multiple per-link rewrites in one scan."
       (should-not warnings))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-typed-link-class ()
-  "[[supports:UUID][text]] resolved → `class=\"link-supports\"' anchor."
+  "[[supports:UUID][text]] resolved → @@html:<a class=\"link-supports\">@@ snippet."
   (a3madkour-pub-rewrite-test--with-stubbed
    (("tgt" :state live :section "garden" :slug "ev")
     ("source-id" :state live :section "garden" :slug "src"))
@@ -682,7 +682,7 @@ accumulates across multiple per-link rewrites in one scan."
      (insert "[[supports:tgt][evidence]]")
      (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
      (should (equal (buffer-string)
-                    "<a class=\"link-supports\" href=\"/garden/ev/\">evidence</a>")))))
+                    "@@html:<a class=\"link-supports\" href=\"/garden/ev/\">evidence</a>@@")))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-file-link ()
   "[[file:target.org][text]] dispatches via `file' scheme arm — recursing
@@ -703,10 +703,10 @@ or omitted-arm regression would leave the link untouched)."
        (insert "see [[file:target.org][Target]] for context")
        (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")
        (should (equal (buffer-string)
-                      "see <a href=\"/garden/foo/\">Target</a> for context"))))))
+                      "see @@html:<a href=\"/garden/foo/\">Target</a>@@ for context"))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/buffer-links-id-without-display-text ()
-  "[[id:UUID]] (no text) → href uses resolved URL as display text; no warnings."
+  "[[id:UUID]] (no text) → @@html:<a href>@@ snippet; URL as display text; no warnings."
   (a3madkour-pub-rewrite-test--with-stubbed
    (("target-id" :state live :section "garden" :slug "foo")
     ("source-id" :state live :section "garden" :slug "src"))
@@ -714,7 +714,7 @@ or omitted-arm regression would leave the link untouched)."
      (insert "see [[id:target-id]] for context")
      (let ((warnings (a3madkour-pub-rewrite/rewrite-buffer-links "source-id")))
        (should (equal (buffer-string)
-                      "see <a href=\"/garden/foo/\">/garden/foo/</a> for context"))
+                      "see @@html:<a href=\"/garden/foo/\">/garden/foo/</a>@@ for context"))
        (should-not warnings)))))
 
 (provide 'a3madkour-publish-rewrite-test)

@@ -87,20 +87,43 @@ Returns a string with leading/trailing `---' delimiters."
              sorted "\n")
             "\n---\n")))
 
+(defun a3madkour-pub-garden--rewrite-to-tmp-file (source-file source-note-id)
+  "Copy SOURCE-FILE to a fresh temp `.org' file with all org links
+pre-rewritten via `a3madkour-pub-rewrite/rewrite-buffer-links'.
+
+Returns the absolute path of the temp file.  Caller is responsible for
+`delete-file' on the returned path (typical pattern: wrap the consumer
+in an `unwind-protect' that deletes on cleanup).
+
+Warnings from the rewriter are surfaced via `message' with the SOURCE-FILE
+included so authors can grep the publish log.  (Future slices may route
+these through a structured warning channel; for now they ride the same
+stderr stream as the rest of the publish pipeline's messages.)"
+  (let ((tmp (make-temp-file "a3-pub-pre-export-" nil ".org"))
+        warnings)
+    (with-temp-buffer
+      (insert-file-contents source-file)
+      (setq warnings
+            (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id))
+      (write-region (point-min) (point-max) tmp nil 'quiet))
+    (dolist (w warnings)
+      (message "[a3-pub-garden] rewrite WARN (%s): %s" source-file w))
+    tmp))
+
 (defun a3madkour-pub-garden/publish-garden-file (file)
   "Publish a single garden-section FILE to content/garden/<slug>/index.md.
 
 Pipeline per spec §10:
-  export → frontmatter/normalize → [rewrite-links: B.1 follow-on] →
+  pre-export-rewrite-links → export → frontmatter/normalize →
   asset-validate-and-copy → write-if-different → record-publish.
 
-NOTE — link rewriting is intentionally deferred (B.1 follow-on): A.1's
-`a3madkour-pub/rewrite-link' operates on raw [[id:UUID]] org bracket syntax,
-but ox-hugo translates those to its own markdown link form during export, so
-the post-export :body has no [[...]] patterns left to find.  Resolving this
-cleanly needs either pre-export buffer rewriting or org-link-set-parameters
-hooks — an architectural decision gated on Task 17's spot-check feedback.
-The body is passed through unchanged from ox-hugo's output for now."
+The pre-export rewrite step copies FILE to a temp .org file and calls
+`a3madkour-pub-rewrite/rewrite-buffer-links' on it (B.1.1) so that org
+bracket-link forms `[[id:UUID]]', `[[file:...]]', and `[[<type>:UUID]]'
+are resolved to inline HTML anchors (or inert plain text for unpublished
+targets) before ox-hugo sees them.  Without this step ox-hugo emits
+`{{< relref \"<underscore_filename>.md\" >}}' shortcodes that fail
+Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths."
   (let* ((id        (plist-get (a3madkour-pub/note-metadata file) :id))
          (slug      (a3madkour-pub/note-slug file))
          (new-url   (a3madkour-pub/note-url file))
@@ -110,10 +133,13 @@ The body is passed through unchanged from ox-hugo's output for now."
                               a3madkour-pub-garden/section-dir-name slug)
                       site-root))
          (out-path   (expand-file-name "index.md" bundle-dir))
-         (exported   (a3madkour-pub-export/export-file file))
+         (tmp-src    (a3madkour-pub-garden--rewrite-to-tmp-file file id))
+         (exported   (unwind-protect
+                         (a3madkour-pub-export/export-file tmp-src)
+                       (when (file-exists-p tmp-src)
+                         (delete-file tmp-src))))
          (normalized (a3madkour-pub-frontmatter/normalize
                       'garden (plist-get exported :frontmatter) file))
-         ;; B.1 follow-on: link rewriting deferred — see docstring above.
          (body       (plist-get exported :body)))
     (a3madkour-pub/asset-validate-and-copy file bundle-dir)
     (a3madkour-pub-garden--write-if-different

@@ -355,9 +355,10 @@ would never resolve against B's hyphen-slug bundle paths."
                     (member scheme a3madkour-pub-typed-link-types))
             (let* ((result      (a3madkour-pub/rewrite-link
                                  org-link source-note-id))
-                   (replacement (or (plist-get result :html)
-                                    (plist-get result :inert)
-                                    ""))
+                   (raw-html    (plist-get result :html))
+                   (replacement (if raw-html
+                                    (format "@@html:%s@@" raw-html)
+                                  (or (plist-get result :inert) "")))
                    (warns       (plist-get result :warnings)))
               (when warns
                 (setq warnings (nconc warnings warns)))
