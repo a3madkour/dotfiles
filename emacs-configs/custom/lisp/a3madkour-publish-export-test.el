@@ -11,7 +11,7 @@
 B.0 ships a skeleton that returns empty values; B.1 wires real ox-hugo."
   (let ((tmp (make-temp-file "b0-export-" nil ".org")))
     (unwind-protect
-        (let ((result (a3madkour-pub-export/export-file tmp nil)))
+        (let ((result (a3madkour-pub-export/export-file tmp)))
           (should (plistp result))
           (should (memq :body result))
           (should (memq :frontmatter result))

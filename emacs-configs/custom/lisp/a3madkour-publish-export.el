@@ -18,13 +18,8 @@
 
 ;;; Code:
 
-(defun a3madkour-pub-export/export-file (file dest-dir)
+(defun a3madkour-pub-export/export-file (file)
   "Export FILE (an absolute `.org' path) via ox-hugo.
-
-DEST-DIR is the absolute path of the destination Hugo content section
-(e.g. \"/Stuff/.../a3madkour.github.io/content/garden/\").  ox-hugo writes
-the per-page bundle under DEST-DIR/<slug>/ ; the caller is responsible
-for resolving the slug and matching the path.
 
 Returns a plist:
   :body         MARKDOWN-STRING — the post-export markdown body (no frontmatter)
@@ -33,11 +28,14 @@ Returns a plist:
   :warnings     LIST OF STRINGS — non-fatal issues raised during export
 
 B.0 skeleton: returns (:body \"\" :frontmatter nil :warnings nil) regardless
-of input.  B.1 wires the real ox-hugo invocation; this docstring's contract
-holds across both phases."
+of input.  B.1 (this slice) wires the real ox-hugo invocation in a follow-up
+task; this docstring's contract holds across both phases.
+
+The bundle destination dir is the caller's responsibility (see spec §10);
+this function does not write to disk."
   ;; B.0 skeleton: no-op stub.  B.1 replaces the body with real ox-hugo
   ;; invocation that captures the export buffer + extracts frontmatter.
-  (ignore file dest-dir)
+  (ignore file)
   (list :body "" :frontmatter nil :warnings nil))
 
 (provide 'a3madkour-publish-export)
