@@ -28,5 +28,15 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
   "B.0 — `normalize' signals an error for unknown section symbol."
   (should-error (a3madkour-pub-frontmatter/normalize 'made-up-section '() "/tmp/x.org")))
 
+(ert-deftest a3madkour-pub-frontmatter--dispatch-routes-by-section ()
+  "normalize dispatches to per-section logic; unknown sections still error."
+  (should-error
+   (a3madkour-pub-frontmatter/normalize 'bogus '((title . "x")) "/tmp/x.org"))
+  ;; Non-garden known sections still pass-through (B.1 only adds garden).
+  (should (equal (a3madkour-pub-frontmatter/normalize 'essays
+                                                       '((title . "Hi"))
+                                                       "/tmp/x.org")
+                 '((title . "Hi")))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

@@ -51,11 +51,24 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
   (unless (memq section a3madkour-pub-frontmatter--known-sections)
     (error "a3madkour-pub-frontmatter: unknown section %S (must be one of %S)"
            section a3madkour-pub-frontmatter--known-sections))
-  (ignore source-file)  ; per-section bodies will consume this in B.1+
-  ;; B.0 pass-through; B.1+ replaces this cond with per-section branches.
   (cond
-   ((memq section a3madkour-pub-frontmatter--known-sections)
+   ((eq section 'garden)
+    (a3madkour-pub-frontmatter--normalize-garden raw-alist source-file))
+   ;; B.2+ slices add real branches here:
+   ;;   ((memq section '(library-reading library-listening library-playing library-watching))
+   ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
+   ;;   ((memq section '(research-theme research-question))
+   ;;    (a3madkour-pub-frontmatter--normalize-research section raw-alist source-file))
+   ;;   ...
+   (t
+    ;; B.0 pass-through for sections not yet handled.
+    (ignore source-file)
     raw-alist)))
+
+(defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
+  "B.1: garden frontmatter normalizer.  Filled in by Tasks 5-8."
+  (ignore source-file)
+  raw-alist)
 
 (provide 'a3madkour-publish-frontmatter)
 
