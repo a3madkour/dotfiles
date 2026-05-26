@@ -116,6 +116,83 @@ normalized frontmatter + body + record-publish call."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+(ert-deftest a3madkour-pub-garden--publish-garden-file-rewrites-links ()
+  "publish-garden-file pre-rewrites [[id:UUID]] links so the emitted
+markdown has resolved HTML anchors and zero `{{< relref' shortcodes.
+
+This is the B.1.1 regression test: prior to pre-export buffer rewriting,
+ox-hugo emitted `[text]({{< relref \"<filename>.md\" >}})' for every
+id-link, which then failed Hugo's REF_NOT_FOUND check against B's
+hyphen-slug bundles."
+  (let* ((notes-dir (make-temp-file "a3-pub-notes-b11-" t))
+         (site-dir  (make-temp-file "a3-pub-site-b11-" t))
+         ;; Two notes — `b-source.org' links to `a-target.org'.  Alphabetical
+         ;; ordering matters: publish-living processes a/ first, so when
+         ;; b/ is processed the manifest already has a/'s state.  (One-pass
+         ;; cross-link resolution; future two-pass design is out of scope.)
+         (target-src (expand-file-name "a-target.org" notes-dir))
+         (source-src (expand-file-name "b-source.org" notes-dir))
+         (target-id  "11111111-2222-3333-4444-555555555555")
+         (source-id  "66666666-7777-8888-9999-aaaaaaaaaaaa"))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file target-src
+            (insert ":PROPERTIES:\n"
+                    ":ID: " target-id "\n"
+                    ":END:\n"
+                    "#+title: Target Note\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "Target body.\n"))
+          (with-temp-file source-src
+            (insert ":PROPERTIES:\n"
+                    ":ID: " source-id "\n"
+                    ":END:\n"
+                    "#+title: Source Note\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "Body text linking to [[id:" target-id "][the target]] "
+                    "and to [[id:00000000-0000-0000-0000-000000000000][a private one]].\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore)
+                      ;; id-to-file resolves both real IDs to their .org files.
+                      ;; The "private" UUID resolves to nil, exercising the
+                      ;; :inert branch via published-p returning nil.
+                      ((symbol-function 'a3madkour-pub--id-to-file)
+                       (lambda (id)
+                         (cond ((equal id target-id) target-src)
+                               ((equal id source-id) source-src)
+                               (t nil)))))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-garden/publish-garden-file target-src)
+              (a3madkour-pub-garden/publish-garden-file source-src)
+              (a3madkour-pub/finish-publish)))
+          (let* ((out  (expand-file-name
+                        "content/garden/source-note/index.md" site-dir))
+                 (body (with-temp-buffer
+                         (insert-file-contents out)
+                         (buffer-string))))
+            (should (file-exists-p out))
+            ;; Resolved link → HTML anchor at the right hyphen-slug URL.
+            (should (string-match-p
+                     "<a href=\"/garden/target-note/\">the target</a>"
+                     body))
+            ;; Unresolved link → inert plain text, no anchor.
+            (should (string-match-p "a private one" body))
+            (should-not (string-match-p
+                         "href=\"[^\"]*private one[^\"]*\"" body))
+            ;; And critically: no ox-hugo relref shortcodes survived.
+            (should-not (string-match-p "{{< *relref" body))
+            (should-not (string-match-p "\\[\\[id:" body))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (provide 'a3madkour-publish-garden-test)
 
 ;;; a3madkour-publish-garden-test.el ends here
