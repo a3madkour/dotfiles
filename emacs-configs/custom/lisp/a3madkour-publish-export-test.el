@@ -66,5 +66,38 @@ see `a3madkour-pub-export--real-export-roundtrip' for that)."
             (should (member "beta" (alist-get 'tags fm)))))
       (delete-directory tmpdir t))))
 
+(ert-deftest a3madkour-pub-export--no-buffer-leak ()
+  "export-file does not leak the source buffer or the *Org Hugo Export* buffer.
+Note: buffer-only export does not validate HUGO_BASE_DIR — directory is a placeholder.
+
+Uses a warm-up call on a first file before measuring, because org-mode lazily
+creates its internal \" *Org parse*\" buffer on the very first export in a session.
+That one-time allocation is org-mode's budget, not ours.  The assertion verifies
+that a SECOND call on a NEW source file does not add any buffers."
+  (let* ((tmpdir (make-temp-file "a3-pub-export-leak-" t))
+         (src-warmup (expand-file-name "warmup.org" tmpdir))
+         (src (expand-file-name "leak-test.org" tmpdir)))
+    (unwind-protect
+        (progn
+          ;; Write both org files.
+          (dolist (pair (list (cons src-warmup "aaaaaaaa-bbbb-cccc-dddd-000000000000")
+                              (cons src "11111111-2222-3333-4444-555555555555")))
+            (with-temp-file (car pair)
+              (insert ":PROPERTIES:\n"
+                      ":ID: " (cdr pair) "\n"
+                      ":END:\n"
+                      "#+title: Leak Test\n"
+                      "#+HUGO_SECTION: garden\n"
+                      "#+HUGO_BASE_DIR: " tmpdir "/site/\n"
+                      "\n* Heading\nbody.\n")))
+          ;; Warm-up: let org-mode allocate its one-time internal buffers.
+          (a3madkour-pub-export/export-file src-warmup)
+          ;; Now measure: a second call on a new source file must not grow the buffer list.
+          (let ((before (length (buffer-list))))
+            (a3madkour-pub-export/export-file src)
+            (let ((after (length (buffer-list))))
+              (should (= before after)))))
+      (delete-directory tmpdir t))))
+
 (provide 'a3madkour-publish-export-test)
 ;;; a3madkour-publish-export-test.el ends here

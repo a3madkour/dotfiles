@@ -26,17 +26,22 @@
 (require 'ox-hugo)
 (require 'yaml)
 
-(defun a3madkour-pub-export--frontmatter-string-to-alist (yaml-str)
+(defun a3madkour-pub-export--frontmatter-string-to-alist (yaml-str file)
   "Parse YAML-STR (the YAML frontmatter ox-hugo emitted) into a symbol-keyed alist.
 yaml.el with `:object-type \\='alist' already returns symbol-keyed alists.
 YAML sequences (arrays) are returned as vectors; we convert them to lists so
-callers see uniform list values for multi-valued fields like `tags'."
-  (let ((raw (yaml-parse-string yaml-str
-                                :object-type 'alist
-                                :sequence-type 'list
-                                :null-object nil
-                                :false-object nil)))
-    raw))
+callers see uniform list values for multi-valued fields like `tags'.
+FILE is the source org path, used only to provide context in parse-error messages."
+  (condition-case err
+      (yaml-parse-string yaml-str
+                         :object-type 'alist
+                         :sequence-type 'list
+                         :null-object nil
+                         :false-object nil)
+    (error
+     (signal (car err)
+             (list (format "a3madkour-pub-export: parsing frontmatter for %s: %s"
+                           file (cadr err)))))))
 
 (defun a3madkour-pub-export--split-frontmatter (text)
   "Split TEXT (raw ox-hugo output) into (FM-STRING . BODY-STRING).
@@ -74,22 +79,34 @@ Uses `org-hugo-export-as-md' (buffer-emit variant) so no files are written to
 disk — writing is the caller's responsibility per spec §10."
   (let* ((org-hugo-front-matter-format "yaml")
          (warnings nil)
+         ;; Detect whether FILE is already open so we only kill what we create.
+         (existing-buf (find-buffer-visiting file))
+         (src-buf (or existing-buf (find-file-noselect file)))
          raw-output)
-    (with-current-buffer (find-file-noselect file)
-      (let ((inhibit-message t))
-        (org-hugo-export-as-md nil nil nil)))
-    ;; ox-hugo writes to "*Org Hugo Export*".
-    (let ((buf (get-buffer "*Org Hugo Export*")))
-      (unless buf
-        (error "a3madkour-pub-export: ox-hugo did not produce *Org Hugo Export* buffer"))
-      (setq raw-output (with-current-buffer buf (buffer-string)))
-      (kill-buffer buf))
+    (unwind-protect
+        (progn
+          ;; Run ox-hugo export; it writes into "*Org Hugo Export*".
+          (with-current-buffer src-buf
+            (let ((inhibit-message t))
+              (org-hugo-export-as-md nil nil nil)))
+          ;; Capture and discard the export output buffer.
+          (let ((export-buf (get-buffer "*Org Hugo Export*")))
+            (unless export-buf
+              (error "a3madkour-pub-export: ox-hugo did not produce *Org Hugo Export* buffer"))
+            (setq raw-output (with-current-buffer export-buf (buffer-string)))
+            (kill-buffer export-buf)))
+      ;; Cleanup: kill the source buffer only if we opened it.
+      (unless existing-buf
+        (when (buffer-live-p src-buf)
+          (with-current-buffer src-buf
+            (set-buffer-modified-p nil))  ; defensive — never write back
+          (kill-buffer src-buf))))
     (let* ((parts (a3madkour-pub-export--split-frontmatter raw-output))
            (fm-string (car parts))
            (body (cdr parts))
            (frontmatter (if (string-empty-p fm-string)
                             nil
-                          (a3madkour-pub-export--frontmatter-string-to-alist fm-string))))
+                          (a3madkour-pub-export--frontmatter-string-to-alist fm-string file))))
       (list :body body
             :frontmatter frontmatter
             :warnings warnings))))
