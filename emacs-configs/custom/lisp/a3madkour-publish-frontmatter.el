@@ -65,10 +65,40 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (ignore source-file)
     raw-alist)))
 
+(defconst a3madkour-pub-frontmatter--progress->stage
+  '(("highlighting" . "seedling")
+    ("ref-notes"    . "budding")
+    ("main-notes"   . "evergreen")
+    ("done"         . "evergreen"))
+  "Mapping from org `:PROGRESS:' property to Hugo `growth_stage'.
+Unset / unrecognized → \"seedling\" (per spec §7).")
+
+(defun a3madkour-pub-frontmatter--read-org-property (file property)
+  "Read PROPERTY (a string like \"PROGRESS\") from the first heading in FILE.
+Returns nil if FILE does not exist or PROPERTY is not set.
+Returns the first occurrence only."
+  (when (file-exists-p file)
+    (with-temp-buffer
+      (insert-file-contents file)
+      (goto-char (point-min))
+      (when (re-search-forward
+             (format "^[ \t]*:%s:[ \t]+\\(.+\\)$" (regexp-quote property))
+             nil t)
+        (string-trim (match-string 1))))))
+
+(defun a3madkour-pub-frontmatter--derive-growth-stage (raw-alist source-file)
+  "Return growth_stage per spec §7: HUGO_GROWTH_STAGE wins; else map :PROGRESS:."
+  (or (alist-get 'growth_stage raw-alist)
+      (let ((progress (a3madkour-pub-frontmatter--read-org-property source-file "PROGRESS")))
+        (or (and progress (cdr (assoc progress a3madkour-pub-frontmatter--progress->stage)))
+            "seedling"))))
+
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
   "B.1: garden frontmatter normalizer.  Filled in by Tasks 5-8."
-  (ignore source-file)
-  raw-alist)
+  (let ((out (copy-alist raw-alist)))
+    (setf (alist-get 'growth_stage out)
+          (a3madkour-pub-frontmatter--derive-growth-stage raw-alist source-file))
+    out))
 
 (provide 'a3madkour-publish-frontmatter)
 
