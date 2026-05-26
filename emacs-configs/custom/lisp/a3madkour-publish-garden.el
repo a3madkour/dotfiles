@@ -45,16 +45,27 @@ Returns t if a write happened, nil if no-op."
       (with-temp-file path (insert content))
       t)))
 
+(defconst a3madkour-pub-garden--date-re
+  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
+  "Regex for bare YYYY-MM-DD date strings.
+These must be emitted unquoted in YAML so the PyYAML / YAML 1.1 loader
+parses them as `datetime.date' objects (which is what check_garden_fixtures.py
+and the Hugo template both expect).  A quoted string like \"2026-05-25\"
+stays a string and fails `isinstance(val, datetime.date)' in the linter.")
+
 (defun a3madkour-pub-garden--render-yaml-value (v)
   "Render V as a YAML scalar/list value.  Internal helper.
-Strings → \"...\"; numbers → as-is; t → true; nil → false;
-lists of strings → [\"a\", \"b\"].
+Strings → \"...\"; YYYY-MM-DD date strings → unquoted (YAML native date);
+numbers → as-is; t → true; nil → false; lists of strings → [\"a\", \"b\"].
 
 NOTE: nil is also a list in Emacs Lisp, so the nil/false case must be
 tested before the listp case."
   (cond
    ((null v)    "false")
    ((eq v t)    "true")
+   ((and (stringp v)
+         (string-match-p a3madkour-pub-garden--date-re v))
+    v)                                    ; unquoted YYYY-MM-DD → YAML date
    ((stringp v) (format "\"%s\"" v))
    ((numberp v) (format "%s" v))
    ((listp v)

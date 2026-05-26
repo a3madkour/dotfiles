@@ -94,24 +94,69 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
       (delete-file src))))
 
 (ert-deftest a3madkour-pub-frontmatter--garden-flavor-inference ()
-  "media_type passes through; flavor is inferred per spec §7."
+  "media_type passes through; flavor is NOT emitted to frontmatter.
+The linter derives flavor internally from media_type, so emitting
+flavor: to the YAML frontmatter is forbidden (check_garden_fixtures.py
+rejects it on concept notes).  The --infer-flavor helper stays pure
+and available for internal use, but the normalizer must suppress the
+flavor key from the output alist."
   (let ((src (make-temp-file "garden-" nil ".org")))
     (unwind-protect
-        (let ((cases '((nil       . "concept")
-                       ("book"    . "media") ("album"  . "media")
-                       ("track"   . "media") ("game"   . "media")
-                       ("film"    . "media") ("series" . "media")
-                       ("paper"   . "reference") ("video"   . "reference")
-                       ("article" . "reference") ("talk"    . "reference"))))
+        (let ((cases '(nil "book" "album" "track" "game" "film" "series"
+                       "paper" "video" "article" "talk")))
           (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
-          (dolist (case cases)
-            (let* ((mt (car case))
-                   (expected-flavor (cdr case))
-                   (raw (if mt `((media_type . ,mt)) '()))
+          (dolist (mt cases)
+            (let* ((raw (if mt `((media_type . ,mt)) '()))
                    (out (a3madkour-pub-frontmatter/normalize 'garden raw src)))
+              ;; media_type passes through when present.
               (when mt
                 (should (equal (alist-get 'media_type out) mt)))
-              (should (equal (alist-get 'flavor out) expected-flavor)))))
+              ;; flavor must NOT appear in output.
+              (should-not (assq 'flavor out)))))
+      (delete-file src))))
+
+(ert-deftest a3madkour-pub-frontmatter--garden-author-stripped ()
+  "author key is stripped from output; creator is kept if both present.
+ox-hugo may emit `author' from #+author: or :AUTHOR: properties, but
+check_garden_fixtures.py's CONCEPT_FIELDS does not include `author'.
+The normalizer must drop it silently."
+  (let ((src (make-temp-file "garden-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          ;; author alone → stripped.
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'garden '((author . "Someone")) src)))
+            (should-not (assq 'author out)))
+          ;; creator alone → kept.
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'garden '((creator . "Jane Austen")) src)))
+            (should (equal (alist-get 'creator out) "Jane Austen")))
+          ;; both author + creator → creator survives, author dropped.
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'garden '((author . "Wrong") (creator . "Right")) src)))
+            (should-not (assq 'author out))
+            (should (equal (alist-get 'creator out) "Right"))))
+      (delete-file src))))
+
+(ert-deftest a3madkour-pub-frontmatter--garden-last-modified-derived ()
+  "last_modified is derived from file mtime when absent from raw-alist.
+If raw-alist already has last_modified (e.g. from #+HUGO_LASTMOD:), that
+value is honored unchanged."
+  (let ((src (make-temp-file "garden-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          ;; Not in raw-alist → derived from mtime (format YYYY-MM-DD).
+          (let* ((out (a3madkour-pub-frontmatter/normalize 'garden '() src))
+                 (lm  (alist-get 'last_modified out)))
+            (should (stringp lm))
+            (should (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" lm)))
+          ;; Already in raw-alist → honored, not overridden.
+          (let* ((out (a3madkour-pub-frontmatter/normalize
+                       'garden '((last_modified . "2025-01-15")) src))
+                 (lm  (alist-get 'last_modified out)))
+            (should (equal lm "2025-01-15"))))
       (delete-file src))))
 
 (ert-deftest a3madkour-pub-frontmatter--garden-topic-map-list ()

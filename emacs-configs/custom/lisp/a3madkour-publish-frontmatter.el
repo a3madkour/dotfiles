@@ -116,14 +116,38 @@ Returns the first occurrence only."
             "seedling"))))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
-  "B.1: garden frontmatter normalizer.  Covers Tasks 5-8."
+  "B.1: garden frontmatter normalizer.  Covers Tasks 5-8 + hygiene fixes.
+
+Hygiene rules (check_garden_fixtures.py compliance):
+  - `flavor' is NOT emitted to frontmatter.  The linter + Hugo template
+    derive flavor internally from `media_type'; emitting it is forbidden
+    on concept notes.  `--infer-flavor' stays as a pure helper for
+    internal use.
+  - `author' is stripped.  ox-hugo may emit it from #+author: or :AUTHOR:
+    properties; `author' is not in any of the linter's allowed field sets.
+    `creator' carries the equivalent semantic on media/reference notes per
+    spec §7.  If the raw alist has both `author' and `creator', `creator'
+    wins; if only `author', it is dropped without renaming.
+  - `last_modified' is set when absent.  Derived from the source file's
+    mtime in YYYY-MM-DD form (git-mtime is the design-spec target per
+    §7 open-Q-5; that is a future follow-up)."
   (let ((out (copy-alist raw-alist)))
     ;; Task 5: growth_stage derivation.
     (setf (alist-get 'growth_stage out)
           (a3madkour-pub-frontmatter--derive-growth-stage raw-alist source-file))
-    ;; Task 6: flavor inference (media_type already in `out' via copy-alist).
-    (setf (alist-get 'flavor out)
-          (a3madkour-pub-frontmatter--infer-flavor (alist-get 'media_type out)))
+    ;; Task 6 (revised): flavor is inferred but NOT emitted to frontmatter.
+    ;; The linter derives flavor from media_type; emitting flavor: is forbidden
+    ;; on concept notes and redundant on media/reference notes.
+    (setq out (assq-delete-all 'flavor out))
+    ;; Hygiene: strip `author' — not in any linter-allowed field set.
+    ;; `creator' (already present if set in source) carries that semantic.
+    (setq out (assq-delete-all 'author out))
+    ;; Hygiene: set last_modified when absent.
+    (unless (alist-get 'last_modified out)
+      (setf (alist-get 'last_modified out)
+            (format-time-string "%Y-%m-%d"
+                                (file-attribute-modification-time
+                                 (file-attributes source-file)))))
     ;; Task 7: topic_map coerce to slug list; only emit when non-nil.
     (let ((tm (a3madkour-pub-frontmatter--coerce-slug-list
                (alist-get 'topic_map raw-alist))))
