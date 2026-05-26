@@ -4,6 +4,10 @@
 
 ;; Implements parent-spec §6 link rewriting contract for A.1.b / A.1.c.
 ;; - `a3madkour-pub/rewrite-link' — per-link-type dispatcher.
+;; - `a3madkour-pub-rewrite/rewrite-buffer-links' — buffer-scan pre-export
+;;   step that substitutes [[id:UUID]]/[[file:]]/typed-link forms with the
+;;   resolved HTML (wrapped in @@html:@@ org export snippets) before
+;;   ox-hugo touches the source.  Used by B.1.1's garden handler.
 ;; - `a3madkour-pub--heading-anchor' — Hugo `github`-style heading anchor slug.
 ;; - `a3madkour-pub-typed-link-types' — defcustom listing recognized custom
 ;;   typed-link types (e.g., `supports`, `contradicts`).
@@ -324,7 +328,7 @@ For every `[[...]]` form whose path uses a scheme A.1 knows how to resolve
 (`id:', `file:', or any member of `a3madkour-pub-typed-link-types'), calls
 `a3madkour-pub/rewrite-link' and substitutes the match with the returned
 `:html' (resolved → inline HTML anchor) or `:inert' (unresolved → plain
-text).  External URLs and asset-shaped links pass through unchanged —
+text).  External URLs and asset-shaped links are skipped by this scanner —
 ox-hugo handles those correctly on its own.
 
 SOURCE-NOTE-ID is the org-roam :ID: of the file whose contents fill the
@@ -356,10 +360,15 @@ would never resolve against B's hyphen-slug bundle paths."
             (let* ((result      (a3madkour-pub/rewrite-link
                                  org-link source-note-id))
                    (raw-html    (plist-get result :html))
+                   ;; @@html:...@@ is org's HTML export snippet — passes raw
+                   ;; HTML verbatim through ox-hugo's markdown export rather
+                   ;; than HTML-escaping bare <a> tags as paragraph text.
                    (replacement (if raw-html
                                     (format "@@html:%s@@" raw-html)
                                   (or (plist-get result :inert) "")))
                    (warns       (plist-get result :warnings)))
+              ;; nconc not append: warns is a let*-local not referenced
+              ;; again, so the destructive splice is safe + avoids a copy.
               (when warns
                 (setq warnings (nconc warnings warns)))
               ;; Use explicit region replacement so we don't depend on match
