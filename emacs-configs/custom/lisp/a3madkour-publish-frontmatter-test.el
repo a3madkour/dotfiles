@@ -159,6 +159,37 @@ value is honored unchanged."
             (should (equal lm "2025-01-15"))))
       (delete-file src))))
 
+(ert-deftest a3madkour-pub-frontmatter--garden-lastmod-renamed-to-last-modified ()
+  "ox-hugo emits `#+HUGO_LASTMOD:' as `lastmod:' but the linter only accepts
+`last_modified:'. The normalizer renames lastmod → last_modified and strips
+the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
+  (let ((src (make-temp-file "garden-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "* Note\n  :PROPERTIES:\n  :END:\n"))
+          ;; ox-hugo ISO datetime form → YYYY-MM-DD prefix.
+          (let* ((out (a3madkour-pub-frontmatter/normalize
+                       'garden
+                       '((lastmod . "2024-12-18T00:00:00-08:00"))
+                       src)))
+            (should-not (assq 'lastmod out))
+            (should (equal (alist-get 'last_modified out) "2024-12-18")))
+          ;; lastmod that is already plain YYYY-MM-DD passes through unchanged.
+          (let* ((out (a3madkour-pub-frontmatter/normalize
+                       'garden '((lastmod . "2024-12-18")) src)))
+            (should-not (assq 'lastmod out))
+            (should (equal (alist-get 'last_modified out) "2024-12-18")))
+          ;; If both lastmod AND last_modified are present, last_modified wins
+          ;; (explicit override) and lastmod is dropped.
+          (let* ((out (a3madkour-pub-frontmatter/normalize
+                       'garden
+                       '((lastmod . "2024-12-18T00:00:00Z")
+                         (last_modified . "2025-06-01"))
+                       src)))
+            (should-not (assq 'lastmod out))
+            (should (equal (alist-get 'last_modified out) "2025-06-01"))))
+      (delete-file src))))
+
 (ert-deftest a3madkour-pub-frontmatter--garden-topic-map-list ()
   "topic_map: list pass-through; string split on whitespace; missing → no key emitted."
   (let ((src (make-temp-file "garden-" nil ".org")))

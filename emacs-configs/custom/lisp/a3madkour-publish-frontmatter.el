@@ -142,7 +142,20 @@ Hygiene rules (check_garden_fixtures.py compliance):
     ;; Hygiene: strip `author' — not in any linter-allowed field set.
     ;; `creator' (already present if set in source) carries that semantic.
     (setq out (assq-delete-all 'author out))
-    ;; Hygiene: set last_modified when absent.
+    ;; Hygiene: ox-hugo emits #+HUGO_LASTMOD: as `lastmod:' (its own field
+    ;; name), but the garden linter rejects `lastmod:' on concept notes and
+    ;; requires `last_modified:'. Rename when present; otherwise derive from
+    ;; the source file's mtime in YYYY-MM-DD form (git-mtime is the §7
+    ;; open-Q-5 follow-up).
+    (let ((lastmod (alist-get 'lastmod out)))
+      (when (and lastmod (not (alist-get 'last_modified out)))
+        ;; ox-hugo formats HUGO_LASTMOD as ISO datetime ("2024-12-18T..."); take
+        ;; the YYYY-MM-DD prefix.
+        (setf (alist-get 'last_modified out)
+              (if (and (stringp lastmod) (>= (length lastmod) 10))
+                  (substring lastmod 0 10)
+                lastmod)))
+      (setq out (assq-delete-all 'lastmod out)))
     (unless (alist-get 'last_modified out)
       (setf (alist-get 'last_modified out)
             (format-time-string "%Y-%m-%d"
