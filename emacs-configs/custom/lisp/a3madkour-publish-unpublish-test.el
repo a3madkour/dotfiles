@@ -537,6 +537,60 @@
       (delete-directory asset-root t)
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-b-deletes-old-bundle ()
+  "Step B: slug shift deletes orphan old Hugo content bundle at old slug.
+
+Scenario:
+  - Manifest has note id-shift at /garden/slug-a/.
+  - A stub handler writes a new bundle at content/garden/slug-b/ to simulate
+    the per-section handler having already published at the new slug.
+  - finish-publish Step B detects the slug shift and must delete
+    content/garden/slug-a/ (the orphan old bundle).
+
+Asserts:
+  - content/garden/slug-a/ is removed.
+  - content/garden/slug-b/ still exists."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (asset-root   (make-temp-file "a3-pub-assets-" t))
+         (notes-dir    (make-temp-file "a3-pub-notes-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         ;; Old bundle (slug-a) — simulates what was written in the prior publish.
+         (old-bundle (expand-file-name "garden/slug-a" content-root))
+         ;; New bundle (slug-b) — simulates what the per-section handler wrote
+         ;; earlier this publish run.
+         (new-bundle (expand-file-name "garden/slug-b" content-root)))
+    (unwind-protect
+        (progn
+          (make-directory old-bundle t)
+          (with-temp-file (expand-file-name "index.md" old-bundle) (insert "old"))
+          (make-directory new-bundle t)
+          (with-temp-file (expand-file-name "index.md" new-bundle) (insert "new"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-canonical-asset-root asset-root)
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'vc-backend) (lambda (_) nil)))
+              ;; Seed manifest: note was at /garden/slug-a/.
+              (a3madkour-pub-history/write-manifest
+               '((notes . [((id . "id-shift") (current_url . "/garden/slug-a/")
+                            (history . []) (state . "live"))])))
+              ;; Accumulator: note now at /garden/slug-b/.
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (puthash "id-shift" '("/garden/slug-b/" . live)
+                       a3madkour-pub--publish-run-accumulator)
+              (let ((result (a3madkour-pub/finish-publish)))
+                (should (equal (plist-get result :slug-shifted)
+                               '(("slug-a" . "slug-b"))))
+                ;; Old bundle must be gone.
+                (should-not (file-directory-p old-bundle))
+                ;; New bundle must still exist.
+                (should (file-directory-p new-bundle))))))
+      (delete-directory content-root t)
+      (delete-directory asset-root t)
+      (delete-directory notes-dir t)
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
 ;; -- unpublish--recheck-live-note-links helper --
 
 (defmacro a3-pub-unpublish-test--with-tmp-source (file-var body-content &rest setup-body)

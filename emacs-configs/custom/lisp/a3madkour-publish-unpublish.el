@@ -218,7 +218,14 @@ Returns:
                 (new-slug (cdr new-parts)))
             (unless dry-run
               (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
-              (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug))
+              (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug)
+              ;; Delete the orphan Hugo content bundle at the old slug.
+              ;; The per-section handler already wrote a new bundle at the
+              ;; new slug; without this call the old bundle stays as dead
+              ;; content.  Runs regardless of asset-rename outcome — the
+              ;; bundle and the asset dir are independent artifacts.
+              (a3madkour-pub--unpublish-delete-bundle
+               (car old-parts) (cdr old-parts)))
             (push (cons old-slug new-slug) slug-shifted-result)))))
     ;; Step C: re-link-check (read-only; runs in dry-run too).
     (when (> (hash-table-count removed-set) 0)
