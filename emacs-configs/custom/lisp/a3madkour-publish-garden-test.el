@@ -126,10 +126,11 @@ id-link, which then failed Hugo's REF_NOT_FOUND check against B's
 hyphen-slug bundles."
   (let* ((notes-dir (make-temp-file "a3-pub-notes-b11-" t))
          (site-dir  (make-temp-file "a3-pub-site-b11-" t))
-         ;; Two notes — `b-source.org' links to `a-target.org'.  Alphabetical
-         ;; ordering matters: publish-living processes a/ first, so when
-         ;; b/ is processed the manifest already has a/'s state.  (One-pass
-         ;; cross-link resolution; future two-pass design is out of scope.)
+         ;; Two notes — `source` links to `target`.  Order is enforced by
+         ;; the explicit hardcoded calls below (target first, then source),
+         ;; so the manifest entry exists when the source is processed.
+         ;; (Alphabetical file naming is for the Task 5 integration fixture
+         ;; where walk-section drives ordering — not relevant here.)
          (target-src (expand-file-name "a-target.org" notes-dir))
          (source-src (expand-file-name "b-source.org" notes-dir))
          (target-id  "11111111-2222-3333-4444-555555555555")
@@ -186,7 +187,7 @@ hyphen-slug bundles."
             ;; Unresolved link → inert plain text, no anchor.
             (should (string-match-p "a private one" body))
             (should-not (string-match-p
-                         "href=\"[^\"]*private one[^\"]*\"" body))
+                         "<a [^>]*>a private one</a>" body))
             ;; And critically: no ox-hugo relref shortcodes survived.
             (should-not (string-match-p "{{< *relref" body))
             (should-not (string-match-p "\\[\\[id:" body))))
