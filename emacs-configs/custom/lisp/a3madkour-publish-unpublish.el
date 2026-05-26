@@ -26,18 +26,37 @@
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-history)
 
-(defcustom a3madkour-pub-site-content-dir
-  (expand-file-name "Stuff/a3madkour/Sync/Workspace/a3madkour.github.io/content/"
-                    "~/")
-  "Root of the Hugo `content/' tree for the site repo.
-`a3madkour-pub--unpublish-delete-bundle' resolves
-`<content-root>/<section>/<slug>/' against this when an orchestrator
-step needs to remove a bundle.
+(defcustom a3madkour-pub-site-content-dir nil
+  "Root of the Hugo `content/' tree for the site repo, or nil to derive.
 
-Override per-call by passing a third arg to the helper, or `let'-bind
-this defcustom inside a fixture."
-  :type 'directory
+When nil (the default), `a3madkour-pub--site-content-dir-effective' derives
+the path from `a3madkour-pub/site-data-dir' (which is set at publish-start
+via the a3-pub.sh wrapper or interactive config) by replacing `data/' with
+`content/'. This is the right value 99% of the time and avoids hardcoding a
+machine-specific path here.
+
+Set explicitly only when the content tree lives somewhere other than the
+sibling of the data dir. `a3madkour-pub--unpublish-delete-bundle' resolves
+`<content-root>/<section>/<slug>/' against the effective value when an
+orchestrator step needs to remove a bundle.
+
+Override per-call by passing a third arg to the helper, or `let'-bind this
+defcustom inside a fixture."
+  :type '(choice (const :tag "Derive from site-data-dir" nil) directory)
   :group 'a3madkour-publish)
+
+(defun a3madkour-pub--site-content-dir-effective ()
+  "Return the effective Hugo `content/' root.
+Honors `a3madkour-pub-site-content-dir' when set; otherwise derives from
+`a3madkour-pub/site-data-dir' (sibling-of-data convention). Returns nil if
+neither is set (caller's burden to error)."
+  (or a3madkour-pub-site-content-dir
+      (and a3madkour-pub/site-data-dir
+           (file-name-as-directory
+            (expand-file-name "content"
+                              (file-name-directory
+                               (directory-file-name
+                                a3madkour-pub/site-data-dir)))))))
 
 (defun a3madkour-pub/diff-published-set (new-set)
   "Diff NEW-SET against the manifest's currently-live+draft entries.
@@ -137,7 +156,7 @@ stale-manifest case is benign).  Other delete errors (permissions, file
 lock) propagate to the caller.
 
 Returns t on successful delete, nil if dir was absent."
-  (let* ((root (or content-root a3madkour-pub-site-content-dir))
+  (let* ((root (or content-root (a3madkour-pub--site-content-dir-effective)))
          (bundle (file-name-as-directory
                   (expand-file-name (format "%s/%s" section slug) root))))
     (cond

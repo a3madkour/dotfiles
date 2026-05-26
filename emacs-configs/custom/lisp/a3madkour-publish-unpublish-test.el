@@ -815,5 +815,31 @@ diff-published-set re-read disk and saw the new URL already there."
           (a3madkour-pub/finish-publish))
       (delete-directory tmp-data t))))
 
+(ert-deftest a3madkour-pub-unpub-test/site-content-dir-derives-from-site-data-dir ()
+  "B.1 regression — when `a3madkour-pub-site-content-dir' is nil (the new
+default), `--site-content-dir-effective' derives the path from
+`a3madkour-pub/site-data-dir' by replacing `data/' with `content/'.
+
+This avoids hardcoding a machine-specific path in the defcustom default,
+which previously leaked the other machine's `/Stuff/...' path into the
+delete-bundle code path on this machine."
+  (let ((a3madkour-pub-site-content-dir nil))
+    ;; Derive: site-data-dir is `<root>/data/' → content is `<root>/content/'.
+    (let ((a3madkour-pub/site-data-dir "/tmp/site-A/data/"))
+      (should (equal (a3madkour-pub--site-content-dir-effective)
+                     "/tmp/site-A/content/")))
+    ;; Trailing-slash variations: with or without should both work.
+    (let ((a3madkour-pub/site-data-dir "/tmp/site-B/data"))
+      (should (equal (a3madkour-pub--site-content-dir-effective)
+                     "/tmp/site-B/content/")))
+    ;; Both nil → nil (caller's burden to error if they need a value).
+    (let ((a3madkour-pub/site-data-dir nil))
+      (should (null (a3madkour-pub--site-content-dir-effective)))))
+  ;; Explicit override wins over derivation.
+  (let ((a3madkour-pub-site-content-dir "/explicit/override/content/")
+        (a3madkour-pub/site-data-dir "/tmp/different/data/"))
+    (should (equal (a3madkour-pub--site-content-dir-effective)
+                   "/explicit/override/content/"))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here
