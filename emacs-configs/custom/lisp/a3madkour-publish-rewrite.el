@@ -310,6 +310,64 @@ See parent spec §6 for the per-link-type rules."
       (error "rewrite-link: scheme %S not yet handled (this branch lands in a later task)"
              scheme)))))
 
+(defconst a3madkour-pub-rewrite--bracket-link-re
+  "\\[\\[\\([^][]+\\)\\(?:\\]\\[\\([^][]+\\)\\)?\\]\\]"
+  "Regex matching an org bracket-link form `[[path]]' or `[[path][text]]'.
+Group 1 = path, group 2 = optional display text.  Rejects nested
+brackets (`[^][]+') — org's bracket-link syntax does not permit them in
+either path or text, so this is sufficient for our scan.")
+
+(defun a3madkour-pub-rewrite/rewrite-buffer-links (source-note-id)
+  "Scan the current buffer for org bracket-link forms; rewrite each in place.
+
+For every `[[...]]` form whose path uses a scheme A.1 knows how to resolve
+(`id:', `file:', or any member of `a3madkour-pub-typed-link-types'), calls
+`a3madkour-pub/rewrite-link' and substitutes the match with the returned
+`:html' (resolved → inline HTML anchor) or `:inert' (unresolved → plain
+text).  External URLs and asset-shaped links pass through unchanged —
+ox-hugo handles those correctly on its own.
+
+SOURCE-NOTE-ID is the org-roam :ID: of the file whose contents fill the
+buffer; threaded through to `rewrite-link' for source-state checks.
+
+Returns the accumulated list of warning strings (empty list when none).
+
+Intended for use as the pre-export step in B's per-section handlers: the
+caller copies the source `.org' to a temp buffer/file, applies this helper,
+then hands the rewritten text to `a3madkour-pub-export/export-file'.  This
+keeps the `[[...]]` form out of ox-hugo's input → prevents ox-hugo from
+emitting `{{< relref \"<underscore_filename>.md\" >}}' shortcodes that
+would never resolve against B's hyphen-slug bundle paths."
+  (let ((warnings nil))
+    (save-excursion
+      (goto-char (point-min))
+      (while (re-search-forward a3madkour-pub-rewrite--bracket-link-re nil t)
+        ;; Capture bounds and text NOW, before any string-match call clobbers
+        ;; the global match data.
+        (let* ((match-beg (match-beginning 0))
+               (match-end (match-end 0))
+               (org-link  (match-string 0))
+               (parsed    (a3madkour-pub--parse-org-link org-link))
+               (path      (plist-get parsed :path))
+               (scheme    (a3madkour-pub--link-scheme path)))
+          (when (or (equal scheme "id")
+                    (equal scheme "file")
+                    (member scheme a3madkour-pub-typed-link-types))
+            (let* ((result      (a3madkour-pub/rewrite-link
+                                 org-link source-note-id))
+                   (replacement (or (plist-get result :html)
+                                    (plist-get result :inert)
+                                    ""))
+                   (warns       (plist-get result :warnings)))
+              (when warns
+                (setq warnings (nconc warnings warns)))
+              ;; Use explicit region replacement so we don't depend on match
+              ;; data still being valid after the rewrite-link call chain.
+              (delete-region match-beg match-end)
+              (goto-char match-beg)
+              (insert replacement))))))
+    warnings))
+
 (provide 'a3madkour-publish-rewrite)
 
 ;;; a3madkour-publish-rewrite.el ends here
