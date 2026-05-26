@@ -150,19 +150,31 @@ keyed, not per-walk).  Repeated calls are independent."
 (defun a3madkour-pub--unpublish-delete-bundle (section slug &optional content-root)
   "Recursively delete `<CONTENT-ROOT>/<SECTION>/<SLUG>/'.
 
-CONTENT-ROOT defaults to `a3madkour-pub-site-content-dir'.  If the bundle
-dir doesn't exist, logs via `message' and returns nil (not an error —
-stale-manifest case is benign).  Other delete errors (permissions, file
-lock) propagate to the caller.
+CONTENT-ROOT defaults to `a3madkour-pub-site-content-dir'.
 
-Returns t on successful delete, nil if dir was absent."
+Return values:
+  t        — bundle existed and was deleted.
+  nil      — bundle was already absent (benign; logged via `message').
+  'failed  — bundle existed but `delete-directory' signalled an error.
+             The error is caught and reported via `message' with a `[a3-pub]
+             delete-bundle FAILED' prefix so the publish log surfaces it.
+             The manifest is NOT reset; callers may treat this as transient.
+
+B.1.1 follow-up: prior to this slice, a thrown error from `delete-directory'
+propagated into `finish-publish' and aborted the publish run with no clear
+attribution.  Visibility-only fix — retry / manifest-state reset for
+self-healing on a subsequent run is left as a future task."
   (let* ((root (or content-root (a3madkour-pub--site-content-dir-effective)))
          (bundle (file-name-as-directory
                   (expand-file-name (format "%s/%s" section slug) root))))
     (cond
      ((file-directory-p bundle)
-      (delete-directory bundle t)
-      t)
+      (condition-case err
+          (progn (delete-directory bundle t) t)
+        (error
+         (message "[a3-pub] delete-bundle FAILED: %s (%s)"
+                  bundle (error-message-string err))
+         'failed)))
      (t
       (message "[a3-pub] delete-bundle: %s already absent (stale manifest?)" bundle)
       nil))))

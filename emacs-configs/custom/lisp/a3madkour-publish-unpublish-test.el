@@ -180,8 +180,10 @@
         (a3madkour-pub--unpublish-delete-bundle "garden" "never-existed" root)
       (delete-directory root t))))
 
-(ert-deftest a3madkour-pub-unpublish-test/delete-bundle-permission-error-propagates ()
-  "Errors raised by delete-directory propagate up."
+(ert-deftest a3madkour-pub-unpublish-test/delete-bundle-permission-error-returns-failed ()
+  "Errors raised by delete-directory are caught; returns 'failed (not propagated).
+
+B.1.1: prior contract was to propagate; updated to catch + WARN."
   (let* ((root (make-temp-file "a3-pub-content-" t))
          (bundle (expand-file-name "garden/foo" root)))
     (unwind-protect
@@ -189,9 +191,8 @@
           (make-directory bundle t)
           (cl-letf (((symbol-function 'delete-directory)
                      (lambda (&rest _) (error "permission denied"))))
-            (should-error
-             (a3madkour-pub--unpublish-delete-bundle "garden" "foo" root)
-             :type 'error)))
+            (should (eq 'failed
+                        (a3madkour-pub--unpublish-delete-bundle "garden" "foo" root)))))
       (delete-directory root t))))
 
 ;; -- url-to-section-slug: URL parser edge cases --
@@ -840,6 +841,31 @@ delete-bundle code path on this machine."
         (a3madkour-pub/site-data-dir "/tmp/different/data/"))
     (should (equal (a3madkour-pub--site-content-dir-effective)
                    "/explicit/override/content/"))))
+
+(ert-deftest a3madkour-pub-unpublish-test/delete-bundle-warns-on-failure ()
+  "When `delete-directory' errors, --unpublish-delete-bundle returns 'failed
+and emits a [a3-pub] WARN message including the bundle path."
+  (let* ((root (make-temp-file "a3-pub-content-" t))
+         (bundle (expand-file-name "garden/locked-bundle" root))
+         captured-messages)
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (cl-letf (((symbol-function 'delete-directory)
+                     (lambda (&rest _) (error "permission denied (test stub)")))
+                    ((symbol-function 'message)
+                     (lambda (fmt &rest args)
+                       (push (apply #'format fmt args) captured-messages))))
+            (let ((result (a3madkour-pub--unpublish-delete-bundle
+                           "garden" "locked-bundle" root)))
+              (should (eq result 'failed))
+              (should (cl-some (lambda (m)
+                                 (string-match-p "\\[a3-pub\\] delete-bundle FAILED" m))
+                               captured-messages))
+              (should (cl-some (lambda (m)
+                                 (string-match-p "locked-bundle" m))
+                               captured-messages)))))
+      (delete-directory root t))))
 
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here
