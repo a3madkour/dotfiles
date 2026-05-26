@@ -7,20 +7,64 @@
 (require 'a3madkour-publish-export)
 
 (ert-deftest a3madkour-pub-export-test/export-file-returns-plist-shape ()
-  "B.0 — `export-file' returns a plist with :body, :frontmatter, :warnings keys.
-B.0 ships a skeleton that returns empty values; B.1 wires real ox-hugo."
-  (let ((tmp (make-temp-file "b0-export-" nil ".org")))
+  "B.1 — `export-file' returns a plist with :body, :frontmatter, :warnings keys.
+Verifies the spec-shaped return value contract only (not content correctness —
+see `a3madkour-pub-export--real-export-roundtrip' for that)."
+  (let* ((tmpdir (make-temp-file "b0-export-" t))
+         (tmp (expand-file-name "shape-test.org" tmpdir)))
     (unwind-protect
-        (let ((result (a3madkour-pub-export/export-file tmp)))
-          (should (plistp result))
-          (should (memq :body result))
-          (should (memq :frontmatter result))
-          (should (memq :warnings result))
-          ;; B.0 skeleton: body is empty string, frontmatter is nil, warnings is nil.
-          (should (stringp (plist-get result :body)))
-          (should (null (plist-get result :frontmatter)))
-          (should (null (plist-get result :warnings))))
-      (delete-file tmp))))
+        (progn
+          ;; Minimal valid org file so ox-hugo doesn't error.
+          (with-temp-file tmp
+            (insert "#+title: Shape Test\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " tmpdir "/site/\n"
+                    "\nBody.\n"))
+          (let ((result (a3madkour-pub-export/export-file tmp)))
+            (should (plistp result))
+            (should (memq :body result))
+            (should (memq :frontmatter result))
+            (should (memq :warnings result))
+            ;; :body is always a string.
+            (should (stringp (plist-get result :body)))
+            ;; :frontmatter is nil or a proper alist (list of conses).
+            (let ((fm (plist-get result :frontmatter)))
+              (should (or (null fm) (and (listp fm) (consp (car fm))))))
+            ;; :warnings is nil or a list of strings.
+            (let ((warns (plist-get result :warnings)))
+              (should (listp warns)))))
+      (delete-directory tmpdir t))))
+
+(ert-deftest a3madkour-pub-export--real-export-roundtrip ()
+  "export-file invokes ox-hugo and returns non-empty :body + parsed :frontmatter."
+  (let* ((tmpdir (make-temp-file "a3-pub-export-" t))
+         (src (expand-file-name "example.org" tmpdir)))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n"
+                    ":END:\n"
+                    "#+title: Example Note\n"
+                    "#+filetags: :alpha:beta:\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " tmpdir "/site/\n"
+                    "\n"
+                    "* The Heading\n"
+                    "Body text with a [[https://example.com][link]].\n"))
+          (let* ((result (a3madkour-pub-export/export-file src))
+                 (body (plist-get result :body))
+                 (fm (plist-get result :frontmatter)))
+            (should (stringp body))
+            (should (string-match-p "Body text with" body))
+            ;; Frontmatter must NOT appear in body — :body is body only.
+            (should-not (string-match-p "^---" body))
+            (should-not (string-match-p "^\\+\\+\\+" body))
+            (should (equal (alist-get 'title fm) "Example Note"))
+            ;; tags may come through as a list of strings.
+            (should (member "alpha" (alist-get 'tags fm)))
+            (should (member "beta" (alist-get 'tags fm)))))
+      (delete-directory tmpdir t))))
 
 (provide 'a3madkour-publish-export-test)
 ;;; a3madkour-publish-export-test.el ends here

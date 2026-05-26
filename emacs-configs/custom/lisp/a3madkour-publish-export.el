@@ -8,15 +8,57 @@
 ;;
 ;;   (:body MARKDOWN-STRING :frontmatter ALIST :warnings (STRING ...))
 ;;
-;; B.0 ships the API surface only — the body is empty, frontmatter and
-;; warnings are nil.  B.1 (garden handler) is the first slice that wires
-;; the real ox-hugo invocation.
+;; :body        — markdown body with NO frontmatter delimiters or contents.
+;; :frontmatter — alist with SYMBOL keys (e.g. `(title . "X")
+;;                `(tags . ("a" "b"))') as ox-hugo emits them, parsed from
+;;                the YAML ox-hugo produces.
+;; :warnings    — list of strings (empty for now; ox-hugo will surface
+;;                warnings in later slices).
 ;;
-;; ox-hugo loading: ox-hugo is loaded lazily.  When B.0 is in effect
-;; (skeleton stub), ox-hugo is not required.  B.1+ will add `(require
-;; 'ox-hugo)' here once the real export plumbing lands.
+;; Implementation forces YAML frontmatter by let-binding
+;; `org-hugo-front-matter-format' to "yaml" around the export call, so
+;; this never perturbs the user's interactive ox-hugo configuration.
+;; Export is buffer-only (org-hugo-export-as-md); this function does NOT
+;; write to disk — that is the caller's responsibility per spec §10.
 
 ;;; Code:
+
+(require 'ox-hugo)
+(require 'yaml)
+
+(defun a3madkour-pub-export--frontmatter-string-to-alist (yaml-str)
+  "Parse YAML-STR (the YAML frontmatter ox-hugo emitted) into a symbol-keyed alist.
+yaml.el with `:object-type \\='alist' already returns symbol-keyed alists.
+YAML sequences (arrays) are returned as vectors; we convert them to lists so
+callers see uniform list values for multi-valued fields like `tags'."
+  (let ((raw (yaml-parse-string yaml-str
+                                :object-type 'alist
+                                :sequence-type 'list
+                                :null-object nil
+                                :false-object nil)))
+    raw))
+
+(defun a3madkour-pub-export--split-frontmatter (text)
+  "Split TEXT (raw ox-hugo output) into (FM-STRING . BODY-STRING).
+FM-STRING is the YAML between the two `---' delimiters (without the delimiter
+lines). BODY-STRING is everything after the closing delimiter, with leading
+newlines trimmed.  Returns (\"\" . TEXT) when no frontmatter delimiters are
+found."
+  (with-temp-buffer
+    (insert text)
+    (goto-char (point-min))
+    (if (looking-at "^---\n")
+        (let ((fm-start (match-end 0)))
+          ;; Advance past the opening delimiter before searching for the closing one.
+          (goto-char fm-start)
+          (if (re-search-forward "^---\n" nil t)
+              (cons (buffer-substring-no-properties fm-start (match-beginning 0))
+                    (string-trim-left
+                     (buffer-substring-no-properties (point) (point-max))))
+            ;; Opening delimiter found but no closing delimiter — treat whole thing as body.
+            (cons "" text)))
+      ;; No frontmatter delimiters found.
+      (cons "" text))))
 
 (defun a3madkour-pub-export/export-file (file)
   "Export FILE (an absolute `.org' path) via ox-hugo.
@@ -27,16 +69,30 @@ Returns a plist:
                 strings/lists/booleans as ox-hugo emits them
   :warnings     LIST OF STRINGS — non-fatal issues raised during export
 
-B.0 skeleton: returns (:body \"\" :frontmatter nil :warnings nil) regardless
-of input.  B.1 (this slice) wires the real ox-hugo invocation in a follow-up
-task; this docstring's contract holds across both phases.
-
-The bundle destination dir is the caller's responsibility (see spec §10);
-this function does not write to disk."
-  ;; B.0 skeleton: no-op stub.  B.1 replaces the body with real ox-hugo
-  ;; invocation that captures the export buffer + extracts frontmatter.
-  (ignore file)
-  (list :body "" :frontmatter nil :warnings nil))
+Forces YAML frontmatter format via let-bound `org-hugo-front-matter-format'.
+Uses `org-hugo-export-as-md' (buffer-emit variant) so no files are written to
+disk — writing is the caller's responsibility per spec §10."
+  (let* ((org-hugo-front-matter-format "yaml")
+         (warnings nil)
+         raw-output)
+    (with-current-buffer (find-file-noselect file)
+      (let ((inhibit-message t))
+        (org-hugo-export-as-md nil nil nil)))
+    ;; ox-hugo writes to "*Org Hugo Export*".
+    (let ((buf (get-buffer "*Org Hugo Export*")))
+      (unless buf
+        (error "a3madkour-pub-export: ox-hugo did not produce *Org Hugo Export* buffer"))
+      (setq raw-output (with-current-buffer buf (buffer-string)))
+      (kill-buffer buf))
+    (let* ((parts (a3madkour-pub-export--split-frontmatter raw-output))
+           (fm-string (car parts))
+           (body (cdr parts))
+           (frontmatter (if (string-empty-p fm-string)
+                            nil
+                          (a3madkour-pub-export--frontmatter-string-to-alist fm-string))))
+      (list :body body
+            :frontmatter frontmatter
+            :warnings warnings))))
 
 (provide 'a3madkour-publish-export)
 
