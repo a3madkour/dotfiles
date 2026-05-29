@@ -27,6 +27,23 @@
 
 ;;; Code:
 
+(defcustom a3madkour-pub-editorial-tags
+  '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH")
+  "Org tags treated as editorial (org-mode workflow keywords) and
+stripped from round-tripped tag lists by `filter-editorial-tags'.
+Used by both garden (file-level tags) and library (per-heading tags)
+normalizers."
+  :type '(repeat string) :group 'a3madkour-publish)
+
+(defun a3madkour-pub-frontmatter/filter-editorial-tags (tags &optional extra-exclusions)
+  "Strip editorial tags from TAGS (a list of strings).
+
+EXTRA-EXCLUSIONS is an optional list of additional tag names to strip,
+merged with the defcustom default `a3madkour-pub-editorial-tags'.
+Preserves order of remaining tags."
+  (let ((excl (append a3madkour-pub-editorial-tags extra-exclusions)))
+    (seq-filter (lambda (tag) (not (member tag excl))) tags)))
+
 (defconst a3madkour-pub-frontmatter--known-sections
   '(garden essays
     research-theme research-question
@@ -173,6 +190,11 @@ Hygiene rules (check_garden_fixtures.py compliance):
       (let ((v (alist-get k out)))
         (when (stringp v)
           (setf (alist-get k out) (string-to-number v)))))
+    ;; B.2: retroactively close B.1.1 follow-up #6 — strip editorial tags
+    ;; (TODO, NOEXPORT, etc.) from the round-tripped tag list.
+    (when-let ((tags (alist-get 'tags out)))
+      (setf (alist-get 'tags out)
+            (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
     out))
 
 (provide 'a3madkour-publish-frontmatter)

@@ -237,5 +237,31 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
             (should (eq (alist-get 'weight out) 5))))
       (delete-file src))))
 
+(ert-deftest a3madkour-pub-frontmatter--filter-editorial-tags-defaults ()
+  "Editorial tags TODO/DONE/WAIT/CANCELED/HOLD/NOEXPORT/ATTACH stripped by default."
+  (should (equal (a3madkour-pub-frontmatter/filter-editorial-tags
+                  '("alpha" "TODO" "beta" "NOEXPORT" "gamma"))
+                 '("alpha" "beta" "gamma")))
+  (should (equal (a3madkour-pub-frontmatter/filter-editorial-tags
+                  '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH"))
+                 nil))
+  (should (equal (a3madkour-pub-frontmatter/filter-editorial-tags '()) nil))
+  (should (equal (a3madkour-pub-frontmatter/filter-editorial-tags '("clean"))
+                 '("clean"))))
+
+(ert-deftest a3madkour-pub-frontmatter--filter-editorial-tags-extra-exclusions ()
+  "Per-call extra-exclusions list merges with the defcustom defaults."
+  (should (equal (a3madkour-pub-frontmatter/filter-editorial-tags
+                  '("alpha" "DRAFT" "beta" "TODO")
+                  '("DRAFT"))
+                 '("alpha" "beta"))))
+
+(ert-deftest a3madkour-pub-frontmatter--garden-tags-strip-editorial ()
+  "Garden normalizer applies the editorial-tag filter (closes B.1.1 #6)."
+  (let* ((raw '((title . "Note")
+                (tags  . ("Bayesian" "TODO" "stats"))))
+         (out (a3madkour-pub-frontmatter/normalize 'garden raw "/tmp/x.org")))
+    (should (equal (alist-get 'tags out) '("Bayesian" "stats")))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
