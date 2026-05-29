@@ -19,6 +19,29 @@
       (should (member (nth 1 cfg) (nth 2 cfg))))) ; default ∈ allowed
   (should-error (a3madkour-pub-library--config-for 'bogus)))
 
+(ert-deftest a3madkour-pub-library--title-to-slug ()
+  "Title-to-slug derivation covers spec §5 edge cases."
+  (should (equal (a3madkour-pub-library--title-to-slug "Pride and Prejudice")
+                 "pride-and-prejudice"))
+  (should (equal (a3madkour-pub-library--title-to-slug "L'Étranger")
+                 "l-etranger"))
+  (should (equal (a3madkour-pub-library--title-to-slug "Köyaanisqatsi")
+                 "koyaanisqatsi"))
+  (should (equal (a3madkour-pub-library--title-to-slug "Crime & Punishment")
+                 "crime-punishment"))
+  (should (equal (a3madkour-pub-library--title-to-slug "Dune: Part One")
+                 "dune-part-one"))
+  (should (equal (a3madkour-pub-library--title-to-slug "Maximum a Posteriori (MAP)")
+                 "maximum-a-posteriori-map"))
+  (should (equal (a3madkour-pub-library--title-to-slug "1984")
+                 "1984"))
+  (should (equal (a3madkour-pub-library--title-to-slug "  Leading-Trailing  ")
+                 "leading-trailing"))
+  (should (equal (a3madkour-pub-library--title-to-slug "!?!")
+                 ""))
+  (should (equal (a3madkour-pub-library--title-to-slug "Severance S2")
+                 "severance-s2")))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here

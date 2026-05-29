@@ -14,6 +14,7 @@
 ;;; Code:
 
 (require 'org-element)
+(require 'ucs-normalize)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-history)
@@ -42,6 +43,29 @@ Errors when SECTION is not a known library section."
     (unless entry
       (error "a3madkour-pub-library: unknown library section %S" section))
     (cdr entry)))
+
+(defun a3madkour-pub-library--title-to-slug (title)
+  "Derive a kebab-case slug from TITLE per spec §5.
+
+Pipeline: NFD-decompose → drop combining marks → lowercase →
+collapse non-alphanumeric runs to single `-' → trim leading/trailing
+`-'. Returns empty string when no alphanumeric content survives —
+callers WARN and skip the item in that case.
+
+Combining marks are matched via the U+0300–U+036F Combining
+Diacritical Marks block — same precedent as
+`a3madkour-pub-slug--ascii-fold' in `a3madkour-publish-slug.el'.
+Emacs's `\\cM' category does NOT correspond to Unicode general
+category Mn, so a literal char-range is the portable choice."
+  (let* ((decomposed (ucs-normalize-NFD-string title))
+         ;; Drop combining marks (Unicode block U+0300–U+036F).
+         (stripped (replace-regexp-in-string "[̀-ͯ]" "" decomposed))
+         (lower (downcase stripped))
+         ;; Collapse runs of non-alphanumeric to a single `-'.
+         (dashed (replace-regexp-in-string "[^a-z0-9]+" "-" lower))
+         ;; Trim leading/trailing `-'.
+         (trimmed (replace-regexp-in-string "\\`-+\\|-+\\'" "" dashed)))
+    trimmed))
 
 (defun a3madkour-pub-library/publish-library-file (file)
   "Publish a single library FILE to data/<medium>.yaml.
