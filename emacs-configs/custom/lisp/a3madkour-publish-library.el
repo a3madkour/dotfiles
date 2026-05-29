@@ -135,6 +135,11 @@ Returns nil when the item should be skipped (e.g. empty slug)."
         (let ((val (a3madkour-pub-library--headline-property headline (car prop))))
           (when val
             (setq row-plist (plist-put row-plist (cdr prop) val)))))
+      ;; Tags: per-heading org tags through editorial filter.
+      (let* ((raw-tags (org-element-property :tags headline))
+             (filtered (a3madkour-pub-frontmatter/filter-editorial-tags raw-tags)))
+        ;; Always emit :tags (linter requires the field even when empty).
+        (setq row-plist (plist-put row-plist :tags filtered)))
       ;; last_modified: :LAST_MODIFIED: drawer → git-mtime fallback.
       (let* ((drawer-lm (a3madkour-pub-library--headline-property headline "LAST_MODIFIED"))
              (lm (or drawer-lm

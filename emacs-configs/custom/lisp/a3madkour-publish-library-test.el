@@ -175,6 +175,48 @@
     (should-not (plist-member row :finished))
     (should-not (plist-member row :preview))))
 
+(ert-deftest a3madkour-pub-library--normalize-tags-roundtrip ()
+  "Per-heading org tags round-trip via filter-editorial-tags."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Pride and Prejudice :classics:romance:
+:PROPERTIES:
+:CREATOR: Austen
+:YEAR: 1813
+:STATUS: finished
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :tags) '("classics" "romance")))))
+
+(ert-deftest a3madkour-pub-library--normalize-tags-strips-editorial ()
+  "TODO/NOEXPORT/etc. on per-heading tags are stripped."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item :classics:TODO:fiction:NOEXPORT:
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :tags) '("classics" "fiction")))))
+
+(ert-deftest a3madkour-pub-library--normalize-tags-empty-after-filter ()
+  "All-editorial tag list → :tags key still present with empty list (linter needs the key)."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item :TODO:NOEXPORT:
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :tags) '()))))
+
 (ert-deftest a3madkour-pub-library--normalize-last-modified-drawer ()
   "Per-heading :LAST_MODIFIED: drawer beats git-mtime fallback."
   (let* ((src (a3madkour-pub-library-test--parse-headline
