@@ -228,8 +228,9 @@ Single-quoted YAML: the only escape is `'' → `'''."
   "Render a scalar VAL for inclusion in YAML.
 
 Strings that contain YAML-sensitive characters (`:' `#'), look like URLs,
-or begin with a YAML indicator character (`\"' or `'') are emitted in
-YAML single-quoted style (`'...''), with embedded `'' doubled. Dates
+or begin with any YAML indicator character (`[' `]' `{' `}' `>' `|' `*'
+`&' `!' `%' `@' `` ` `` `\"' `'' `?' `,' `-') are emitted in YAML
+single-quoted style (`'...''), with embedded `'' doubled. Dates
 (YYYY-MM-DD) and plain strings emit unquoted; nil/t/numbers handle their
 natural types."
   (cond
@@ -246,9 +247,11 @@ natural types."
      ;; YAML-sensitive chars: single-quote (escape embedded `'').
      ((string-match-p "[:#]" val)
       (a3madkour-pub-library--yaml-single-quote val))
-     ;; Leading YAML indicator (`\"' or `'') would confuse the parser
-     ;; into reading a quoted scalar; force single-quoted output.
-     ((string-match-p "^[\"']" val)
+     ;; Leading YAML indicator would confuse the parser into reading a
+     ;; flow collection, anchor/alias, block scalar, tag, directive, or
+     ;; quoted scalar; force single-quoted output. `]' is placed first
+     ;; inside the class so it is taken as a literal.
+     ((string-match-p "\\`[][{}>|*&!%@`\"'?,-]" val)
       (a3madkour-pub-library--yaml-single-quote val))
      (t val)))
    (t (format "%S" val))))

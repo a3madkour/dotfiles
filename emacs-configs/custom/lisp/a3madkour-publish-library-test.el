@@ -446,6 +446,23 @@
   (should (equal (a3madkour-pub-library--render-scalar "'tis a title")
                  "'''tis a title'")))
 
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-leading-bracket ()
+  "Leading `[' triggers single-quoted yaml output (would corrupt as flow-seq otherwise)."
+  (should (equal (a3madkour-pub-library--render-scalar "[Insert Title Here]")
+                 "'[Insert Title Here]'")))
+
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-leading-asterisk ()
+  "Leading `*' triggers single-quoted yaml output (would break as alias otherwise)."
+  (should (equal (a3madkour-pub-library--render-scalar "*Asterisk Author*")
+                 "'*Asterisk Author*'")))
+
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-leading-blockscalar ()
+  "Leading `>' / `|' (block scalar indicators) trigger single-quoted output."
+  (should (equal (a3madkour-pub-library--render-scalar "> Quoted Opening")
+                 "'> Quoted Opening'"))
+  (should (equal (a3madkour-pub-library--render-scalar "| Pipe Title")
+                 "'| Pipe Title'")))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here
