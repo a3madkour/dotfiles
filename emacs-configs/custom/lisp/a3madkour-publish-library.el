@@ -13,6 +13,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'org-element)
 (require 'ucs-normalize)
 (require 'a3madkour-publish)
@@ -66,6 +67,62 @@ category Mn, so a literal char-range is the portable choice."
          ;; Trim leading/trailing `-'.
          (trimmed (replace-regexp-in-string "\\`-+\\|-+\\'" "" dashed)))
     trimmed))
+
+(defun a3madkour-pub-library--headline-property (headline prop)
+  "Read a single drawer property PROP (a string like \"CREATOR\") off HEADLINE.
+Returns nil if not set or empty."
+  (let ((val (org-element-property
+              (intern (concat ":" prop)) headline)))
+    (and (stringp val) (not (string-empty-p val)) (string-trim val))))
+
+(defun a3madkour-pub-library--warn (file slug fmt &rest args)
+  "Emit a WARN message with FILE + SLUG context."
+  (apply #'message (concat "a3madkour-pub-library WARN [%s slug=%s]: " fmt)
+         (file-name-nondirectory file) (or slug "?") args))
+
+(defun a3madkour-pub-library--resolve-slug (headline title file)
+  "Resolve slug: :SLUG: drawer → fallback `--title-to-slug'.
+Empty result → WARN + return nil (caller skips the item)."
+  (let* ((drawer-slug (a3madkour-pub-library--headline-property headline "SLUG"))
+         (derived (and (not drawer-slug) (a3madkour-pub-library--title-to-slug title)))
+         (slug (or drawer-slug derived)))
+    (cond
+     ((and slug (not (string-empty-p slug))) slug)
+     (t (a3madkour-pub-library--warn file nil
+                                     "empty slug for title %S; skipping" title)
+        nil))))
+
+(cl-defun a3madkour-pub-library--normalize-item (headline section cfg file)
+  "Build a YAML-row plist from HEADLINE for SECTION using CFG.
+FILE is the source path (used for WARN context + git-mtime fallback in later tasks).
+
+Returns nil when the item should be skipped (e.g. empty slug)."
+  (ignore section)
+  (let* ((title (org-element-property :raw-value headline))
+         (slug (a3madkour-pub-library--resolve-slug headline title file)))
+    (unless slug
+      (cl-return-from a3madkour-pub-library--normalize-item nil))
+    (let* ((default-mt    (nth 1 cfg))
+           (allowed-mt    (nth 2 cfg))
+           (allowed-stat  (nth 3 cfg))
+           (drawer-mt     (a3madkour-pub-library--headline-property headline "MEDIA_TYPE"))
+           (media-type    (or drawer-mt default-mt))
+           (status        (a3madkour-pub-library--headline-property headline "STATUS"))
+           (creator       (a3madkour-pub-library--headline-property headline "CREATOR"))
+           (year-raw      (a3madkour-pub-library--headline-property headline "YEAR"))
+           (year          (and year-raw (string-to-number year-raw))))
+      (unless (member media-type allowed-mt)
+        (a3madkour-pub-library--warn file slug
+                                     "media_type=%s not in %S" media-type allowed-mt))
+      (unless (and status (member status allowed-stat))
+        (a3madkour-pub-library--warn file slug
+                                     "status=%s not in %S" status allowed-stat))
+      (list :slug slug
+            :title title
+            :creator creator
+            :year year
+            :media_type media-type
+            :status status))))
 
 (defun a3madkour-pub-library/publish-library-file (file)
   "Publish a single library FILE to data/<medium>.yaml.

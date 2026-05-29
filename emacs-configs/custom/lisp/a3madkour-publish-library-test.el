@@ -1,7 +1,15 @@
 ;;; a3madkour-publish-library-test.el --- tests for library handler  -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 (require 'a3madkour-publish-library)
+
+(defun a3madkour-pub-library-test--parse-headline (org-text)
+  "Helper: parse ORG-TEXT and return the first top-level headline element."
+  (with-temp-buffer
+    (insert org-text)
+    (org-mode)
+    (car (org-element-map (org-element-parse-buffer) 'headline #'identity nil nil nil))))
 
 (ert-deftest a3madkour-pub-library--module-loads ()
   "Smoke: module loadable and exposes publish-library-file."
@@ -41,6 +49,88 @@
                  ""))
   (should (equal (a3madkour-pub-library--title-to-slug "Severance S2")
                  "severance-s2")))
+
+(ert-deftest a3madkour-pub-library--normalize-required-fields ()
+  "Required-field happy path covers title, slug, creator, year, media_type, status."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Pride and Prejudice
+:PROPERTIES:
+:CREATOR: Jane Austen
+:YEAR: 1813
+:STATUS: finished
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :slug) "pride-and-prejudice"))
+    (should (equal (plist-get row :title) "Pride and Prejudice"))
+    (should (equal (plist-get row :creator) "Jane Austen"))
+    (should (equal (plist-get row :year) 1813))
+    (should (equal (plist-get row :media_type) "book"))
+    (should (equal (plist-get row :status) "finished"))))
+
+(ert-deftest a3madkour-pub-library--normalize-slug-override ()
+  "Explicit :SLUG: drawer overrides title-derived fallback."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* L'Étranger
+:PROPERTIES:
+:SLUG: the-stranger
+:CREATOR: Camus
+:YEAR: 1942
+:STATUS: finished
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :slug) "the-stranger"))))
+
+(ert-deftest a3madkour-pub-library--normalize-media-type-default ()
+  "Missing :MEDIA_TYPE: defaults to the section default (book/album/game/film)."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Untitled
+:PROPERTIES:
+:CREATOR: Someone
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-watching))
+         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org")))
+    (should (equal (plist-get row :media_type) "film"))))
+
+(ert-deftest a3madkour-pub-library--normalize-media-type-override ()
+  "Explicit :MEDIA_TYPE: overrides the section default."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Severance S2
+:PROPERTIES:
+:MEDIA_TYPE: series
+:CREATOR: Apple TV+
+:YEAR: 2025
+:STATUS: finished
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-watching))
+         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org")))
+    (should (equal (plist-get row :media_type) "series"))))
+
+(ert-deftest a3madkour-pub-library--normalize-status-enum-warn ()
+  "Out-of-enum :STATUS: WARNs but still emits the value (linter catches)."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Bogus
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: to-read
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (warnings '())
+         (row (cl-letf (((symbol-function 'message)
+                         (lambda (fmt &rest args)
+                           (push (apply #'format fmt args) warnings))))
+                (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))))
+    (should (equal (plist-get row :status) "to-read"))
+    (should (seq-some (lambda (m) (string-match-p "status.*to-read.*not in" m)) warnings))))
 
 (provide 'a3madkour-publish-library-test)
 
