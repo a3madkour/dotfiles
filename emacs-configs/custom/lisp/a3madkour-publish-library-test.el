@@ -132,6 +132,84 @@
     (should (equal (plist-get row :status) "to-read"))
     (should (seq-some (lambda (m) (string-match-p "status.*to-read.*not in" m)) warnings))))
 
+(ert-deftest a3madkour-pub-library--normalize-optional-passthroughs ()
+  "Optional drawer fields pass through unchanged."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: finished
+:STARTED: 2024-01-01
+:FINISHED: 2024-06-15
+:SPOILER_LEVEL: light
+:CITE_KEY: doe2024
+:CANONICAL_URL: https://example.com/item
+:NOTE_SLUG: my-note
+:PREVIEW: A short annotation.
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :started) "2024-01-01"))
+    (should (equal (plist-get row :finished) "2024-06-15"))
+    (should (equal (plist-get row :spoiler_level) "light"))
+    (should (equal (plist-get row :cite_key) "doe2024"))
+    (should (equal (plist-get row :canonical_url) "https://example.com/item"))
+    (should (equal (plist-get row :note_slug) "my-note"))
+    (should (equal (plist-get row :preview) "A short annotation."))))
+
+(ert-deftest a3madkour-pub-library--normalize-optional-absent ()
+  "Absent optional drawers don't appear in the row plist."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should-not (plist-member row :started))
+    (should-not (plist-member row :finished))
+    (should-not (plist-member row :preview))))
+
+(ert-deftest a3madkour-pub-library--normalize-last-modified-drawer ()
+  "Per-heading :LAST_MODIFIED: drawer beats git-mtime fallback."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:LAST_MODIFIED: 2025-03-14
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+    (should (equal (plist-get row :last_modified) "2025-03-14"))))
+
+(ert-deftest a3madkour-pub-library--normalize-last-modified-git-mtime-fallback ()
+  "Absent :LAST_MODIFIED: falls back to git-mtime-of-file."
+  (let* ((tmpdir (make-temp-file "a3-pub-libmtime-" t))
+         (file (expand-file-name "x.org" tmpdir)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                   (lambda (f) (ignore f) "2026-01-15")))
+          (let* ((src (a3madkour-pub-library-test--parse-headline
+                       "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+                 (cfg (a3madkour-pub-library--config-for 'library-reading))
+                 (row (a3madkour-pub-library--normalize-item src 'library-reading cfg file)))
+            (should (equal (plist-get row :last_modified) "2026-01-15"))))
+      (delete-directory tmpdir t))))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here

@@ -94,7 +94,8 @@ Empty result → WARN + return nil (caller skips the item)."
 
 (cl-defun a3madkour-pub-library--normalize-item (headline section cfg file)
   "Build a YAML-row plist from HEADLINE for SECTION using CFG.
-FILE is the source path (used for WARN context + git-mtime fallback in later tasks).
+FILE is the source path (used for WARN context + git-mtime fallback for
+the `last_modified' field).
 
 Returns nil when the item should be skipped (e.g. empty slug)."
   (ignore section)
@@ -110,19 +111,37 @@ Returns nil when the item should be skipped (e.g. empty slug)."
            (status        (a3madkour-pub-library--headline-property headline "STATUS"))
            (creator       (a3madkour-pub-library--headline-property headline "CREATOR"))
            (year-raw      (a3madkour-pub-library--headline-property headline "YEAR"))
-           (year          (and year-raw (string-to-number year-raw))))
+           (year          (and year-raw (string-to-number year-raw)))
+           (row-plist     (list :slug slug
+                                :title title
+                                :creator creator
+                                :year year
+                                :media_type media-type
+                                :status status)))
       (unless (member media-type allowed-mt)
         (a3madkour-pub-library--warn file slug
                                      "media_type=%s not in %S" media-type allowed-mt))
       (unless (and status (member status allowed-stat))
         (a3madkour-pub-library--warn file slug
                                      "status=%s not in %S" status allowed-stat))
-      (list :slug slug
-            :title title
-            :creator creator
-            :year year
-            :media_type media-type
-            :status status))))
+      ;; Optional drawer pass-throughs.
+      (dolist (prop '(("STARTED" . :started)
+                      ("FINISHED" . :finished)
+                      ("SPOILER_LEVEL" . :spoiler_level)
+                      ("CITE_KEY" . :cite_key)
+                      ("CANONICAL_URL" . :canonical_url)
+                      ("NOTE_SLUG" . :note_slug)
+                      ("PREVIEW" . :preview)))
+        (let ((val (a3madkour-pub-library--headline-property headline (car prop))))
+          (when val
+            (setq row-plist (plist-put row-plist (cdr prop) val)))))
+      ;; last_modified: :LAST_MODIFIED: drawer → git-mtime fallback.
+      (let* ((drawer-lm (a3madkour-pub-library--headline-property headline "LAST_MODIFIED"))
+             (lm (or drawer-lm
+                     (a3madkour-pub-history/git-mtime-of-file file))))
+        (when lm
+          (setq row-plist (plist-put row-plist :last_modified lm))))
+      row-plist)))
 
 (defun a3madkour-pub-library/publish-library-file (file)
   "Publish a single library FILE to data/<medium>.yaml.
