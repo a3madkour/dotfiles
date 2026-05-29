@@ -463,6 +463,103 @@
   (should (equal (a3madkour-pub-library--render-scalar "| Pipe Title")
                  "'| Pipe Title'")))
 
+(ert-deftest a3madkour-pub-library--publish-library-file-end-to-end ()
+  "publish-library-file walks headings + writes data/<medium>.yaml."
+  (let* ((notes-dir (make-temp-file "a3-pub-libnotes-" t))
+         (site-dir  (make-temp-file "a3-pub-libsite-" t))
+         (src       (expand-file-name "library-reading.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (with-temp-file src
+            (insert "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: library/reading\n\n"
+                    "* Pride and Prejudice :classics:romance:\n"
+                    ":PROPERTIES:\n"
+                    ":CREATOR: Jane Austen\n"
+                    ":YEAR: 1813\n"
+                    ":STATUS: finished\n"
+                    ":FINISHED: 2024-12-15\n"
+                    ":LAST_MODIFIED: 2024-12-16\n"
+                    ":END:\n\n"
+                    "* Lord Jim :classics:\n"
+                    ":PROPERTIES:\n"
+                    ":CREATOR: Joseph Conrad\n"
+                    ":YEAR: 1900\n"
+                    ":STATUS: reading\n"
+                    ":LAST_MODIFIED: 2025-04-01\n"
+                    ":END:\n"))
+          (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
+            (a3madkour-pub-library/publish-library-file src))
+          (let ((out (expand-file-name "data/reading.yaml" site-dir)))
+            (should (file-exists-p out))
+            (with-temp-buffer
+              (insert-file-contents out)
+              (should (string-match-p "slug: pride-and-prejudice" (buffer-string)))
+              (should (string-match-p "slug: lord-jim" (buffer-string)))
+              (should (string-match-p "title: Pride and Prejudice" (buffer-string)))
+              (should (string-match-p "tags: \\[classics, romance\\]" (buffer-string)))
+              ;; Source-file-order: P comes before L.
+              (let ((p-pos (string-match-p "slug: pride-and-prejudice" (buffer-string)))
+                    (l-pos (string-match-p "slug: lord-jim" (buffer-string))))
+                (should (< p-pos l-pos))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
+(ert-deftest a3madkour-pub-library--publish-library-file-slug-collision ()
+  "Slug collision within file → WARN, skip second occurrence."
+  (let* ((notes-dir (make-temp-file "a3-pub-libnotes-" t))
+         (site-dir  (make-temp-file "a3-pub-libsite-" t))
+         (src       (expand-file-name "library-reading.org" notes-dir))
+         (warnings '()))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (with-temp-file src
+            (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: library/reading\n\n"
+                    "* Same Title\n:PROPERTIES:\n:CREATOR: x\n:YEAR: 2024\n:STATUS: queued\n:END:\n"
+                    "* Same Title\n:PROPERTIES:\n:CREATOR: y\n:YEAR: 2025\n:STATUS: queued\n:END:\n"))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args)
+                       (push (apply #'format fmt args) warnings))))
+            (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
+              (a3madkour-pub-library/publish-library-file src)))
+          ;; Yaml only has one row.
+          (let* ((content (with-temp-buffer
+                            (insert-file-contents (expand-file-name "data/reading.yaml" site-dir))
+                            (buffer-string)))
+                 (row-count (cl-count-if (lambda (line) (string-prefix-p "  - slug:" line))
+                                         (split-string content "\n"))))
+            (should (= 1 row-count))
+            (should (seq-some (lambda (m) (string-match-p "slug collision" m)) warnings))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
+(ert-deftest a3madkour-pub-library--publish-library-file-idempotent ()
+  "Second publish run on unchanged source → file mtime unchanged."
+  (let* ((notes-dir (make-temp-file "a3-pub-libnotes-" t))
+         (site-dir  (make-temp-file "a3-pub-libsite-" t))
+         (src       (expand-file-name "library-reading.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (with-temp-file src
+            (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: library/reading\n\n"
+                    "* Item\n:PROPERTIES:\n:CREATOR: x\n:YEAR: 2024\n:STATUS: queued\n"
+                    ":LAST_MODIFIED: 2025-01-01\n:END:\n"))
+          (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
+            (a3madkour-pub-library/publish-library-file src)
+            (let* ((out (expand-file-name "data/reading.yaml" site-dir))
+                   (mtime1 (file-attribute-modification-time
+                            (file-attributes out))))
+              (sleep-for 1.1)
+              (a3madkour-pub-library/publish-library-file src)
+              (let ((mtime2 (file-attribute-modification-time
+                             (file-attributes out))))
+                (should (equal mtime1 mtime2))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here

@@ -306,12 +306,70 @@ SOURCE-FILE is recorded in the comment header for provenance."
    (mapconcat #'a3madkour-pub-library--render-row rows "\n")
    "\n"))
 
+(defun a3madkour-pub-library--write-if-different (path content)
+  "Write CONTENT to PATH only if it differs from existing on-disk content.
+Returns t if a write occurred, nil if the existing content was identical."
+  (let ((existing (when (file-exists-p path)
+                    (with-temp-buffer
+                      (insert-file-contents path)
+                      (buffer-string)))))
+    (unless (string= existing content)
+      (make-directory (file-name-directory path) t)
+      (with-temp-file path (insert content))
+      t)))
+
+(defun a3madkour-pub-library--yaml-path (file cfg)
+  "Compute the absolute output yaml path for FILE given CFG.
+Resolves under `a3madkour-pub/site-data-dir'; errors if unset."
+  (ignore file)
+  (let ((data-dir (and (boundp 'a3madkour-pub/site-data-dir)
+                       a3madkour-pub/site-data-dir)))
+    (unless data-dir
+      (error "a3madkour-pub-library: a3madkour-pub/site-data-dir is nil"))
+    (expand-file-name (nth 0 cfg) data-dir)))
+
+(defun a3madkour-pub-library--section-string-to-symbol (s)
+  "Translate a `#+HUGO_SECTION:' string into a config-table alist key.
+
+The canonical `#+HUGO_SECTION:' enum uses slash-separated paths
+(`library/reading'), while the per-medium config table keys them as
+symbols with a single segment (`library-reading' — `/' is awkward in
+symbol names).  This bridges the two: `\"library/reading\"' → `library-reading'."
+  (and s (intern (replace-regexp-in-string "/" "-" s))))
+
 (defun a3madkour-pub-library/publish-library-file (file)
   "Publish a single library FILE to data/<medium>.yaml.
 
-Stub (Task 3): signature only; real implementation lands in Tasks 4-10."
-  (ignore file)
-  nil)
+Walks top-level headings via `org-element-parse-buffer', normalizes each
+via `--normalize-item', deduplicates slugs (WARN on collision; skip
+second), renders the YAML, writes if different.  Library items do NOT
+call `record-publish' (URL-less; per spec §6 step 8)."
+  (let* ((section-str (a3madkour-pub/note-section file))
+         (section (a3madkour-pub-library--section-string-to-symbol section-str))
+         (cfg (a3madkour-pub-library--config-for section))
+         (out-path (a3madkour-pub-library--yaml-path file cfg))
+         (ast (with-temp-buffer
+                (insert-file-contents file)
+                (org-mode)
+                (org-element-parse-buffer)))
+         (seen-slugs (make-hash-table :test 'equal))
+         (rows '()))
+    (org-element-map ast 'headline
+      (lambda (hl)
+        (when (= 1 (org-element-property :level hl))
+          (let ((row (a3madkour-pub-library--normalize-item hl section cfg file)))
+            (when row
+              (let ((slug (plist-get row :slug)))
+                (cond
+                 ((gethash slug seen-slugs)
+                  (a3madkour-pub-library--warn
+                   file slug "slug collision; skipping second occurrence"))
+                 (t
+                  (puthash slug t seen-slugs)
+                  (push row rows)))))))))
+    (let ((yaml (a3madkour-pub-library--render-library-yaml
+                 (nreverse rows) file)))
+      (a3madkour-pub-library--write-if-different out-path yaml))))
 
 (provide 'a3madkour-publish-library)
 
