@@ -419,6 +419,33 @@
     (should (string= (a3madkour-pub-library--render-library-yaml rows "x.org")
                      (a3madkour-pub-library--render-library-yaml rows "x.org")))))
 
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-embedded-double-quote ()
+  "Embedded double-quote in string with `:' or `#' → single-quoted yaml output."
+  ;; `:#` branch
+  (should (equal (a3madkour-pub-library--render-scalar "He said \"hello\": fine.")
+                 "'He said \"hello\": fine.'"))
+  ;; URL branch
+  (should (equal (a3madkour-pub-library--render-scalar "http://example.com/path?q=\"foo\"")
+                 "'http://example.com/path?q=\"foo\"'")))
+
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-embedded-single-quote ()
+  "Embedded `'' inside a single-quoted yaml scalar is doubled to `'''."
+  ;; `:#` branch with single-quote
+  (should (equal (a3madkour-pub-library--render-scalar "title: It's fine.")
+                 "'title: It''s fine.'"))
+  ;; URL branch with single-quote
+  (should (equal (a3madkour-pub-library--render-scalar "http://example.com/it's/here")
+                 "'http://example.com/it''s/here'")))
+
+(ert-deftest a3madkour-pub-library--render-scalar-quotes-leading-indicator ()
+  "Strings starting with `\"' or `'' are single-quoted to avoid YAML indicator confusion."
+  ;; Real-world example from the bug report: \"Hello,\" He Lied.
+  (should (equal (a3madkour-pub-library--render-scalar "\"Hello,\" He Lied")
+                 "'\"Hello,\" He Lied'"))
+  ;; Leading single-quote (embedded `'' doubled).
+  (should (equal (a3madkour-pub-library--render-scalar "'tis a title")
+                 "'''tis a title'")))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here

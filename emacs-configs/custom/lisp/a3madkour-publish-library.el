@@ -219,8 +219,19 @@ Returns nil when the item should be skipped (e.g. empty slug)."
   "Deterministic key order within each yaml row.
 Matches the shape of existing fixtures under data/*.yaml.")
 
+(defun a3madkour-pub-library--yaml-single-quote (val)
+  "Wrap VAL in YAML single-quoted style, doubling embedded `''.
+Single-quoted YAML: the only escape is `'' → `'''."
+  (concat "'" (replace-regexp-in-string "'" "''" val) "'"))
+
 (defun a3madkour-pub-library--render-scalar (val)
-  "Render a scalar VAL for inclusion in YAML."
+  "Render a scalar VAL for inclusion in YAML.
+
+Strings that contain YAML-sensitive characters (`:' `#'), look like URLs,
+or begin with a YAML indicator character (`\"' or `'') are emitted in
+YAML single-quoted style (`'...''), with embedded `'' doubled. Dates
+(YYYY-MM-DD) and plain strings emit unquoted; nil/t/numbers handle their
+natural types."
   (cond
    ((null val) "null")
    ((eq val t) "true")
@@ -229,10 +240,16 @@ Matches the shape of existing fixtures under data/*.yaml.")
     (cond
      ;; YYYY-MM-DD: emit unquoted so PyYAML loads as datetime.date.
      ((string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" val) val)
-     ;; URLs and quoted text — wrap in double quotes.
-     ((string-prefix-p "http" val) (format "\"%s\"" val))
-     ;; Plain strings: only quote if they contain `:' or other YAML-sensitive chars.
-     ((string-match-p "[:#]" val) (format "\"%s\"" val))
+     ;; URLs: single-quote (escape embedded `'').
+     ((string-prefix-p "http" val)
+      (a3madkour-pub-library--yaml-single-quote val))
+     ;; YAML-sensitive chars: single-quote (escape embedded `'').
+     ((string-match-p "[:#]" val)
+      (a3madkour-pub-library--yaml-single-quote val))
+     ;; Leading YAML indicator (`\"' or `'') would confuse the parser
+     ;; into reading a quoted scalar; force single-quoted output.
+     ((string-match-p "^[\"']" val)
+      (a3madkour-pub-library--yaml-single-quote val))
      (t val)))
    (t (format "%S" val))))
 
