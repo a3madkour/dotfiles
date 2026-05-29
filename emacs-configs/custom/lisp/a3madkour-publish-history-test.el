@@ -346,6 +346,34 @@ when non-nil, ignoring disk."
             (should (equal "disk-only" (alist-get 'id (aref notes 0))))))
       (delete-directory tmp-data t))))
 
+(ert-deftest a3madkour-pub-history--git-mtime-tracked-file ()
+  "git-mtime-of-file returns YYYY-MM-DD for a git-tracked file."
+  (let* ((tmpdir (make-temp-file "a3-pub-git-" t))
+         (file (expand-file-name "tracked.org" tmpdir))
+         (default-directory tmpdir))
+    (unwind-protect
+        (progn
+          (call-process "git" nil nil nil "init" "-q")
+          (call-process "git" nil nil nil "config" "user.email" "test@example.com")
+          (call-process "git" nil nil nil "config" "user.name" "Test")
+          (with-temp-file file (insert "content\n"))
+          (call-process "git" nil nil nil "add" "tracked.org")
+          (call-process "git" nil nil nil "commit" "-q" "-m" "init")
+          (let ((result (a3madkour-pub-history/git-mtime-of-file file)))
+            (should (stringp result))
+            (should (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" result))))
+      (delete-directory tmpdir t))))
+
+(ert-deftest a3madkour-pub-history--git-mtime-untracked-file ()
+  "git-mtime-of-file returns nil for a file not under git."
+  (let* ((tmpdir (make-temp-file "a3-pub-nogit-" t))
+         (file (expand-file-name "untracked.org" tmpdir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "content\n"))
+          (should-not (a3madkour-pub-history/git-mtime-of-file file)))
+      (delete-directory tmpdir t))))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here

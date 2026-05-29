@@ -252,6 +252,26 @@ Drops `nil' entries (notes that have only ever had a single URL or are removed).
                    for url = (alist-get 'url entry)
                    when url collect url))))))
 
+(defun a3madkour-pub-history/git-mtime-of-file (file)
+  "Return the YYYY-MM-DD date of the most recent commit touching FILE.
+Returns nil when FILE is not under git or has never been committed.
+
+Used as the per-file fallback for `last_modified' when no explicit
+property is set on the source (garden + library per spec §8 + §5
+respectively)."
+  (when (file-exists-p file)
+    (let* ((default-directory (file-name-directory (expand-file-name file)))
+           (basename (file-name-nondirectory file))
+           (raw (with-output-to-string
+                  (with-current-buffer standard-output
+                    (call-process "git" nil t nil
+                                  "log" "-1" "--format=%cs" "--" basename))))
+           (trimmed (string-trim raw)))
+      (when (and trimmed
+                 (not (string-empty-p trimmed))
+                 (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" trimmed))
+        trimmed))))
+
 (provide 'a3madkour-publish-history)
 
 ;;; a3madkour-publish-history.el ends here
