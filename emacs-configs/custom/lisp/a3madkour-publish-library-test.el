@@ -252,6 +252,114 @@
             (should (equal (plist-get row :last_modified) "2026-01-15"))))
       (delete-directory tmpdir t))))
 
+(ert-deftest a3madkour-pub-library--normalize-extras-book ()
+  "Book extras: ISBN + progress_pct/progress_label + universal covers."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: reading
+:ISBN: 9780141439518
+:PROGRESS_PCT: 42
+:PROGRESS_LABEL: p. 84 / 200
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))
+         (extras (plist-get row :extras)))
+    (should (equal (plist-get extras :isbn) "9780141439518"))
+    (should (equal (plist-get extras :progress_pct) 42))
+    (should (equal (plist-get extras :progress_label) "p. 84 / 200"))))
+
+(ert-deftest a3madkour-pub-library--normalize-extras-game ()
+  "Game extras: igdb_id (int) + hours_played (int) + platform."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Outer Wilds
+:PROPERTIES:
+:CREATOR: Mobius
+:YEAR: 2019
+:STATUS: playing
+:IGDB_ID: 12345
+:HOURS_PLAYED: 22
+:PLATFORM: PC
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-playing))
+         (row (a3madkour-pub-library--normalize-item src 'library-playing cfg "/tmp/x.org"))
+         (extras (plist-get row :extras)))
+    (should (equal (plist-get extras :igdb_id) 12345))
+    (should (equal (plist-get extras :hours_played) 22))
+    (should (equal (plist-get extras :platform) "PC"))))
+
+(ert-deftest a3madkour-pub-library--normalize-extras-series ()
+  "Series extras: episode_count + current_episode + current_season + tmdb_id."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Severance S2
+:PROPERTIES:
+:MEDIA_TYPE: series
+:CREATOR: Apple TV+
+:YEAR: 2025
+:STATUS: finished
+:EPISODE_COUNT: 10
+:CURRENT_EPISODE: 4
+:CURRENT_SEASON: 2
+:TMDB_ID: 67890
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-watching))
+         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org"))
+         (extras (plist-get row :extras)))
+    (should (equal (plist-get extras :episode_count) 10))
+    (should (equal (plist-get extras :current_episode) 4))
+    (should (equal (plist-get extras :current_season) 2))
+    (should (equal (plist-get extras :tmdb_id) 67890))))
+
+(ert-deftest a3madkour-pub-library--normalize-extras-ignored-cross-medium ()
+  ":ISBN: on an album is silently ignored (forward-compatible)."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Album
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: listening
+:ISBN: 9780000000000
+:MBID: aaaaaaaa-bbbb
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-listening))
+         (row (a3madkour-pub-library--normalize-item src 'library-listening cfg "/tmp/x.org"))
+         (extras (plist-get row :extras)))
+    (should-not (plist-member extras :isbn))
+    (should (equal (plist-get extras :musicbrainz_release_group) "aaaaaaaa-bbbb"))))
+
+(ert-deftest a3madkour-pub-library--normalize-cover-file-existence-warn ()
+  "Missing cover file → WARN, but :cover_file key still emitted."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: reading
+:COVER_FILE: nonexistent.jpg
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (warnings '())
+         ;; Stub: --site-static-dir-of returns a tmp dir with no cover file.
+         (tmpdir (make-temp-file "a3-pub-covers-" t)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-library--site-static-dir-of)
+                   (lambda (file) (ignore file) tmpdir))
+                  ((symbol-function 'message)
+                   (lambda (fmt &rest args)
+                     (push (apply #'format fmt args) warnings))))
+          (let* ((row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))
+                 (extras (plist-get row :extras)))
+            (should (equal (plist-get extras :cover_file) "nonexistent.jpg"))
+            (should (seq-some (lambda (m) (string-match-p "cover.*missing" m)) warnings))))
+      (delete-directory tmpdir t))))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here

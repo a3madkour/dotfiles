@@ -45,6 +45,42 @@ Errors when SECTION is not a known library section."
       (error "a3madkour-pub-library: unknown library section %S" section))
     (cdr entry)))
 
+(defconst a3madkour-pub-library--extras-by-media
+  '(("book"
+     ("ISBN" :isbn nil) ("PROGRESS_PCT" :progress_pct int)
+     ("PROGRESS_LABEL" :progress_label nil)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil))
+    ("album"
+     ("MBID" :musicbrainz_release_group nil)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil))
+    ("track"
+     ("MBID" :musicbrainz_release_group nil)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil))
+    ("game"
+     ("IGDB_ID" :igdb_id int) ("HOURS_PLAYED" :hours_played int)
+     ("PLATFORM" :platform nil)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil))
+    ("film"
+     ("RUNTIME_MIN" :runtime_min int) ("TMDB_ID" :tmdb_id int)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil))
+    ("series"
+     ("EPISODE_COUNT" :episode_count int) ("CURRENT_EPISODE" :current_episode int)
+     ("CURRENT_SEASON" :current_season int) ("TMDB_ID" :tmdb_id int)
+     ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil)))
+  "Per-medium extras drawer prop → yaml key + coercion.
+Matches `tools/check_library_fixtures.py:ALLOWED_EXTRAS' exactly.")
+
+(defun a3madkour-pub-library--site-static-dir-of (source-file)
+  "Derive the site static/ dir given SOURCE-FILE (a library .org).
+Cascade: A3_PUB_SITE_STATIC_DIR env var → sibling of `a3madkour-pub/site-data-dir'.
+Returns absolute path with trailing slash, or nil if unresolvable."
+  (ignore source-file)
+  (or (getenv "A3_PUB_SITE_STATIC_DIR")
+      (when (and (boundp 'a3madkour-pub/site-data-dir)
+                 a3madkour-pub/site-data-dir)
+        (expand-file-name "../static/"
+                          (directory-file-name a3madkour-pub/site-data-dir)))))
+
 (defun a3madkour-pub-library--title-to-slug (title)
   "Derive a kebab-case slug from TITLE per spec §5.
 
@@ -91,6 +127,30 @@ Empty result → WARN + return nil (caller skips the item)."
      (t (a3madkour-pub-library--warn file nil
                                      "empty slug for title %S; skipping" title)
         nil))))
+
+(defun a3madkour-pub-library--collect-extras (headline media-type file slug)
+  "Collect extras drawer properties from HEADLINE per MEDIA-TYPE.
+WARNs on missing cover-file (emits key anyway).  Returns a plist or nil."
+  (let* ((spec (cdr (assoc media-type a3madkour-pub-library--extras-by-media)))
+         (result '()))
+    (dolist (entry spec)
+      (let* ((prop (nth 0 entry))
+             (key (nth 1 entry))
+             (coerce (nth 2 entry))
+             (raw (a3madkour-pub-library--headline-property headline prop)))
+        (when raw
+          (let ((val (if (eq coerce 'int) (string-to-number raw) raw)))
+            (setq result (plist-put result key val))
+            ;; Cover-file existence check (WARN only; key still emitted above).
+            (when (eq key :cover_file)
+              (let* ((static-dir (a3madkour-pub-library--site-static-dir-of file))
+                     (cover-path (and static-dir
+                                      (expand-file-name (concat "library/covers/" raw)
+                                                        static-dir))))
+                (when (and cover-path (not (file-exists-p cover-path)))
+                  (a3madkour-pub-library--warn file slug
+                                               "cover file missing at %s" cover-path))))))))
+    result))
 
 (cl-defun a3madkour-pub-library--normalize-item (headline section cfg file)
   "Build a YAML-row plist from HEADLINE for SECTION using CFG.
@@ -146,6 +206,10 @@ Returns nil when the item should be skipped (e.g. empty slug)."
                      (a3madkour-pub-history/git-mtime-of-file file))))
         (when lm
           (setq row-plist (plist-put row-plist :last_modified lm))))
+      ;; Extras: per-medium drawer mapping + cover-file existence check.
+      (let ((extras (a3madkour-pub-library--collect-extras headline media-type file slug)))
+        (when extras
+          (setq row-plist (plist-put row-plist :extras extras))))
       row-plist)))
 
 (defun a3madkour-pub-library/publish-library-file (file)
