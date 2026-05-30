@@ -16,8 +16,9 @@
   (should (fboundp 'a3madkour-pub-library/publish-library-file)))
 
 (ert-deftest a3madkour-pub-library--config-table-shape ()
-  "Per-medium config table has all 4 library sections with the right shape."
-  (dolist (section '(library-reading library-listening library-playing library-watching))
+  "Per-medium config table has all 4 library sections with the right shape.
+Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
+  (dolist (section '("library/reading" "library/listening" "library/playing" "library/watching"))
     (let ((cfg (a3madkour-pub-library--config-for section)))
       (should (= 4 (length cfg)))
       (should (stringp (nth 0 cfg)))           ; yaml filename
@@ -25,7 +26,7 @@
       (should (listp (nth 2 cfg)))             ; allowed media_types
       (should (listp (nth 3 cfg)))             ; allowed statuses
       (should (member (nth 1 cfg) (nth 2 cfg))))) ; default ∈ allowed
-  (should-error (a3madkour-pub-library--config-for 'bogus)))
+  (should-error (a3madkour-pub-library--config-for "bogus")))
 
 (ert-deftest a3madkour-pub-library--title-to-slug ()
   "Title-to-slug derivation covers spec §5 edge cases."
@@ -60,8 +61,8 @@
 :STATUS: finished
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :slug) "pride-and-prejudice"))
     (should (equal (plist-get row :title) "Pride and Prejudice"))
     (should (equal (plist-get row :creator) "Jane Austen"))
@@ -80,8 +81,8 @@
 :STATUS: finished
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :slug) "the-stranger"))))
 
 (ert-deftest a3madkour-pub-library--normalize-media-type-default ()
@@ -94,8 +95,8 @@
 :STATUS: queued
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-watching))
-         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/watching"))
+         (row (a3madkour-pub-library--normalize-item src "library/watching" cfg "/tmp/x.org")))
     (should (equal (plist-get row :media_type) "film"))))
 
 (ert-deftest a3madkour-pub-library--normalize-media-type-override ()
@@ -109,8 +110,8 @@
 :STATUS: finished
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-watching))
-         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/watching"))
+         (row (a3madkour-pub-library--normalize-item src "library/watching" cfg "/tmp/x.org")))
     (should (equal (plist-get row :media_type) "series"))))
 
 (ert-deftest a3madkour-pub-library--normalize-status-enum-warn ()
@@ -123,12 +124,12 @@
 :STATUS: to-read
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
          (warnings '())
          (row (cl-letf (((symbol-function 'message)
                          (lambda (fmt &rest args)
                            (push (apply #'format fmt args) warnings))))
-                (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))))
+                (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org"))))
     (should (equal (plist-get row :status) "to-read"))
     (should (seq-some (lambda (m) (string-match-p "status.*to-read.*not in" m)) warnings))))
 
@@ -149,8 +150,8 @@
 :PREVIEW: A short annotation.
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :started) "2024-01-01"))
     (should (equal (plist-get row :finished) "2024-06-15"))
     (should (equal (plist-get row :spoiler_level) "light"))
@@ -169,8 +170,8 @@
 :STATUS: queued
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should-not (plist-member row :started))
     (should-not (plist-member row :finished))
     (should-not (plist-member row :preview))))
@@ -185,8 +186,8 @@
 :STATUS: finished
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :tags) '("classics" "romance")))))
 
 (ert-deftest a3madkour-pub-library--normalize-tags-strips-editorial ()
@@ -199,8 +200,8 @@
 :STATUS: queued
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :tags) '("classics" "fiction")))))
 
 (ert-deftest a3madkour-pub-library--normalize-tags-empty-after-filter ()
@@ -213,8 +214,8 @@
 :STATUS: queued
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :tags) '()))))
 
 (ert-deftest a3madkour-pub-library--normalize-last-modified-drawer ()
@@ -228,8 +229,8 @@
 :LAST_MODIFIED: 2025-03-14
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org")))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org")))
     (should (equal (plist-get row :last_modified) "2025-03-14"))))
 
 (ert-deftest a3madkour-pub-library--normalize-last-modified-git-mtime-fallback ()
@@ -247,8 +248,8 @@
 :STATUS: queued
 :END:
 "))
-                 (cfg (a3madkour-pub-library--config-for 'library-reading))
-                 (row (a3madkour-pub-library--normalize-item src 'library-reading cfg file)))
+                 (cfg (a3madkour-pub-library--config-for "library/reading"))
+                 (row (a3madkour-pub-library--normalize-item src "library/reading" cfg file)))
             (should (equal (plist-get row :last_modified) "2026-01-15"))))
       (delete-directory tmpdir t))))
 
@@ -265,8 +266,8 @@
 :PROGRESS_LABEL: p. 84 / 200
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
-         (row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org"))
          (extras (plist-get row :extras)))
     (should (equal (plist-get extras :isbn) "9780141439518"))
     (should (equal (plist-get extras :progress_pct) 42))
@@ -285,8 +286,8 @@
 :PLATFORM: PC
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-playing))
-         (row (a3madkour-pub-library--normalize-item src 'library-playing cfg "/tmp/x.org"))
+         (cfg (a3madkour-pub-library--config-for "library/playing"))
+         (row (a3madkour-pub-library--normalize-item src "library/playing" cfg "/tmp/x.org"))
          (extras (plist-get row :extras)))
     (should (equal (plist-get extras :igdb_id) 12345))
     (should (equal (plist-get extras :hours_played) 22))
@@ -307,8 +308,8 @@
 :TMDB_ID: 67890
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-watching))
-         (row (a3madkour-pub-library--normalize-item src 'library-watching cfg "/tmp/x.org"))
+         (cfg (a3madkour-pub-library--config-for "library/watching"))
+         (row (a3madkour-pub-library--normalize-item src "library/watching" cfg "/tmp/x.org"))
          (extras (plist-get row :extras)))
     (should (equal (plist-get extras :episode_count) 10))
     (should (equal (plist-get extras :current_episode) 4))
@@ -327,8 +328,8 @@
 :MBID: aaaaaaaa-bbbb
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-listening))
-         (row (a3madkour-pub-library--normalize-item src 'library-listening cfg "/tmp/x.org"))
+         (cfg (a3madkour-pub-library--config-for "library/listening"))
+         (row (a3madkour-pub-library--normalize-item src "library/listening" cfg "/tmp/x.org"))
          (extras (plist-get row :extras)))
     (should-not (plist-member extras :isbn))
     (should (equal (plist-get extras :musicbrainz_release_group) "aaaaaaaa-bbbb"))))
@@ -344,7 +345,7 @@
 :COVER_FILE: nonexistent.jpg
 :END:
 "))
-         (cfg (a3madkour-pub-library--config-for 'library-reading))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
          (warnings '())
          ;; Stub: --site-static-dir-of returns a tmp dir with no cover file.
          (tmpdir (make-temp-file "a3-pub-covers-" t)))
@@ -354,7 +355,7 @@
                   ((symbol-function 'message)
                    (lambda (fmt &rest args)
                      (push (apply #'format fmt args) warnings))))
-          (let* ((row (a3madkour-pub-library--normalize-item src 'library-reading cfg "/tmp/x.org"))
+          (let* ((row (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org"))
                  (extras (plist-get row :extras)))
             (should (equal (plist-get extras :cover_file) "nonexistent.jpg"))
             (should (seq-some (lambda (m) (string-match-p "cover.*missing" m)) warnings))))

@@ -32,15 +32,29 @@ No commits to the manifest; snapshot is cleared at end."
 (ert-deftest a3madkour-pub-living-test/garden-handler-registered ()
   "B.1 — loading a3madkour-publish-garden registers the garden handler in
 `a3madkour-pub-living--handlers' via the after-load form at the bottom of
-this file's parent module."
+this file's parent module.  Handler-alist keys are STRINGS (the canonical
+`#+HUGO_SECTION:' value), so we look up via `assoc' not `assq'."
   (require 'a3madkour-publish-garden)
-  (should (eq (cdr (assq 'garden a3madkour-pub-living--handlers))
+  (should (eq (cdr (assoc "garden" a3madkour-pub-living--handlers))
               'a3madkour-pub-garden/publish-garden-file)))
 
-(ert-deftest a3madkour-pub-living-test/walk-section-dispatches-symbol-vs-string ()
-  "B.1 regression — walk-section compares the section SYMBOL key
-to `note-section''s STRING value via symbol-name; a naive `(eq ...)' check
-would never match and silently drop every file."
+(ert-deftest a3madkour-pub-living-test/library-handlers-registered ()
+  "B.2 — loading a3madkour-publish-library registers all 4 library
+sections (`library/reading', `library/listening', `library/playing',
+`library/watching') in `a3madkour-pub-living--handlers', each pointing
+at `a3madkour-pub-library/publish-library-file'."
+  (require 'a3madkour-publish-library)
+  (dolist (section '("library/reading" "library/listening"
+                     "library/playing" "library/watching"))
+    (should (eq (cdr (assoc section a3madkour-pub-living--handlers))
+                'a3madkour-pub-library/publish-library-file))))
+
+(ert-deftest a3madkour-pub-living-test/walk-section-dispatches-on-string-key ()
+  "B.1 regression — walk-section compares the section STRING key
+directly to `note-section''s STRING value.  Pre-Task-11 used symbol
+keys + `symbol-name' bridge which silently no-op'd on slash-form
+sections (`library/reading' would intern to `library/reading' which
+is not what `note-section' returns)."
   (require 'a3madkour-publish-garden)
   (let* ((notes-dir (make-temp-file "living-dispatch-" t))
          (site-dir  (make-temp-file "living-dispatch-site-" t))

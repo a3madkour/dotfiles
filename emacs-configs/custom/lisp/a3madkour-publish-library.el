@@ -21,26 +21,31 @@
 (require 'a3madkour-publish-history)
 
 (defconst a3madkour-pub-library--config
-  '((library-reading
+  '(("library/reading"
      "reading.yaml"  "book"  ("book")
      ("finished" "reading" "queued" "abandoned"))
-    (library-listening
+    ("library/listening"
      "listening.yaml" "album" ("album" "track")
      ("finished" "listening" "queued" "dropped"))
-    (library-playing
+    ("library/playing"
      "playing.yaml"   "game"  ("game")
      ("finished" "100pct" "playing" "queued" "dropped"))
-    (library-watching
+    ("library/watching"
      "watching.yaml"  "film"  ("film" "series")
      ("finished" "watching" "queued" "dropped")))
-  "Per-section config: (SYMBOL YAML-FILE DEFAULT-MT (ALLOWED-MT...) (ALLOWED-STATUS...)).
+  "Per-section config: (SECTION-STRING YAML-FILE DEFAULT-MT (ALLOWED-MT...) (ALLOWED-STATUS...)).
+SECTION-STRING is the canonical `#+HUGO_SECTION:' slash-form value (e.g.
+`\"library/reading\"') so it compares directly against `note-section''s
+string return — no symbol/string bridge needed.
+
 Status enums copied verbatim from check_library_fixtures.py — the linter is
 authoritative for B-emitted YAML.")
 
 (defun a3madkour-pub-library--config-for (section)
   "Return (yaml-file default-mt allowed-mt allowed-status) for SECTION.
+SECTION is a string (the canonical `#+HUGO_SECTION:' slash-form).
 Errors when SECTION is not a known library section."
-  (let ((entry (assq section a3madkour-pub-library--config)))
+  (let ((entry (assoc section a3madkour-pub-library--config)))
     (unless entry
       (error "a3madkour-pub-library: unknown library section %S" section))
     (cdr entry)))
@@ -328,15 +333,6 @@ Resolves under `a3madkour-pub/site-data-dir'; errors if unset."
       (error "a3madkour-pub-library: a3madkour-pub/site-data-dir is nil"))
     (expand-file-name (nth 0 cfg) data-dir)))
 
-(defun a3madkour-pub-library--section-string-to-symbol (s)
-  "Translate a `#+HUGO_SECTION:' string into a config-table alist key.
-
-The canonical `#+HUGO_SECTION:' enum uses slash-separated paths
-(`library/reading'), while the per-medium config table keys them as
-symbols with a single segment (`library-reading' — `/' is awkward in
-symbol names).  This bridges the two: `\"library/reading\"' → `library-reading'."
-  (and s (intern (replace-regexp-in-string "/" "-" s))))
-
 (defun a3madkour-pub-library/publish-library-file (file)
   "Publish a single library FILE to data/<medium>.yaml.
 
@@ -344,8 +340,7 @@ Walks top-level headings via `org-element-parse-buffer', normalizes each
 via `--normalize-item', deduplicates slugs (WARN on collision; skip
 second), renders the YAML, writes if different.  Library items do NOT
 call `record-publish' (URL-less; per spec §6 step 8)."
-  (let* ((section-str (a3madkour-pub/note-section file))
-         (section (a3madkour-pub-library--section-string-to-symbol section-str))
+  (let* ((section (a3madkour-pub/note-section file))
          (cfg (a3madkour-pub-library--config-for section))
          (out-path (a3madkour-pub-library--yaml-path file cfg))
          (ast (with-temp-buffer
