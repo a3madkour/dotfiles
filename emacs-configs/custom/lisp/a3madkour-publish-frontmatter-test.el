@@ -329,5 +329,42 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
     (should (equal (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org")
                    "2024-01-01"))))
 
+(ert-deftest a3madkour-pub-frontmatter--hugo-description-keyword ()
+  "#+HUGO_DESCRIPTION: keyword is read from source file and injected into alist as 'description.
+When #+HUGO_DESCRIPTION: is present it wins over any pre-existing description in
+the raw alist (e.g. from #+DESCRIPTION: via ox-hugo).  When absent, the raw
+alist value (if any) passes through unchanged."
+  (let ((src (make-temp-file "fm-desc-" nil ".org")))
+    (unwind-protect
+        (progn
+          ;; Present: injected into alist.
+          (with-temp-file src
+            (insert "#+title: Theme One\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: research-themes\n"
+                    "#+HUGO_DESCRIPTION: A short description of the theme.\n"))
+          (should (equal (alist-get 'description
+                                    (a3madkour-pub-frontmatter--inject-description
+                                     '() src))
+                         "A short description of the theme."))
+          ;; Overrides existing description in raw alist.
+          (should (equal (alist-get 'description
+                                    (a3madkour-pub-frontmatter--inject-description
+                                     '((description . "old value")) src))
+                         "A short description of the theme."))
+          ;; Absent: raw alist value passes through.
+          (with-temp-file src
+            (insert "#+title: Theme One\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: research-themes\n"))
+          (should (equal (alist-get 'description
+                                    (a3madkour-pub-frontmatter--inject-description
+                                     '((description . "from-ox-hugo")) src))
+                         "from-ox-hugo"))
+          ;; Absent + nothing in raw alist: description key not added.
+          (let ((out (a3madkour-pub-frontmatter--inject-description '() src)))
+            (should-not (assq 'description out))))
+      (delete-file src))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

@@ -132,6 +132,42 @@ Returns the first occurrence only."
         (or (and progress (cdr (assoc progress a3madkour-pub-frontmatter--progress->stage)))
             "seedling"))))
 
+(defun a3madkour-pub-frontmatter--read-org-keyword (file keyword-name)
+  "Return the value of `#+KEYWORD-NAME:' from FILE, or nil if absent.
+Reads the first matching `#+KEYWORD-NAME: value' line (case-insensitive on
+the key name) from FILE.  The value is trimmed of surrounding whitespace.
+Absent or empty-value keyword returns nil."
+  (when (file-exists-p file)
+    (with-temp-buffer
+      (insert-file-contents file)
+      (goto-char (point-min))
+      (let* ((case-fold-search t)
+             (re (format "^#\\+%s:[ \t]+\\(.+\\)$"
+                         (regexp-quote keyword-name))))
+        (when (re-search-forward re nil t)
+          (let ((v (string-trim (match-string 1))))
+            (and (not (string-empty-p v)) v)))))))
+
+(defun a3madkour-pub-frontmatter--inject-description (raw-alist source-file)
+  "Inject `#+HUGO_DESCRIPTION:' from SOURCE-FILE into RAW-ALIST as `description'.
+
+When `#+HUGO_DESCRIPTION:' is present in the source file, it is set as
+the `description' key in the returned alist, overriding any pre-existing
+value (e.g. from `#+DESCRIPTION:' via ox-hugo).
+
+When absent, RAW-ALIST is returned unchanged — a pre-existing `description'
+key (if any) passes through, and no key is added when neither source is set.
+
+This parallels the HUGO_GROWTH_STAGE wiring used by the garden normalizer
+and is the shared infrastructure required by both research-themes and
+research-questions normalizers (B.3 Tasks 3-4)."
+  (let* ((out (copy-alist raw-alist))
+         (kw-val (a3madkour-pub-frontmatter--read-org-keyword
+                  source-file "HUGO_DESCRIPTION")))
+    (when kw-val
+      (setf (alist-get 'description out) kw-val))
+    out))
+
 (cl-defun a3madkour-pub-frontmatter/last-modified-cascade
     (file &key drawer keyword)
   "Resolve the last_modified value for FILE via the 5-step cascade.
