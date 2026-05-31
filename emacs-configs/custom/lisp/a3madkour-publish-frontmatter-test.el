@@ -470,5 +470,21 @@ alist value (if any) passes through unchanged."
       (should (equal (alist-get 'status out) "bogus"))
       (should (seq-some (lambda (m) (string-match-p "status.*bogus.*not in" m)) warnings)))))
 
+(ert-deftest a3madkour-pub-frontmatter--research-theme-weight-non-numeric-dropped ()
+  "Non-numeric weight WARNs and the weight key is dropped (not emitted as nil)."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "T") (description . "x") (status . "active")
+                  (weight . "not-a-number")))
+           (warnings '())
+           (out (cl-letf (((symbol-function 'message)
+                           (lambda (fmt &rest args)
+                             (push (apply #'format fmt args) warnings))))
+                  (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org"))))
+      (should-not (assq 'weight out))
+      (should (seq-some (lambda (m) (string-match-p "weight.*non-numeric" m)) warnings)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

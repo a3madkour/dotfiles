@@ -294,7 +294,7 @@ is the hard gate.")
        ((string-match-p "^[+-]?[0-9]+\\(\\.[0-9]+\\)?$" cleaned)
         (truncate (string-to-number cleaned)))
        (t (message "a3madkour-pub-frontmatter WARN [%s]: weight=%S non-numeric"
-                   (file-name-nondirectory file) raw)
+                   (if file (file-name-nondirectory file) "unknown") raw)
           nil))))
    (t nil)))
 
@@ -307,10 +307,15 @@ is the hard gate.")
         (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
                  (file-name-nondirectory file) status
                  a3madkour-pub-frontmatter--research-statuses)))
-    ;; Weight coercion to int (octal-safe).
+    ;; Weight coercion to int (octal-safe).  Drop the key when coercion
+    ;; returns nil (non-numeric raw) rather than leaving (weight . nil)
+    ;; in the alist, which would serialize as weight: null and fail the
+    ;; research fixtures linter.
     (when-let ((raw-w (alist-get 'weight out)))
-      (setf (alist-get 'weight out)
-            (a3madkour-pub-frontmatter--coerce-weight raw-w file)))
+      (let ((coerced (a3madkour-pub-frontmatter--coerce-weight raw-w file)))
+        (if coerced
+            (setf (alist-get 'weight out) coerced)
+          (setq out (assq-delete-all 'weight out)))))
     ;; Drop forbidden keys silently.
     (dolist (key a3madkour-pub-frontmatter--theme-forbidden)
       (setq out (assq-delete-all key out)))
