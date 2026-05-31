@@ -127,6 +127,25 @@ Row order preserved.  See spec §6 for the table contract."
               (push (list :kind kind :title title :url url :year year) results)))))
         (when results (nreverse results))))))
 
+;;; Task 8 — strip-outputs-subtree helper
+
+(defun a3madkour-pub-research--strip-outputs-subtree (org-text)
+  "Return ORG-TEXT with any top-level * Outputs subtree removed.
+Case-insensitive heading match.  No-op if no Outputs heading found.
+
+Pure-functional: operates on a temp buffer, returns the new string."
+  (with-temp-buffer
+    (insert org-text)
+    (org-mode)
+    (let* ((ast (org-element-parse-buffer))
+           (heading (a3madkour-pub-research--find-outputs-heading ast)))
+      (if (not heading)
+          org-text
+        (let ((begin (org-element-property :begin heading))
+              (end (org-element-property :end heading)))
+          (delete-region begin end)
+          (buffer-substring-no-properties (point-min) (point-max)))))))
+
 ;;; Entry point
 
 (defun a3madkour-pub-research/publish-research-file (file)

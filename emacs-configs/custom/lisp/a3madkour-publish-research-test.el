@@ -111,6 +111,53 @@
            (outputs (a3madkour-pub-research--parse-outputs-table ast "/tmp/x.org")))
       (should (= 1 (length outputs))))))
 
+;;; Task 8 — strip-outputs-subtree tests
+
+(ert-deftest a3madkour-pub-research--strip-outputs-subtree-happy ()
+  "Outputs heading + everything until next same-level heading or EOF is removed."
+  (let* ((src "* Intro
+Body before.
+
+* Outputs                                                  :outputs:
+| kind  | title  | url                  | year |
+|-------+--------+----------------------+------|
+| paper | Foo    | https://example.com  | 2024 |
+
+* After
+Body after.
+")
+         (result (a3madkour-pub-research--strip-outputs-subtree src)))
+    (should (string-match-p "Body before" result))
+    (should (string-match-p "Body after" result))
+    (should-not (string-match-p "^\\* Outputs" result))
+    (should-not (string-match-p "kind " result))))
+
+(ert-deftest a3madkour-pub-research--strip-outputs-subtree-trailing ()
+  "Outputs subtree at end-of-file: stripped to EOF."
+  (let* ((src "* Intro
+Body before.
+
+* Outputs
+| kind  | title | url                 | year |
+|-------+-------+---------------------+------|
+| paper | Foo   | https://example.com | 2024 |
+")
+         (result (a3madkour-pub-research--strip-outputs-subtree src)))
+    (should (string-match-p "Body before" result))
+    (should-not (string-match-p "^\\* Outputs" result))))
+
+(ert-deftest a3madkour-pub-research--strip-outputs-subtree-no-outputs ()
+  "No * Outputs heading → buffer unchanged."
+  (let* ((src "* Intro\nBody.\n* Another\nMore.\n")
+         (result (a3madkour-pub-research--strip-outputs-subtree src)))
+    (should (string= src result))))
+
+(ert-deftest a3madkour-pub-research--strip-outputs-subtree-case-insensitive ()
+  "Lowercased * outputs heading also stripped."
+  (let* ((src "* Intro\nBody.\n\n* outputs\n| k | t | u | y |\n|---+---+---+---|\n| paper | F | https://x | 2024 |\n")
+         (result (a3madkour-pub-research--strip-outputs-subtree src)))
+    (should-not (string-match-p "^\\* outputs" result))))
+
 (provide 'a3madkour-publish-research-test)
 
 ;;; a3madkour-publish-research-test.el ends here
