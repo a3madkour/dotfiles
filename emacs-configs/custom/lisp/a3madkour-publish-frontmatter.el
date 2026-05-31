@@ -12,7 +12,7 @@
 ;;
 ;; SECTION is a symbol from the enum:
 ;;   garden | essays
-;;   research-theme | research-question
+;;   research-themes | research-questions
 ;;   works-games | works-music | works-poetry
 ;;   streams | about
 ;;   library-reading | library-listening | library-playing | library-watching
@@ -46,7 +46,7 @@ Preserves order of remaining tags."
 
 (defconst a3madkour-pub-frontmatter--known-sections
   '(garden essays
-    research-theme research-question
+    research-themes research-questions
     works-games works-music works-poetry
     streams about
     library-reading library-listening library-playing library-watching)
@@ -74,7 +74,7 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
-   ;;   ((memq section '(research-theme research-question))
+   ;;   ((memq section '(research-themes research-questions))
    ;;    (a3madkour-pub-frontmatter--normalize-research section raw-alist source-file))
    ;;   ...
    (t
@@ -146,12 +146,17 @@ Cascade order:
 Returns a YYYY-MM-DD string; never nil.  DRAWER + KEYWORD are passed
 in by per-section normalizers (each section reads them from different
 places — file-level keyword for garden/essays/research, per-heading
-drawer for library)."
-  (or drawer
-      keyword
-      (a3madkour-pub-history/git-mtime-of-file file)
-      (a3madkour-pub-history/filesystem-mtime-of-file file)
-      (format-time-string "%Y-%m-%d")))
+drawer for library).
+
+Empty-string values for DRAWER or KEYWORD are treated as absent: Elisp
+`\"\"' is truthy so a bare `or' would short-circuit on it, returning an
+empty string that the downstream linter rejects."
+  (cl-flet ((nonempty (v) (and (stringp v) (not (string-empty-p v)) v)))
+    (or (nonempty drawer)
+        (nonempty keyword)
+        (nonempty (a3madkour-pub-history/git-mtime-of-file file))
+        (nonempty (a3madkour-pub-history/filesystem-mtime-of-file file))
+        (format-time-string "%Y-%m-%d"))))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
   "B.1: garden frontmatter normalizer.  Covers Tasks 5-8 + hygiene fixes.

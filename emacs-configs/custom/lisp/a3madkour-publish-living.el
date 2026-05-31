@@ -4,8 +4,8 @@
 
 ;; Top-level command for sub-project B's living-surfaces publish.
 ;; Wraps the begin/walk/finish lifecycle around the union of per-section
-;; handlers for living sections (garden, library-*, research-theme,
-;; research-question).
+;; handlers for living sections (garden, library-*, research-themes,
+;; research-questions).
 ;;
 ;; B.0 ships the lifecycle scaffold with an empty handler registry.
 ;; B.1 (garden) is the first slice to register a handler; B.2 (library)

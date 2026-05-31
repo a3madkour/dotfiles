@@ -17,7 +17,7 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
 
 (ert-deftest a3madkour-pub-fm-test/normalize-accepts-all-known-sections ()
   "B.0 — `normalize' dispatches without error for every section enum value."
-  (dolist (section '(garden essays research-theme research-question
+  (dolist (section '(garden essays research-themes research-questions
                      works-games works-music works-poetry
                      streams about
                      library-reading library-listening
@@ -310,6 +310,24 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
     (let ((result (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org"))
           (today (format-time-string "%Y-%m-%d")))
       (should (equal result today)))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-empty-strings-fallthrough ()
+  "Empty-string drawer and keyword values fall through to git/fs/today fallbacks."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2024-01-01"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2025-01-01")))
+    ;; Empty drawer + non-empty keyword → keyword.
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :drawer "" :keyword "2026-05-29")
+                   "2026-05-29"))
+    ;; Empty drawer + empty keyword → git.
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :drawer "" :keyword "")
+                   "2024-01-01"))
+    ;; Both nil → git (preserves Step 6 behavior).
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org")
+                   "2024-01-01"))))
 
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
