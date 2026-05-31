@@ -271,7 +271,14 @@ Hygiene rules (check_garden_fixtures.py compliance):
   "Apply common-across-both-research-types normalization to RAW alist.
 Returns a NEW alist with the cleaned shared fields populated.  Caller
 (theme or question per-type normalizer) layers on the type-specific
-fields and emits the final alist."
+fields and emits the final alist.
+
+Callers are responsible for injecting `description' and `source_stream'
+into RAW before invocation if those fields should be emitted — ox-hugo
+does not natively parse `#+HUGO_DESCRIPTION:' or `#+HUGO_SOURCE_STREAM:'
+into the alist.  Use `a3madkour-pub-frontmatter--inject-description'
+(B.3 Task 2) and the equivalent source-stream helper (when it exists)
+in the per-section normalizer or the handler entry point."
   (let ((out (copy-alist raw)))
     ;; last_modified: cascade.
     (setf (alist-get 'last_modified out)
@@ -281,10 +288,14 @@ fields and emits the final alist."
            :keyword (alist-get 'lastmod raw)))
     ;; Drop ox-hugo's `lastmod' once cascade is resolved.
     (setq out (assq-delete-all 'lastmod out))
-    ;; Tags: filter editorial.
+    ;; Tags: filter editorial.  If the result is empty (all tags were
+    ;; editorial, e.g. only TODO), drop the key entirely rather than
+    ;; emitting tags: [] — matches garden's pattern.
     (when-let ((tags (alist-get 'tags out)))
-      (setf (alist-get 'tags out)
-            (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+      (let ((filtered (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+        (if filtered
+            (setf (alist-get 'tags out) filtered)
+          (setq out (assq-delete-all 'tags out)))))
     ;; description / summary / source_stream are pass-through from raw
     ;; (already present via custom HUGO_* keyword wiring).  Drop only if
     ;; raw value is nil/empty.

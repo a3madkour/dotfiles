@@ -399,5 +399,16 @@ alist value (if any) passes through unchanged."
       (should-not (assq 'source_stream out))
       (should-not (assq 'description out)))))
 
+(ert-deftest a3madkour-pub-frontmatter--research-normalize-common-tags-all-editorial-dropped ()
+  "When every tag is editorial, the filtered result is empty and the tags key is dropped."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "T") (tags . ("TODO" "NOEXPORT"))))
+           (out (a3madkour-pub-frontmatter/research-normalize-common
+                 raw "/tmp/x.org")))
+      (should-not (assq 'tags out)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
