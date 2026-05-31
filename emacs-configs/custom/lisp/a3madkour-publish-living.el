@@ -94,6 +94,13 @@ direct invocation with a mock handler if desired."
     (add-to-list 'a3madkour-pub-living--handlers
                  (cons section 'a3madkour-pub-library/publish-library-file))))
 
+;; B.3: research handler registration (one entry per cascade type,
+;; both pointing at the same `publish-research-file' entry point).
+(with-eval-after-load 'a3madkour-publish-research
+  (dolist (section '("research/themes" "research/questions"))
+    (add-to-list 'a3madkour-pub-living--handlers
+                 (cons section 'a3madkour-pub-research/publish-research-file))))
+
 (provide 'a3madkour-publish-living)
 
 ;;; a3madkour-publish-living.el ends here

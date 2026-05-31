@@ -85,5 +85,15 @@ is not what `note-section' returns)."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+(ert-deftest a3madkour-pub-living-test/research-handlers-registered ()
+  "B.3 — loading a3madkour-publish-research registers both research
+sections (`research/themes', `research/questions') in
+`a3madkour-pub-living--handlers', each pointing at
+`a3madkour-pub-research/publish-research-file'."
+  (require 'a3madkour-publish-research)
+  (dolist (section '("research/themes" "research/questions"))
+    (should (eq (cdr (assoc section a3madkour-pub-living--handlers))
+                'a3madkour-pub-research/publish-research-file))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here
