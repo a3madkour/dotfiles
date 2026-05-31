@@ -27,6 +27,8 @@
 
 ;;; Code:
 
+(require 'a3madkour-publish-keywords)
+
 (defcustom a3madkour-pub-editorial-tags
   '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH")
   "Org tags treated as editorial (org-mode workflow keywords) and
@@ -133,20 +135,18 @@ Returns the first occurrence only."
             "seedling"))))
 
 (defun a3madkour-pub-frontmatter--read-org-keyword (file keyword-name)
-  "Return the value of `#+KEYWORD-NAME:' from FILE, or nil if absent.
-Reads the first matching `#+KEYWORD-NAME: value' line (case-insensitive on
-the key name) from FILE.  The value is trimmed of surrounding whitespace.
-Absent or empty-value keyword returns nil."
+  "Read a single #+KEYWORD: line from FILE.
+KEYWORD-NAME is the keyword (e.g. \"HUGO_DESCRIPTION\"); match is
+case-insensitive.  Returns the trimmed value string or nil if the
+keyword is absent or its value is empty.
+
+Delegates the regex + buffer scan to `a3madkour-pub-keywords/extract'
+to keep a single source of truth; we just wrap it with file I/O."
   (when (file-exists-p file)
     (with-temp-buffer
       (insert-file-contents file)
-      (goto-char (point-min))
-      (let* ((case-fold-search t)
-             (re (format "^#\\+%s:[ \t]+\\(.+\\)$"
-                         (regexp-quote keyword-name))))
-        (when (re-search-forward re nil t)
-          (let ((v (string-trim (match-string 1))))
-            (and (not (string-empty-p v)) v)))))))
+      (let ((v (a3madkour-pub-keywords/extract keyword-name)))
+        (and v (not (string-empty-p v)) v)))))
 
 (defun a3madkour-pub-frontmatter--inject-description (raw-alist source-file)
   "Inject `#+HUGO_DESCRIPTION:' from SOURCE-FILE into RAW-ALIST as `description'.
@@ -160,7 +160,14 @@ key (if any) passes through, and no key is added when neither source is set.
 
 This parallels the HUGO_GROWTH_STAGE wiring used by the garden normalizer
 and is the shared infrastructure required by both research-themes and
-research-questions normalizers (B.3 Tasks 3-4)."
+research-questions normalizers (B.3 Tasks 3-4).
+
+This differs from `a3madkour-pub-frontmatter--derive-growth-stage':
+that function preserves a pre-existing raw-alist value via `or'.
+`--inject-description' always wins because ox-hugo does not natively
+parse `#+HUGO_DESCRIPTION:' into the alist, so any pre-existing
+`description' key came from `#+DESCRIPTION:' (a different ox-hugo
+mechanism we intentionally override)."
   (let* ((out (copy-alist raw-alist))
          (kw-val (a3madkour-pub-frontmatter--read-org-keyword
                   source-file "HUGO_DESCRIPTION")))

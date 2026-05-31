@@ -363,7 +363,7 @@ alist value (if any) passes through unchanged."
                          "from-ox-hugo"))
           ;; Absent + nothing in raw alist: description key not added.
           (let ((out (a3madkour-pub-frontmatter--inject-description '() src)))
-            (should-not (assq 'description out))))
+            (should (null (alist-get 'description out)))))
       (delete-file src))))
 
 (provide 'a3madkour-publish-frontmatter-test)
