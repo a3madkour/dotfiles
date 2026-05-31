@@ -112,6 +112,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-deliberate \
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
+    -l a3madkour-publish-research \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
     --eval "(a3-publish-living)" \
     --eval "(kill-emacs 0)" \
@@ -158,6 +159,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-deliberate \
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
+    -l a3madkour-publish-research \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
     --eval "(condition-case err
               (a3-publish-deliberate \"$target_path\")
@@ -191,5 +193,6 @@ exec emacs --batch \
   -l a3madkour-publish-deliberate \
   -l a3madkour-publish-garden \
   -l a3madkour-publish-library \
+  -l a3madkour-publish-research \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"
