@@ -75,11 +75,11 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (a3madkour-pub-frontmatter--normalize-garden raw-alist source-file))
    ((eq section 'research-themes)
     (a3madkour-pub-frontmatter--normalize-research-theme raw-alist source-file))
+   ((eq section 'research-questions)
+    (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
-   ;;   ((eq section 'research-questions)
-   ;;    (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
    ;;   ...
    (t
     ;; B.0 pass-through for sections not yet handled.
@@ -297,6 +297,46 @@ is the hard gate.")
                    (if file (file-name-nondirectory file) "unknown") raw)
           nil))))
    (t nil)))
+
+(defun a3madkour-pub-frontmatter--parse-slug-list (raw)
+  "Parse a space-delimited slug-list string RAW into a list of strings.
+Empty string or nil → nil."
+  (cond
+   ((null raw) nil)
+   ((listp raw) raw)
+   ((stringp raw)
+    (let ((trimmed (string-trim raw)))
+      (when (and trimmed (not (string-empty-p trimmed)))
+        (split-string trimmed "[ \t]+" t))))
+   (t nil)))
+
+(defun a3madkour-pub-frontmatter--normalize-research-question (raw file)
+  "Normalize a research-question RAW alist.  Returns the cleaned alist."
+  (let ((out (a3madkour-pub-frontmatter/research-normalize-common raw file)))
+    ;; Status enum check.
+    (let ((status (alist-get 'status out)))
+      (unless (member status a3madkour-pub-frontmatter--research-statuses)
+        (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
+                 (if file (file-name-nondirectory file) "unknown") status
+                 a3madkour-pub-frontmatter--research-statuses)))
+    ;; Weight coercion — drop key if coerce returns nil (matches theme post-T5 fix).
+    (when-let ((raw-w (alist-get 'weight out)))
+      (let ((coerced (a3madkour-pub-frontmatter--coerce-weight raw-w file)))
+        (if coerced
+            (setf (alist-get 'weight out) coerced)
+          (setq out (assq-delete-all 'weight out)))))
+    ;; Slug-list parses (supporting_notes, related_essays).
+    (dolist (key '(supporting_notes related_essays))
+      (let* ((raw-v (alist-get key out))
+             (parsed (a3madkour-pub-frontmatter--parse-slug-list raw-v)))
+        (if parsed
+            (setf (alist-get key out) parsed)
+          (setq out (assq-delete-all key out)))))
+    ;; outputs: emitted separately in Task 9 (publish-research-file injects
+    ;; the parsed outputs plist list).  At normalize time, drop any pre-
+    ;; existing outputs key from raw (should never appear via custom keywords).
+    (setq out (assq-delete-all 'outputs out))
+    out))
 
 (defun a3madkour-pub-frontmatter--normalize-research-theme (raw file)
   "Normalize a research-theme RAW alist.  Returns the cleaned alist."
