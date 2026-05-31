@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-05-24 Sun]
+:LAST_MODIFIED: [2026-05-29 Fri]
 :END:
 
 * Bootstrap
@@ -1277,10 +1277,9 @@ Standard activation from the [[https://github.com/lassik/emacs-format-all-the-co
 (use-package py-isort)
 (use-package pyimport)
 (use-package python-pytest)
-(use-package conda)
-(use-package anaconda-mode)
 (use-package jupyter)
-
+(use-package uv-mode
+  :hook (python-mode . uv-mode-auto-activate-hook))
 ;;uv I LOVE YOU DUDE: https://mclare.blog/posts/using-uv-in-emacs/
 (defun uv-activate ()
   "Activate Python environment managed by uv based on current project directory.
