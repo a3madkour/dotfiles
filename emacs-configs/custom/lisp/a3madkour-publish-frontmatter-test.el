@@ -410,5 +410,65 @@ alist value (if any) passes through unchanged."
                  raw "/tmp/x.org")))
       (should-not (assq 'tags out)))))
 
+(ert-deftest a3madkour-pub-frontmatter--research-theme-required-fields ()
+  "Theme required fields land in the output alist."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "Memory and play")
+                  (description . "How readers assemble fragments.")
+                  (status . "active")
+                  (weight . "10")
+                  (garden_topic_ref . "memory-in-play")
+                  (tags . ("memory" "play"))))
+           (out (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org")))
+      (should (equal (alist-get 'title out) "Memory and play"))
+      (should (equal (alist-get 'status out) "active"))
+      (should (equal (alist-get 'weight out) 10))     ; coerced int
+      (should (equal (alist-get 'garden_topic_ref out) "memory-in-play")))))
+
+(ert-deftest a3madkour-pub-frontmatter--research-theme-weight-octal-safe ()
+  "weight string parsing is octal-safe (per [[hugo-int-octal-gotcha]])."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "Z") (description . "x") (status . "active")
+                  (weight . "08")))
+           (out (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org")))
+      ;; "08" must NOT octal-trap into a parse error; expect int 8.
+      (should (equal (alist-get 'weight out) 8)))))
+
+(ert-deftest a3madkour-pub-frontmatter--research-theme-forbidden-fields-dropped ()
+  "parent_question + theme silently dropped on themes (linter is the gate)."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "T")
+                  (description . "x")
+                  (status . "active")
+                  (parent_question . "qslug")
+                  (theme . "other-theme")))
+           (out (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org")))
+      (should-not (assq 'parent_question out))
+      (should-not (assq 'theme out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--research-theme-status-enum-warn ()
+  "Out-of-enum status WARNs but still emits."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let* ((raw '((title . "T") (description . "x") (status . "bogus")))
+           (warnings '())
+           (out (cl-letf (((symbol-function 'message)
+                           (lambda (fmt &rest args)
+                             (push (apply #'format fmt args) warnings))))
+                  (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org"))))
+      (should (equal (alist-get 'status out) "bogus"))
+      (should (seq-some (lambda (m) (string-match-p "status.*bogus.*not in" m)) warnings)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

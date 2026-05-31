@@ -73,11 +73,13 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
   (cond
    ((eq section 'garden)
     (a3madkour-pub-frontmatter--normalize-garden raw-alist source-file))
+   ((eq section 'research-themes)
+    (a3madkour-pub-frontmatter--normalize-research-theme raw-alist source-file))
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
-   ;;   ((memq section '(research-themes research-questions))
-   ;;    (a3madkour-pub-frontmatter--normalize-research section raw-alist source-file))
+   ;;   ((eq section 'research-questions)
+   ;;    (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
    ;;   ...
    (t
     ;; B.0 pass-through for sections not yet handled.
@@ -265,6 +267,53 @@ Hygiene rules (check_garden_fixtures.py compliance):
     (when-let ((tags (alist-get 'tags out)))
       (setf (alist-get 'tags out)
             (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+    out))
+
+(defconst a3madkour-pub-frontmatter--research-statuses
+  '("active" "dormant" "answered")
+  "Allowed status values for research themes + questions
+(per check_research_fixtures.py STATUSES).")
+
+(defconst a3madkour-pub-frontmatter--theme-forbidden
+  '(parent_question theme)
+  "Frontmatter keys forbidden on themes (per check_research_fixtures.py
+THEME_FORBIDDEN).  Dropped silently in the normalizer; site linter
+is the hard gate.")
+
+(defun a3madkour-pub-frontmatter--coerce-weight (raw file)
+  "Coerce RAW weight value to int.  String '08' must not octal-trap
+(per [[hugo-int-octal-gotcha]]).  Non-numeric raw → WARN + nil."
+  (cond
+   ((null raw) nil)
+   ((integerp raw) raw)
+   ((stringp raw)
+    (let ((cleaned (string-trim raw)))
+      (cond
+       ((string-empty-p cleaned) nil)
+       ;; Float-trip avoids the octal trap.
+       ((string-match-p "^[+-]?[0-9]+\\(\\.[0-9]+\\)?$" cleaned)
+        (truncate (string-to-number cleaned)))
+       (t (message "a3madkour-pub-frontmatter WARN [%s]: weight=%S non-numeric"
+                   (file-name-nondirectory file) raw)
+          nil))))
+   (t nil)))
+
+(defun a3madkour-pub-frontmatter--normalize-research-theme (raw file)
+  "Normalize a research-theme RAW alist.  Returns the cleaned alist."
+  (let ((out (a3madkour-pub-frontmatter/research-normalize-common raw file)))
+    ;; Status enum check (WARN-don't-fail).
+    (let ((status (alist-get 'status out)))
+      (unless (member status a3madkour-pub-frontmatter--research-statuses)
+        (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
+                 (file-name-nondirectory file) status
+                 a3madkour-pub-frontmatter--research-statuses)))
+    ;; Weight coercion to int (octal-safe).
+    (when-let ((raw-w (alist-get 'weight out)))
+      (setf (alist-get 'weight out)
+            (a3madkour-pub-frontmatter--coerce-weight raw-w file)))
+    ;; Drop forbidden keys silently.
+    (dolist (key a3madkour-pub-frontmatter--theme-forbidden)
+      (setq out (assq-delete-all key out)))
     out))
 
 (defun a3madkour-pub-frontmatter/research-normalize-common (raw source-file)
