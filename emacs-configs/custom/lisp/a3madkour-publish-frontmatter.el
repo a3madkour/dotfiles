@@ -300,7 +300,12 @@ is the hard gate.")
 
 (defun a3madkour-pub-frontmatter--parse-slug-list (raw)
   "Parse a space-delimited slug-list string RAW into a list of strings.
-Empty string or nil → nil."
+
+Contract:
+  nil    → nil
+  list   → returned as-is (defensive against pre-parsed input)
+  string → trimmed; empty → nil; otherwise split on whitespace
+  other  → nil"
   (cond
    ((null raw) nil)
    ((listp raw) raw)
@@ -332,9 +337,10 @@ Empty string or nil → nil."
         (if parsed
             (setf (alist-get key out) parsed)
           (setq out (assq-delete-all key out)))))
-    ;; outputs: emitted separately in Task 9 (publish-research-file injects
-    ;; the parsed outputs plist list).  At normalize time, drop any pre-
-    ;; existing outputs key from raw (should never appear via custom keywords).
+    ;; outputs: never arrives in raw via the custom keyword path (no
+    ;; HUGO_OUTPUTS keyword exists).  Defensive cleanup only.  The real
+    ;; outputs value is injected by publish-research-file (Task 9) after
+    ;; this normalizer returns, parsed from the * Outputs org table.
     (setq out (assq-delete-all 'outputs out))
     out))
 
@@ -345,7 +351,7 @@ Empty string or nil → nil."
     (let ((status (alist-get 'status out)))
       (unless (member status a3madkour-pub-frontmatter--research-statuses)
         (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
-                 (file-name-nondirectory file) status
+                 (if file (file-name-nondirectory file) "unknown") status
                  a3madkour-pub-frontmatter--research-statuses)))
     ;; Weight coercion to int (octal-safe).  Drop the key when coercion
     ;; returns nil (non-numeric raw) rather than leaving (weight . nil)
