@@ -132,6 +132,27 @@ Returns the first occurrence only."
         (or (and progress (cdr (assoc progress a3madkour-pub-frontmatter--progress->stage)))
             "seedling"))))
 
+(cl-defun a3madkour-pub-frontmatter/last-modified-cascade
+    (file &key drawer keyword)
+  "Resolve the last_modified value for FILE via the 5-step cascade.
+
+Cascade order:
+  1. DRAWER (the :LAST_MODIFIED: property if present in the source)
+  2. KEYWORD (the #+HUGO_LASTMOD: keyword value if present)
+  3. git-mtime via `a3madkour-pub-history/git-mtime-of-file'
+  4. filesystem mtime via `a3madkour-pub-history/filesystem-mtime-of-file'
+  5. today (`format-time-string \"%Y-%m-%d\"')
+
+Returns a YYYY-MM-DD string; never nil.  DRAWER + KEYWORD are passed
+in by per-section normalizers (each section reads them from different
+places — file-level keyword for garden/essays/research, per-heading
+drawer for library)."
+  (or drawer
+      keyword
+      (a3madkour-pub-history/git-mtime-of-file file)
+      (a3madkour-pub-history/filesystem-mtime-of-file file)
+      (format-time-string "%Y-%m-%d")))
+
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
   "B.1: garden frontmatter normalizer.  Covers Tasks 5-8 + hygiene fixes.
 
@@ -161,23 +182,24 @@ Hygiene rules (check_garden_fixtures.py compliance):
     (setq out (assq-delete-all 'author out))
     ;; Hygiene: ox-hugo emits #+HUGO_LASTMOD: as `lastmod:' (its own field
     ;; name), but the garden linter rejects `lastmod:' on concept notes and
-    ;; requires `last_modified:'. Rename when present; otherwise derive from
-    ;; the source file's mtime in YYYY-MM-DD form (git-mtime is the §7
-    ;; open-Q-5 follow-up).
-    (let ((lastmod (alist-get 'lastmod out)))
-      (when (and lastmod (not (alist-get 'last_modified out)))
-        ;; ox-hugo formats HUGO_LASTMOD as ISO datetime ("2024-12-18T..."); take
-        ;; the YYYY-MM-DD prefix.
-        (setf (alist-get 'last_modified out)
-              (if (and (stringp lastmod) (>= (length lastmod) 10))
-                  (substring lastmod 0 10)
-                lastmod)))
-      (setq out (assq-delete-all 'lastmod out)))
-    (unless (alist-get 'last_modified out)
+    ;; requires `last_modified:'.  Resolve via the 5-step cascade:
+    ;;   1. explicit last_modified in raw-alist (e.g. :LAST_MODIFIED: drawer)
+    ;;   2. lastmod keyword (ox-hugo's ISO datetime truncated to YYYY-MM-DD)
+    ;;   3. git-mtime of source-file
+    ;;   4. filesystem mtime of source-file
+    ;;   5. today
+    (let* ((drawer-lm (alist-get 'last_modified out))
+           (lastmod   (alist-get 'lastmod out))
+           ;; ox-hugo formats HUGO_LASTMOD as ISO datetime ("2024-12-18T...");
+           ;; take the YYYY-MM-DD prefix for the keyword slot.
+           (keyword-lm (when (and (stringp lastmod) (>= (length lastmod) 10))
+                         (substring lastmod 0 10))))
+      (setq out (assq-delete-all 'lastmod out))
       (setf (alist-get 'last_modified out)
-            (format-time-string "%Y-%m-%d"
-                                (file-attribute-modification-time
-                                 (file-attributes source-file)))))
+            (a3madkour-pub-frontmatter/last-modified-cascade
+             source-file
+             :drawer  drawer-lm
+             :keyword keyword-lm)))
     ;; Task 7: topic_map coerce to slug list; only emit when non-nil.
     (let ((tm (a3madkour-pub-frontmatter--coerce-slug-list
                (alist-get 'topic_map raw-alist))))

@@ -374,6 +374,23 @@ when non-nil, ignoring disk."
           (should-not (a3madkour-pub-history/git-mtime-of-file file)))
       (delete-directory tmpdir t))))
 
+(ert-deftest a3madkour-pub-history--filesystem-mtime-existing-file ()
+  "filesystem-mtime-of-file returns YYYY-MM-DD for an existing file."
+  (let* ((tmpdir (make-temp-file "a3-pub-fsmtime-" t))
+         (file (expand-file-name "x.org" tmpdir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "content\n"))
+          (let ((result (a3madkour-pub-history/filesystem-mtime-of-file file)))
+            (should (stringp result))
+            (should (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" result))))
+      (delete-directory tmpdir t))))
+
+(ert-deftest a3madkour-pub-history--filesystem-mtime-missing-file ()
+  "filesystem-mtime-of-file returns nil for a missing file."
+  (should-not (a3madkour-pub-history/filesystem-mtime-of-file
+               "/nonexistent/path/x.org")))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here

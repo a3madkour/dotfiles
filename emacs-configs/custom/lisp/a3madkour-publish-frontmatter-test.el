@@ -263,5 +263,53 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
          (out (a3madkour-pub-frontmatter/normalize 'garden raw "/tmp/x.org")))
     (should (equal (alist-get 'tags out) '("Bayesian" "stats")))))
 
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-drawer-wins ()
+  ":LAST_MODIFIED: drawer beats keyword + git-mtime + fs-mtime."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2024-01-01"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2025-01-01")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :drawer "2026-05-30" :keyword "2026-05-29")
+                   "2026-05-30"))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-keyword-second ()
+  "#+HUGO_LASTMOD: keyword wins when drawer absent."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2024-01-01"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2025-01-01")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :keyword "2026-05-29")
+                   "2026-05-29"))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-git-third ()
+  "git-mtime wins when drawer + keyword absent."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2024-01-01"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2025-01-01")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org")
+                   "2024-01-01"))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-fs-fourth ()
+  "fs-mtime wins when drawer + keyword + git absent."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2025-01-01")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org")
+                   "2025-01-01"))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-today-fallback ()
+  "today is the ultimate fallback when nothing else resolves."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) nil)))
+    (let ((result (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org"))
+          (today (format-time-string "%Y-%m-%d")))
+      (should (equal result today)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

@@ -272,6 +272,20 @@ respectively)."
                  (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" trimmed))
         trimmed))))
 
+(defun a3madkour-pub-history/filesystem-mtime-of-file (file)
+  "Return the YYYY-MM-DD filesystem mtime of FILE.
+Returns nil when FILE does not exist.
+
+Used as the ultimate fallback for `last_modified' when neither
+:LAST_MODIFIED: drawer, #+HUGO_LASTMOD: keyword, nor git-mtime
+\(`--git-mtime-of-file') yields a value.  Best-effort idempotence —
+editor saves with no content change bump mtime and will produce a
+publish diff."
+  (when (file-exists-p file)
+    (format-time-string "%Y-%m-%d"
+                        (file-attribute-modification-time
+                         (file-attributes file)))))
+
 (provide 'a3madkour-publish-history)
 
 ;;; a3madkour-publish-history.el ends here
