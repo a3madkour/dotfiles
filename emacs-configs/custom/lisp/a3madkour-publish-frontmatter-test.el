@@ -366,5 +366,38 @@ alist value (if any) passes through unchanged."
             (should (null (alist-get 'description out)))))
       (delete-file src))))
 
+(ert-deftest a3madkour-pub-frontmatter--research-normalize-common-shape ()
+  "Common-field normalize covers title/draft/last_modified/tags/description/summary/source_stream."
+  (let* ((raw '((title . "Theme One")
+                (draft . nil)
+                (lastmod . "2026-05-30")
+                (tags . ("alpha" "TODO" "beta"))
+                (description . "A short description.")
+                (summary . "An umbrella thread.")
+                (source_stream . "2026-04-10-example-stream")))
+         (out (a3madkour-pub-frontmatter/research-normalize-common
+               raw "/tmp/x.org")))
+    (should (equal (alist-get 'title out) "Theme One"))
+    (should (equal (alist-get 'last_modified out) "2026-05-30"))
+    (should (equal (alist-get 'tags out) '("alpha" "beta")))   ; TODO filtered
+    (should (equal (alist-get 'description out) "A short description."))
+    (should (equal (alist-get 'summary out) "An umbrella thread."))
+    (should (equal (alist-get 'source_stream out) "2026-04-10-example-stream"))))
+
+(ert-deftest a3madkour-pub-frontmatter--research-normalize-common-defaults ()
+  "Missing optional keys are not emitted; required keys derive from cascade."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-01-15"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-01-15")))
+    (let* ((raw '((title . "Q1")))
+           (out (a3madkour-pub-frontmatter/research-normalize-common
+                 raw "/tmp/x.org")))
+      (should (equal (alist-get 'title out) "Q1"))
+      (should (equal (alist-get 'last_modified out) "2026-01-15"))
+      (should-not (assq 'summary out))
+      (should-not (assq 'source_stream out))
+      (should-not (assq 'description out)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

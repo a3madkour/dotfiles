@@ -267,6 +267,33 @@ Hygiene rules (check_garden_fixtures.py compliance):
             (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
     out))
 
+(defun a3madkour-pub-frontmatter/research-normalize-common (raw source-file)
+  "Apply common-across-both-research-types normalization to RAW alist.
+Returns a NEW alist with the cleaned shared fields populated.  Caller
+(theme or question per-type normalizer) layers on the type-specific
+fields and emits the final alist."
+  (let ((out (copy-alist raw)))
+    ;; last_modified: cascade.
+    (setf (alist-get 'last_modified out)
+          (a3madkour-pub-frontmatter/last-modified-cascade
+           source-file
+           :drawer (alist-get 'last_modified raw)
+           :keyword (alist-get 'lastmod raw)))
+    ;; Drop ox-hugo's `lastmod' once cascade is resolved.
+    (setq out (assq-delete-all 'lastmod out))
+    ;; Tags: filter editorial.
+    (when-let ((tags (alist-get 'tags out)))
+      (setf (alist-get 'tags out)
+            (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+    ;; description / summary / source_stream are pass-through from raw
+    ;; (already present via custom HUGO_* keyword wiring).  Drop only if
+    ;; raw value is nil/empty.
+    (dolist (key '(description summary source_stream))
+      (let ((v (alist-get key out)))
+        (when (or (null v) (and (stringp v) (string-empty-p v)))
+          (setq out (assq-delete-all key out)))))
+    out))
+
 (provide 'a3madkour-publish-frontmatter)
 
 ;;; a3madkour-publish-frontmatter.el ends here
