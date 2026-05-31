@@ -172,6 +172,11 @@ Body before.
   (should (string= "[\"tag1\", \"tag2\"]"
                    (a3madkour-pub-research--render-yaml-value '("tag1" "tag2")))))
 
+(ert-deftest a3madkour-pub-research--render-yaml-value-list-non-string-errors ()
+  "List branch errors on non-string elements."
+  (should-error (a3madkour-pub-research--render-yaml-value '((:kind "x")))
+                :type 'error))
+
 (ert-deftest a3madkour-pub-research--render-outputs-yaml-single-row ()
   "Single output row renders as a block sequence item."
   (let ((outputs (list (list :kind "paper" :title "Test Paper"
@@ -251,6 +256,9 @@ Body before.
           (let ((a3madkour-pub/site-data-dir
                  (file-name-as-directory (expand-file-name "data" site-dir)))
                 (a3madkour-pub/org-notes-dir notes-dir))
+            ;; begin-publish / finish-publish wrap the manifest-snapshot lifecycle —
+            ;; e2e tests that touch publish-research-file must include them or the
+            ;; defvar leaks into subsequent tests.
             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
               (a3madkour-pub/begin-publish)
               (a3madkour-pub-research/publish-research-file src)

@@ -153,22 +153,10 @@ Pure-functional: operates on a temp buffer, returns the new string."
   "Regex for bare YYYY-MM-DD date strings.
 Emitted unquoted so PyYAML / Hugo parse them as native date objects.")
 
-(defun a3madkour-pub-research--render-yaml-scalar (v)
-  "Render V as a YAML scalar value.
-Strings → \"...\"; YYYY-MM-DD → unquoted (YAML native date);
-numbers → as-is; t → true; nil → false."
-  (cond
-   ((null v)    "false")
-   ((eq v t)    "true")
-   ((and (stringp v)
-         (string-match-p a3madkour-pub-research--date-re v))
-    v)
-   ((stringp v) (format "\"%s\"" v))
-   ((numberp v) (format "%s" v))))
-
 (defun a3madkour-pub-research--render-yaml-value (v)
   "Render V as a YAML value.  Lists of strings render as [...].
-For structured outputs lists use `--render-outputs-yaml'."
+Lists must contain only strings; for structured lists (list of plists,
+e.g. outputs), use `--render-outputs-yaml' instead."
   (cond
    ((null v)    "false")
    ((eq v t)    "true")
@@ -178,6 +166,9 @@ For structured outputs lists use `--render-outputs-yaml'."
    ((stringp v) (format "\"%s\"" v))
    ((numberp v) (format "%s" v))
    ((listp v)
+    (unless (cl-every #'stringp v)
+      (error "a3madkour-pub-research--render-yaml-value: list contains \
+non-string element; caller must use --render-outputs-yaml for structured lists"))
     (format "[%s]"
             (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
 
