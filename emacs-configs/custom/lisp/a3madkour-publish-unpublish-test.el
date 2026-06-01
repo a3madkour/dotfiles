@@ -867,5 +867,97 @@ and emits a [a3-pub] WARN message including the bundle path."
                                captured-messages)))))
       (delete-directory root t))))
 
+;; -- B.4 Task 2: finish-publish :scope keyword --
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-deliberate-skips-step-a ()
+  "B.4: :scope 'deliberate does NOT delete bundles for ids missing from
+the accumulator.  Seed manifest with 3 live ids; accumulator has only
+id-a; assert no `record-publish' with state `removed' fired."
+  (let ((tmp-data-dir (make-temp-file "a3-pub-data-" t))
+        (tmp-content (make-temp-file "a3-pub-content-" t))
+        removed-ids)
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir (file-name-as-directory tmp-data-dir))
+              (a3madkour-pub--manifest-snapshot
+               '((notes . [((id . "id-a") (current_url . "/garden/a/") (state . "live"))
+                           ((id . "id-b") (current_url . "/garden/b/") (state . "live"))
+                           ((id . "id-c") (current_url . "/garden/c/") (state . "live"))]))))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-a" (cons "/garden/a/" 'live) a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                     (lambda (&rest _) (error "delete-bundle should not be called")))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (id _url state)
+                       (when (eq state 'removed) (push id removed-ids)))))
+            (a3madkour-pub/finish-publish :scope 'deliberate))
+          (should-not removed-ids))
+      (delete-directory tmp-data-dir t)
+      (delete-directory tmp-content t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-deliberate-step-b-narrows ()
+  "B.4: :scope 'deliberate runs Step B only for the touched id.
+Manifest has id-a at /garden/a/; accumulator has id-a at /garden/a-renamed/
+AND manifest has id-b at /garden/b-old/ that's NOT in accumulator.
+Step B fires for id-a only."
+  (let ((tmp-data-dir (make-temp-file "a3-pub-data-" t))
+        renamed-pairs)
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir (file-name-as-directory tmp-data-dir))
+              (a3madkour-pub--manifest-snapshot
+               '((notes . [((id . "id-a") (current_url . "/garden/a/") (state . "live"))
+                           ((id . "id-b") (current_url . "/garden/b-old/") (state . "live"))]))))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-a" (cons "/garden/a-renamed/" 'live)
+                   a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub--unpublish-rename-asset-dir)
+                     (lambda (old new &rest _) (push (cons old new) renamed-pairs)))
+                    ((symbol-function 'a3madkour-pub--unpublish-bulk-rewrite-source-links)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (&rest _) nil)))
+            (a3madkour-pub/finish-publish :scope 'deliberate))
+          (should (equal renamed-pairs '(("a" . "a-renamed")))))
+      (delete-directory tmp-data-dir t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-deliberate-step-c-skipped ()
+  "B.4: :scope 'deliberate returns :orphan-warnings nil (Step C never ran)."
+  (let ((tmp-data-dir (make-temp-file "a3-pub-data-" t)))
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir (file-name-as-directory tmp-data-dir))
+              (a3madkour-pub--manifest-snapshot
+               '((notes . [((id . "id-a") (current_url . "/garden/a/") (state . "live"))]))))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-a" (cons "/garden/a/" 'live) a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub--unpublish-recheck-live-note-links)
+                     (lambda (&rest _) (error "recheck should not be called"))))
+            (let ((result (a3madkour-pub/finish-publish :scope 'deliberate)))
+              (should-not (plist-get result :orphan-warnings)))))
+      (delete-directory tmp-data-dir t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-living-default-unchanged ()
+  "B.4: :scope defaults to 'living; called with no kwargs runs full
+Step A + B + C (existing behavior).  Sanity check that the kwarg
+addition didn't regress the default path."
+  (let ((tmp-data-dir (make-temp-file "a3-pub-data-" t))
+        deleted-bundles)
+    (unwind-protect
+        (let ((a3madkour-pub/site-data-dir (file-name-as-directory tmp-data-dir))
+              (a3madkour-pub--manifest-snapshot
+               '((notes . [((id . "id-a") (current_url . "/garden/a/") (state . "live"))
+                           ((id . "id-b") (current_url . "/garden/b/") (state . "live"))]))))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-a" (cons "/garden/a/" 'live) a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                     (lambda (section slug &rest _) (push (cons section slug) deleted-bundles)))
+                    ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub--unpublish-recheck-live-note-links)
+                     (lambda (&rest _) nil)))
+            (a3madkour-pub/finish-publish))
+          ;; Living scope: id-b is "removed" (not in accumulator), bundle deleted.
+          (should (member '("garden" . "b") deleted-bundles)))
+      (delete-directory tmp-data-dir t))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

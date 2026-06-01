@@ -193,20 +193,30 @@ yield (\"research/questions\" . \"q\")."
         (cons (mapconcat #'identity (butlast parts) "/")
               (car (last parts)))))))
 
-(cl-defun a3madkour-pub/finish-publish (&key dry-run)
+(cl-defun a3madkour-pub/finish-publish (&key dry-run (scope 'living))
   "Orchestrate the unpublish flow.  Returns a plist.
 
-When DRY-RUN is non-nil: no FS writes, no manifest mutation.  Useful for
-`--check-orphans' preview.  Step C still runs in dry-run (it's read-only).
+When DRY-RUN is non-nil: no FS writes, no manifest mutation.
+
+SCOPE is `'living' (default) or `'deliberate'.  `'living' runs the
+full Step A unpublish-sweep + Step B slug-shift + Step C re-link-check
+against the diff of new-set vs manifest.  `'deliberate' skips Step A
+and Step C entirely (the accumulator carries only the touched files,
+so `\"missing from accumulator\"' has no meaning) and narrows Step B
+to the single accumulator entry's slug-shift if its URL differs from
+the manifest.
 
 Sub-steps (in fixed order):
   Step A — unpublish sweep: diff new live-set vs manifest live+draft;
            for each :removed, delete `content/<section>/<slug>/' bundle +
            call `record-publish' with state `removed' to mutate manifest.
+           SKIPPED under `'deliberate'.
   Step B — slug-shift sync: rename `<asset-root>/page/<old-slug>/' →
            `<new-slug>/' and bulk-rewrite source .org link references.
+           Under `'deliberate', narrowed to the single accumulator entry.
   Step C — re-link-check: scan live notes' outgoing [[id:...]] links;
            WARN for any link resolving into removed-this-publish-set.
+           SKIPPED under `'deliberate'.
 
 New-set is read from `a3madkour-pub--publish-run-accumulator' (B-coupled
 mode); if empty, falls back to `walk-published-source-set' (standalone
@@ -224,42 +234,52 @@ Returns:
          (diff (a3madkour-pub/diff-published-set new-set))
          (removed (plist-get diff :removed))
          (shifts (plist-get diff :slug-shifted))
-         (manifest (a3madkour-pub-history/read-manifest))
+         (manifest (a3madkour-pub-history/read-manifest-snapshot-or-disk))
          (notes (alist-get 'notes manifest))
          (removed-set (make-hash-table :test 'equal))
          slug-shifted-result orphan-warnings)
-    ;; Step A: sweep.
-    (dolist (id removed)
-      (puthash id t removed-set)
-      (let* ((idx (a3madkour-pub-history--find-note-by-id notes id))
-             (entry (when idx (aref notes idx)))
-             (url (when entry (alist-get 'current_url entry)))
-             (parts (when url (a3madkour-pub--unpublish-url-to-section-slug url))))
-        (when (and parts (not dry-run))
-          (a3madkour-pub--unpublish-delete-bundle (car parts) (cdr parts))
-          (a3madkour-pub-history/record-publish id nil 'removed))))
-    ;; Step B: slug-shift sync.
-    (dolist (shift shifts)
-      (let* ((old-url (nth 1 shift))
-             (new-url (nth 2 shift))
-             (old-parts (a3madkour-pub--unpublish-url-to-section-slug old-url))
-             (new-parts (a3madkour-pub--unpublish-url-to-section-slug new-url)))
-        (when (and old-parts new-parts)
-          (let ((old-slug (cdr old-parts))
-                (new-slug (cdr new-parts)))
-            (unless dry-run
-              (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
-              (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug)
-              ;; Delete the orphan Hugo content bundle at the old slug.
-              ;; The per-section handler already wrote a new bundle at the
-              ;; new slug; without this call the old bundle stays as dead
-              ;; content.  Runs regardless of asset-rename outcome — the
-              ;; bundle and the asset dir are independent artifacts.
-              (a3madkour-pub--unpublish-delete-bundle
-               (car old-parts) (cdr old-parts)))
-            (push (cons old-slug new-slug) slug-shifted-result)))))
-    ;; Step C: re-link-check (read-only; runs in dry-run too).
-    (when (> (hash-table-count removed-set) 0)
+    ;; Step A: sweep.  Skipped under 'deliberate.
+    (unless (eq scope 'deliberate)
+      (dolist (id removed)
+        (puthash id t removed-set)
+        (let* ((idx (a3madkour-pub-history--find-note-by-id notes id))
+               (entry (when idx (aref notes idx)))
+               (url (when entry (alist-get 'current_url entry)))
+               (parts (when url (a3madkour-pub--unpublish-url-to-section-slug url))))
+          (when (and parts (not dry-run))
+            (a3madkour-pub--unpublish-delete-bundle (car parts) (cdr parts))
+            (a3madkour-pub-history/record-publish id nil 'removed)))))
+    ;; Step B: slug-shift sync.  Under 'deliberate, narrow to touched ids.
+    (let ((deliberate-ids
+           (when (eq scope 'deliberate)
+             (let ((ids nil))
+               (maphash (lambda (k _v) (push k ids))
+                        a3madkour-pub--publish-run-accumulator)
+               ids))))
+      (dolist (shift shifts)
+        (when (or (not (eq scope 'deliberate))
+                  (member (car shift) deliberate-ids))
+          (let* ((old-url (nth 1 shift))
+                 (new-url (nth 2 shift))
+                 (old-parts (a3madkour-pub--unpublish-url-to-section-slug old-url))
+                 (new-parts (a3madkour-pub--unpublish-url-to-section-slug new-url)))
+            (when (and old-parts new-parts)
+              (let ((old-slug (cdr old-parts))
+                    (new-slug (cdr new-parts)))
+                (unless dry-run
+                  (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
+                  (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug)
+                  ;; Delete the orphan Hugo content bundle at the old slug.
+                  ;; The per-section handler already wrote a new bundle at the
+                  ;; new slug; without this call the old bundle stays as dead
+                  ;; content.  Runs regardless of asset-rename outcome — the
+                  ;; bundle and the asset dir are independent artifacts.
+                  (a3madkour-pub--unpublish-delete-bundle
+                   (car old-parts) (cdr old-parts)))
+                (push (cons old-slug new-slug) slug-shifted-result)))))))
+    ;; Step C: re-link-check (read-only; runs in dry-run too).  Skipped under 'deliberate.
+    (when (and (not (eq scope 'deliberate))
+               (> (hash-table-count removed-set) 0))
       (setq orphan-warnings
             (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
     ;; B.0: clear manifest snapshot now that the publish run is over.
@@ -267,7 +287,7 @@ Returns:
     (setq a3madkour-pub--manifest-snapshot nil)
     (list :added (plist-get diff :added)
           :stayed (plist-get diff :stayed)
-          :removed removed
+          :removed (if (eq scope 'deliberate) nil removed)
           :slug-shifted (nreverse slug-shifted-result)
           :orphan-warnings orphan-warnings)))
 
