@@ -645,5 +645,34 @@ alist value (if any) passes through unchanged."
                                     (alist-get 'lastmod out)))))
       (delete-file tmp))))
 
+;; -- B.4 Task 7: series defaults --
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-series-defaults ()
+  "Absent series → empty string; absent series_order → 0."
+  (let ((tmp (make-temp-file "essays-ser-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12")) tmp)))
+            (should (equal (alist-get 'series out) ""))
+            (should (equal (alist-get 'series_order out) 0))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-series-order-string-coerced ()
+  "series_order from ox-hugo arrives as string '2' → coerce to int 2."
+  (let ((tmp (make-temp-file "essays-ser-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12")
+                        (series . "example-series") (series_order . "2"))
+                      tmp)))
+            (should (equal (alist-get 'series out) "example-series"))
+            (should (eq (alist-get 'series_order out) 2))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
