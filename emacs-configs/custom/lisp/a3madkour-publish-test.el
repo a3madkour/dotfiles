@@ -439,6 +439,14 @@ Uses a temp data dir with a seeded manifest; stubs org-roam-db-sync."
             (should (equal "abc-123" (alist-get 'id (aref notes 0))))))
       (delete-directory tmp-data t))))
 
+(ert-deftest a3madkour-pub-test/essays-dir-defvar-exists ()
+  "B.4 Task 1: `a3madkour-pub/essays-dir' must be a defcustom or defvar,
+non-empty string, defaulting to a path under ~/org/."
+  (should (boundp 'a3madkour-pub/essays-dir))
+  (should (stringp a3madkour-pub/essays-dir))
+  (should (not (string-empty-p a3madkour-pub/essays-dir)))
+  (should (string-match-p "/org/essays" a3madkour-pub/essays-dir)))
+
 (provide 'a3madkour-publish-test)
 
 ;;; a3madkour-publish-test.el ends here

@@ -26,6 +26,15 @@
   :type 'directory
   :group 'a3madkour-pub)
 
+(defcustom a3madkour-pub/essays-dir (expand-file-name "~/org/essays/")
+  "Directory holding essay source `.org' files for B.4 essays handler.
+
+Essays are NOT roam-indexed and do NOT live under
+`a3madkour-pub/org-notes-dir'.  The handler walks this directory only
+under `publish-deliberate'; `publish-living' does not touch essays."
+  :type 'directory
+  :group 'a3madkour-pub)
+
 (defcustom a3madkour-pub/site-data-dir
   nil
   "Path to the Hugo site repo's `data/' directory.
