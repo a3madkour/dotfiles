@@ -717,6 +717,68 @@ or omitted-arm regression would leave the link untouched)."
                       "see @@html:<a href=\"/garden/foo/\">/garden/foo/</a>@@ for context"))
        (should-not warnings)))))
 
+;; -- rewrite-to-tmp-file: shared per-handler pre-export wrapper --
+
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-to-tmp-file-happy-path ()
+  "Returns a tmp .org path; file contains rewritten @@html:@@ snippet."
+  (a3madkour-pub-rewrite-test--with-stubbed
+   (("target-id" :state live :section "garden" :slug "foo")
+    ("source-id" :state live :section "garden" :slug "src"))
+   (let ((src (make-temp-file "rewrite-tmp-src-" nil ".org"))
+         tmp)
+     (unwind-protect
+         (progn
+           (with-temp-file src
+             (insert "see [[id:target-id]] for context\n"))
+           (setq tmp (a3madkour-pub-rewrite/rewrite-to-tmp-file src "source-id"))
+           (should (stringp tmp))
+           (should (file-exists-p tmp))
+           (should (string-suffix-p ".org" tmp))
+           (with-temp-buffer
+             (insert-file-contents tmp)
+             (should (string-match-p
+                      "@@html:<a href=\"/garden/foo/\">/garden/foo/</a>@@"
+                      (buffer-string)))))
+       (when (and tmp (file-exists-p tmp)) (delete-file tmp))
+       (when (file-exists-p src) (delete-file src))))))
+
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-to-tmp-file-log-tag-custom ()
+  "Custom LOG-TAG appears bracketed in the warning message."
+  ;; Force the rewriter to emit a warning by pointing at an unresolved id;
+  ;; we don't care about the file contents — only the message format.
+  (a3madkour-pub-rewrite-test--with-stubbed
+   (("source-id" :state live :section "garden" :slug "src"))
+   (let ((src (make-temp-file "rewrite-tmp-src-" nil ".org"))
+         tmp captured)
+     (unwind-protect
+         (progn
+           (with-temp-file src
+             (insert "see [[id:missing-id]] for context\n"))
+           (cl-letf (((symbol-function 'message)
+                      (lambda (fmt &rest args)
+                        (push (apply #'format fmt args) captured))))
+             (setq tmp (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                        src "source-id" "a3-pub-essays")))
+           (should (cl-some (lambda (m) (string-match-p "\\[a3-pub-essays\\] rewrite WARN" m))
+                            captured)))
+       (when (and tmp (file-exists-p tmp)) (delete-file tmp))
+       (when (file-exists-p src) (delete-file src))))))
+
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-to-tmp-file-cleans-up-on-signal ()
+  "If the rewriter signals, the tmp file is deleted before re-raising."
+  (let ((src (make-temp-file "rewrite-tmp-src-" nil ".org"))
+        (tmps-before (directory-files temporary-file-directory t "\\`a3-pub-pre-export-")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "irrelevant\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub-rewrite/rewrite-buffer-links)
+                     (lambda (&rest _) (error "boom"))))
+            (should-error
+             (a3madkour-pub-rewrite/rewrite-to-tmp-file src "source-id")))
+          (let ((tmps-after (directory-files temporary-file-directory t "\\`a3-pub-pre-export-")))
+            (should (equal (length tmps-before) (length tmps-after)))))
+      (when (file-exists-p src) (delete-file src)))))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here

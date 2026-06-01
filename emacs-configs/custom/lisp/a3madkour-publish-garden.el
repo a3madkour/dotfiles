@@ -87,42 +87,6 @@ Returns a string with leading/trailing `---' delimiters."
              sorted "\n")
             "\n---\n")))
 
-(defun a3madkour-pub-garden--rewrite-to-tmp-file (source-file source-note-id)
-  "Copy SOURCE-FILE to a fresh temp `.org' file with all org links
-pre-rewritten via `a3madkour-pub-rewrite/rewrite-buffer-links'.
-
-Returns the absolute path of the temp file.  Caller is responsible for
-`delete-file' on the returned path (typical pattern: wrap the consumer
-in an `unwind-protect' that deletes on cleanup).
-
-If this function signals before returning successfully, it deletes the
-tmp file itself — the caller's `delete-file' obligation only applies to
-the happy-path return.
-
-Warnings from the rewriter are surfaced via `message' with the SOURCE-FILE
-included so authors can grep the publish log.  (Future slices may route
-these through a structured warning channel; for now they ride the same
-stderr stream as the rest of the publish pipeline's messages.)"
-  (let ((tmp (make-temp-file "a3-pub-pre-export-" nil ".org"))
-        (ok nil)
-        warnings)
-    (unwind-protect
-        (progn
-          (with-temp-buffer
-            (insert-file-contents source-file)
-            (setq warnings
-                  (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id))
-            (write-region (point-min) (point-max) tmp nil 'quiet))
-          (dolist (w warnings)
-            (message "[a3-pub-garden] rewrite WARN (%s): %s" source-file w))
-          (setq ok t)
-          tmp)
-      ;; Cleanup on error: delete the tmp file so a mid-helper signal
-      ;; doesn't leave it stranded.  On success (`ok' is t) the caller
-      ;; takes ownership and is responsible for delete-file.
-      (unless ok
-        (when (file-exists-p tmp) (delete-file tmp))))))
-
 (defun a3madkour-pub-garden/publish-garden-file (file)
   "Publish a single garden-section FILE to content/garden/<slug>/index.md.
 
@@ -146,7 +110,8 @@ Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths."
                               a3madkour-pub-garden/section-dir-name slug)
                       site-root))
          (out-path   (expand-file-name "index.md" bundle-dir))
-         (tmp-src    (a3madkour-pub-garden--rewrite-to-tmp-file file id))
+         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                      file id "a3-pub-garden"))
          ;; unwind-protect deletes tmp-src whether export-file succeeds or signals.
          (exported   (unwind-protect
                          (a3madkour-pub-export/export-file tmp-src)

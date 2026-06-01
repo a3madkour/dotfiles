@@ -254,29 +254,6 @@ but we centralize the mapping here for clarity and future-proofing."
 \"research/questions\" → 'research-questions"
   (intern (replace-regexp-in-string "/" "-" section-str)))
 
-;;; Task 9 — pre-export link rewrite (mirrors garden's --rewrite-to-tmp-file)
-
-(defun a3madkour-pub-research--rewrite-to-tmp-file (source-file source-note-id)
-  "Copy SOURCE-FILE to a fresh temp `.org' file and rewrite its links.
-Returns the absolute path of the temp file; caller must `delete-file' it
-on success.  On error, the temp file is deleted before signalling."
-  (let ((tmp (make-temp-file "a3-pub-research-pre-export-" nil ".org"))
-        (ok nil)
-        warnings)
-    (unwind-protect
-        (progn
-          (with-temp-buffer
-            (insert-file-contents source-file)
-            (setq warnings
-                  (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id))
-            (write-region (point-min) (point-max) tmp nil 'quiet))
-          (dolist (w warnings)
-            (message "[a3-pub-research] rewrite WARN (%s): %s" source-file w))
-          (setq ok t)
-          tmp)
-      (unless ok
-        (when (file-exists-p tmp) (delete-file tmp))))))
-
 ;;; Task 9 — outputs injection into normalized alist
 
 (defun a3madkour-pub-research--inject-outputs (alist outputs)
@@ -332,7 +309,8 @@ parse/strip steps run."
                        (a3madkour-pub-research--question-outputs-from-file file)))
          ;; Step 2: pre-export rewrite.  For questions, we also need to strip
          ;; the outputs subtree from the file before ox-hugo sees it.
-         (tmp-src    (a3madkour-pub-research--rewrite-to-tmp-file file id))
+         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                      file id "a3-pub-research"))
          ;; Step 3: If question, strip outputs subtree from the temp source.
          ;; We do this by rewriting tmp-src in-place (new write to same path).
          (exported
