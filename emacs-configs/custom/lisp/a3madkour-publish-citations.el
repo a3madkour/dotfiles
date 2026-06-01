@@ -236,6 +236,131 @@ in the manifest snapshot, return its garden slug.  Otherwise nil."
                   a3madkour-pub--manifest-snapshot)
              url)))))))
 
+;; ---------------------------------------------------------------------
+;; cite-emit-yaml: merge / replace into data/citations.yaml (Task 11)
+;; ---------------------------------------------------------------------
+
+(defconst a3madkour-pub-citations--required-fields
+  '(:authors :year :title :venue)
+  "Yaml fields that MUST be non-nil for a citation entry to be valid.")
+
+(defun a3madkour-pub-citations--yaml-escape (s)
+  "Escape S for embedding in a double-quoted yaml scalar (basic)."
+  (let ((out (replace-regexp-in-string "\\\\" "\\\\\\\\" s)))
+    (replace-regexp-in-string "\"" "\\\\\"" out)))
+
+(defun a3madkour-pub-citations--yaml-format-value (key val)
+  "Format VAL for yaml.  KEY is the plist key (used for :authors list shape)."
+  (cond
+   ((eq key :authors)
+    (concat "[" (mapconcat
+                 (lambda (a) (format "\"%s\""
+                                     (a3madkour-pub-citations--yaml-escape a)))
+                 val ", ") "]"))
+   ((eq key :year) (format "%d" val))
+   ((stringp val)  (format "\"%s\"" (a3madkour-pub-citations--yaml-escape val)))
+   (t              (format "%s" val))))
+
+(defconst a3madkour-pub-citations--yaml-key-order
+  '(:authors :year :title :venue :url :doi :publisher :volume
+    :issue :pages :isbn :type :notes_ref))
+
+(defun a3madkour-pub-citations--render-entry (key entry)
+  "Render `<key>: ...' yaml block for ENTRY plist."
+  (with-output-to-string
+    (princ (format "  %s:\n" key))
+    (dolist (k a3madkour-pub-citations--yaml-key-order)
+      (let ((v (plist-get entry k)))
+        (when (and v (not (and (listp v) (null v))))
+          (let ((field-name (substring (symbol-name k) 1)))
+            (princ (format "    %s: %s\n"
+                           field-name
+                           (a3madkour-pub-citations--yaml-format-value k v)))))))))
+
+(defun a3madkour-pub-citations--parse-existing-yaml (path)
+  "Read PATH and return an alist (KEY . RAW-ENTRY-STRING) of citation
+blocks.  Lightweight parse: each `  <key>:' header starts a block; the
+block ends at the next `  <key>:' or EOF."
+  (when (file-exists-p path)
+    (with-temp-buffer
+      (insert-file-contents path)
+      (goto-char (point-min))
+      (let ((entries nil)
+            current-key
+            block-start)
+        (while (re-search-forward "^  \\([A-Za-z0-9][A-Za-z0-9-]*\\):\\s-*$"
+                                  nil t)
+          (when current-key
+            (let ((blk (string-trim-right
+                        (buffer-substring-no-properties
+                         block-start (match-beginning 0))
+                        "\n+")))
+              (push (cons current-key blk) entries)))
+          (setq current-key (match-string-no-properties 1)
+                block-start (match-beginning 0)))
+        (when current-key
+          (let ((blk (string-trim-right
+                      (buffer-substring-no-properties block-start (point-max))
+                      "\n+")))
+            (push (cons current-key blk) entries)))
+        (nreverse entries)))))
+
+(defun a3madkour-pub-citations--validate-entry (key entry)
+  "Signal if ENTRY is missing any required field."
+  (dolist (req a3madkour-pub-citations--required-fields)
+    (unless (plist-get entry req)
+      (error "%s: bib entry missing required field %s"
+             key (substring (symbol-name req) 1)))))
+
+(cl-defun a3madkour-pub-citations/emit-yaml (&key (mode 'merge))
+  "Write `data/citations.yaml' from the accumulator.
+
+MODE: `'merge' (default) keeps existing keys not in the accumulator.
+      `'replace' drops keys not in the accumulator (sync command path).
+
+Skips file write entirely if the accumulator is empty and MODE is merge."
+  (unless a3madkour-pub-citations--accumulator
+    (a3madkour-pub-citations--accumulator-init))
+  (let ((acc-keys (sort (let (keys)
+                          (maphash (lambda (k _) (push k keys))
+                                   a3madkour-pub-citations--accumulator)
+                          keys)
+                        #'string-lessp)))
+    (when (or acc-keys (eq mode 'replace))
+      (let* ((yaml-path (expand-file-name "citations.yaml"
+                                          a3madkour-pub/site-data-dir))
+             (tmp-path  (concat yaml-path ".tmp"))
+             (existing  (a3madkour-pub-citations--parse-existing-yaml yaml-path))
+             ;; New-from-accumulator entries (plists)
+             (new-rendered
+              (mapcar
+               (lambda (k)
+                 (let ((entry (a3madkour-pub-bib/resolve k)))
+                   (a3madkour-pub-citations--validate-entry k entry)
+                   ;; Attach notes_ref if auto-detect resolves.
+                   (let ((nref (a3madkour-pub-citations--lookup-notes-ref k)))
+                     (when nref
+                       (setq entry (plist-put entry :notes_ref nref))))
+                   (cons k (a3madkour-pub-citations--render-entry k entry))))
+               acc-keys))
+             ;; Final entries: per-MODE merge with existing.
+             (final
+              (cond
+               ((eq mode 'replace) new-rendered)
+               (t
+                (let* ((carry
+                        (cl-remove-if
+                         (lambda (pair) (assoc (car pair) new-rendered))
+                         existing))
+                       (merged (append new-rendered carry)))
+                  (sort merged
+                        (lambda (a b) (string-lessp (car a) (car b)))))))))
+        (with-temp-file tmp-path
+          (insert "citations:\n")
+          (dolist (pair final)
+            (insert (cdr pair) "\n")))
+        (rename-file tmp-path yaml-path t)))))
+
 (provide 'a3madkour-publish-citations)
 
 ;;; a3madkour-publish-citations.el ends here

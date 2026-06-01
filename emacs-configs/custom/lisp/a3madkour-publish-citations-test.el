@@ -286,6 +286,155 @@ returns <slug> string."
       (should (equal "mykey2020"
                      (a3madkour-pub-citations--lookup-notes-ref "myKey2020"))))))
 
+;; -- Task 11: cite-emit-yaml --
+
+(defmacro a3madkour-pub-citations-test--with-yaml-dir (&rest body)
+  "Set up a temp site root with data/ subdir; let-bind a3madkour-pub/site-data-dir."
+  (declare (indent 0))
+  `(let* ((tmp-root (make-temp-file "a3-pub-citations-" t))
+          (tmp-data (expand-file-name "data/" tmp-root)))
+     (make-directory tmp-data t)
+     (unwind-protect
+         (let ((a3madkour-pub/site-data-dir tmp-data))
+           ,@body)
+       (delete-directory tmp-root t))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-writes-yaml-for-cited-keys ()
+  "F Task 11: emit-yaml writes data/citations.yaml with each accumulated key."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{a, author={A,A}, title={T-A}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+        (a3madkour-pub-citations--accumulator-init)
+        (puthash "a" '(("/fake/x.org" . 1)) a3madkour-pub-citations--accumulator)
+        (a3madkour-pub-citations/emit-yaml)
+        (let ((yaml-text (with-temp-buffer
+                           (insert-file-contents
+                            (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                           (buffer-string))))
+          (should (string-match-p "^citations:" yaml-text))
+          (should (string-match-p "  a:" yaml-text))
+          (should (string-match-p "title: \"T-A\"" yaml-text)))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-merges-with-existing ()
+  "F Task 11: pre-existing keys NOT in accumulator survive untouched."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (let ((existing (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir)))
+      (with-temp-file existing
+        (insert "citations:\n  preexisting:\n    authors: [\"X, Y\"]\n"
+                "    year: 2010\n    title: \"Old\"\n    venue: \"V\"\n"))
+      (a3madkour-pub-bib-test--with-bib
+          "@misc{newkey, author={A,A}, title={NT}, date={2020}, publisher={P}}"
+        (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+          (a3madkour-pub-citations--accumulator-init)
+          (puthash "newkey" '(("/fake/x.org" . 1))
+                   a3madkour-pub-citations--accumulator)
+          (a3madkour-pub-citations/emit-yaml)
+          (let ((yaml-text (with-temp-buffer
+                             (insert-file-contents existing)
+                             (buffer-string))))
+            (should (string-match-p "  preexisting:" yaml-text))
+            (should (string-match-p "  newkey:" yaml-text))))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-sorted-by-key ()
+  "F Task 11: keys in output are sorted lexicographically for deterministic diffs."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{zeta, author={A,A}, title={Z}, date={2020}, publisher={P}}
+@misc{alpha, author={A,A}, title={A}, date={2020}, publisher={P}}
+@misc{mu, author={A,A}, title={M}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+        (a3madkour-pub-citations--accumulator-init)
+        (dolist (k '("zeta" "alpha" "mu"))
+          (puthash k '(("/x.org" . 1)) a3madkour-pub-citations--accumulator))
+        (a3madkour-pub-citations/emit-yaml)
+        (let* ((yaml-text (with-temp-buffer
+                            (insert-file-contents
+                             (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                            (buffer-string)))
+               (a-pos    (string-match "^  alpha:" yaml-text))
+               (m-pos    (string-match "^  mu:"    yaml-text))
+               (z-pos    (string-match "^  zeta:"  yaml-text)))
+          (should (and a-pos m-pos z-pos))
+          (should (< a-pos m-pos))
+          (should (< m-pos z-pos)))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-idempotent ()
+  "F Task 11: re-running emit-yaml with same accumulator yields identical bytes."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{k, author={A,A}, title={T}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+        (a3madkour-pub-citations--accumulator-init)
+        (puthash "k" '(("/x.org" . 1)) a3madkour-pub-citations--accumulator)
+        (a3madkour-pub-citations/emit-yaml)
+        (let ((first (with-temp-buffer
+                       (insert-file-contents
+                        (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                       (buffer-string))))
+          (a3madkour-pub-citations/emit-yaml)
+          (let ((second (with-temp-buffer
+                          (insert-file-contents
+                           (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                          (buffer-string))))
+            (should (equal first second))))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-empty-accumulator-noop ()
+  "F Task 11: empty accumulator does NOT write or modify the yaml."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (let ((existing (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir)))
+      (with-temp-file existing (insert "citations:\n  k:\n    authors: [\"X\"]\n"))
+      (let ((before (with-temp-buffer (insert-file-contents existing) (buffer-string))))
+        (a3madkour-pub-citations--accumulator-init)
+        (a3madkour-pub-citations/emit-yaml)
+        (let ((after (with-temp-buffer (insert-file-contents existing) (buffer-string))))
+          (should (equal before after)))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-fails-on-missing-required-field ()
+  "F Task 11: bib entry without title fails-fast at emit."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{k, author={A,A}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+        (a3madkour-pub-citations--accumulator-init)
+        (puthash "k" '(("/x.org" . 1)) a3madkour-pub-citations--accumulator)
+        (let ((err (should-error (a3madkour-pub-citations/emit-yaml))))
+          (should (string-match-p "title\\|required" (format "%s" err))))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-replace-purge-mode ()
+  "F Task 11: emit-yaml with :mode 'replace drops keys not in accumulator."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (let ((existing (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir)))
+      (with-temp-file existing
+        (insert "citations:\n  stale:\n    authors: [\"X\"]\n"
+                "    year: 2010\n    title: \"S\"\n    venue: \"V\"\n"))
+      (a3madkour-pub-bib-test--with-bib
+          "@misc{kept, author={A,A}, title={K}, date={2020}, publisher={P}}"
+        (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+          (a3madkour-pub-citations--accumulator-init)
+          (puthash "kept" '(("/x.org" . 1)) a3madkour-pub-citations--accumulator)
+          (a3madkour-pub-citations/emit-yaml :mode 'replace)
+          (let ((yaml-text (with-temp-buffer
+                             (insert-file-contents existing) (buffer-string))))
+            (should     (string-match-p "  kept:"  yaml-text))
+            (should-not (string-match-p "  stale:" yaml-text))))))))
+
+(ert-deftest a3madkour-pub-citations-test/emit-uses-tmp-rename ()
+  "F Task 11: write goes via .tmp file (atomicity)."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{k, author={A,A}, title={T}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+        (let ((calls nil))
+          (cl-letf (((symbol-function 'rename-file)
+                     (lambda (from to &optional ok-overwrite)
+                       (push (cons from to) calls))))
+            (a3madkour-pub-citations--accumulator-init)
+            (puthash "k" '(("/x.org" . 1)) a3madkour-pub-citations--accumulator)
+            (a3madkour-pub-citations/emit-yaml)
+            (should (cl-some (lambda (pair) (string-match-p "\\.tmp\\'" (car pair)))
+                             calls))))))))
+
 (provide 'a3madkour-publish-citations-test)
 
 ;;; a3madkour-publish-citations-test.el ends here
