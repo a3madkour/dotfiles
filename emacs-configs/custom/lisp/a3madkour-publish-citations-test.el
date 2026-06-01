@@ -213,6 +213,79 @@ stops the run (no second-error reporting)."
     (goto-char (point-min))
     (should (search-forward "@@hugo:{{< cite \"b\" >}}@@" nil t))))
 
+;; -- Task 10: cite--lookup-notes-ref --
+
+(defmacro a3madkour-pub-citations-test--with-manifest (manifest-alist &rest body)
+  "Let-bind the manifest snapshot defvar to MANIFEST-ALIST and run BODY."
+  (declare (indent 1))
+  `(let ((a3madkour-pub--manifest-snapshot ,manifest-alist))
+     ,@body))
+
+(defmacro a3madkour-pub-citations-test--with-ref-note-dir (specs &rest body)
+  "SPECS is an alist of (KEY-SYMBOL . PROPERTY-STRINGS).  Create a temp
+ref-notes directory with one .org file per key; let-bind the F ref-notes
+dir to it; run BODY."
+  (declare (indent 1))
+  `(let ((tmp (make-temp-file "a3-pub-ref-notes-" t)))
+     (unwind-protect
+         (progn
+           (dolist (spec ,specs)
+             (let* ((key (car spec))
+                    (props (cdr spec))
+                    (path (expand-file-name
+                           (format "%s.org" key) tmp)))
+               (with-temp-file path
+                 (insert props))))
+           (let ((a3madkour-pub-citations--ref-notes-dir
+                  (file-name-as-directory tmp)))
+             ,@body))
+       (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-absent-returns-nil ()
+  "F Task 10: no ref-note file → nil."
+  (a3madkour-pub-citations-test--with-ref-note-dir nil
+    (a3madkour-pub-citations-test--with-manifest nil
+      (should-not (a3madkour-pub-citations--lookup-notes-ref "abc")))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-unpublished-returns-nil ()
+  "F Task 10: ref-note exists but HUGO_PUBLISH is missing → nil."
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("myKey2020" . "#+HUGO_SECTION: garden\n#+title: T\n"))
+    (a3madkour-pub-citations-test--with-manifest nil
+      (should-not (a3madkour-pub-citations--lookup-notes-ref "myKey2020")))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-wrong-section-returns-nil ()
+  "F Task 10: ref-note has HUGO_SECTION other than garden → nil."
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("myKey2020" .
+         "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: essays\n#+title: T\n"))
+    (a3madkour-pub-citations-test--with-manifest nil
+      (should-not (a3madkour-pub-citations--lookup-notes-ref "myKey2020")))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-not-in-manifest-returns-nil ()
+  "F Task 10: ref-note is published but not in the manifest snapshot → nil."
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("myKey2020" .
+         "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: T\n"))
+    (a3madkour-pub-citations-test--with-manifest
+        '((notes . [((id . "id-x")
+                     (current_url . "/garden/some-other/")
+                     (state . "live"))]))
+      (should-not (a3madkour-pub-citations--lookup-notes-ref "myKey2020")))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-happy-path-returns-slug ()
+  "F Task 10: ref-note published AND in manifest under /garden/<slug>/ →
+returns <slug> string."
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("myKey2020" .
+         "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: My Key\n"))
+    (a3madkour-pub-citations-test--with-manifest
+        '((notes . [((id . "id-key")
+                     (current_url . "/garden/mykey2020/")
+                     (state . "live"))]))
+      (should (equal "mykey2020"
+                     (a3madkour-pub-citations--lookup-notes-ref "myKey2020"))))))
+
 (provide 'a3madkour-publish-citations-test)
 
 ;;; a3madkour-publish-citations-test.el ends here

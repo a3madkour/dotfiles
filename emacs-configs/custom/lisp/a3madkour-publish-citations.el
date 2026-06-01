@@ -178,6 +178,64 @@ recorded by org-element-parse-buffer."
             (goto-char begin)
             (insert (a3madkour-pub-citations--shortcode-for-keys keys))))))))
 
+;; ---------------------------------------------------------------------
+;; cite--lookup-notes-ref: manifest-backed ref-note auto-detect (Task 10)
+;; ---------------------------------------------------------------------
+
+(defcustom a3madkour-pub-citations--ref-notes-dir
+  (expand-file-name "~/org/notes/ref-notes/")
+  "Directory holding per-cite-key reference org notes.  For a cite key
+KEY, F probes for `<ref-notes-dir>/<KEY>.org' to auto-populate the
+:notes_ref yaml field."
+  :type 'directory
+  :group 'a3madkour-pub)
+
+(defun a3madkour-pub-citations--read-keyword (file keyword)
+  "Read first `#+<KEYWORD>: <VALUE>' line from FILE; return VALUE or nil."
+  (with-temp-buffer
+    (insert-file-contents file nil 0 4096)  ; first 4KB is enough for keywords
+    (goto-char (point-min))
+    (when (re-search-forward
+           (format "^#\\+%s:[ \t]*\\(.*\\)$" (upcase keyword)) nil t)
+      (string-trim (match-string 1)))))
+
+(defun a3madkour-pub-citations--manifest-slug-for-garden-url (manifest url)
+  "Search MANIFEST (the snapshot alist) for an entry whose current_url
+equals URL; return its slug (the path component between /garden/ and /),
+or nil if not found."
+  (let ((notes (alist-get 'notes manifest)))
+    (cl-some
+     (lambda (note-alist)
+       (let ((cur-url (alist-get 'current_url note-alist))
+             (state   (alist-get 'state       note-alist)))
+         (and (equal cur-url url)
+              (equal state "live")
+              (when (string-match "\\`/garden/\\([^/]+\\)/\\'" cur-url)
+                (match-string 1 cur-url)))))
+     ;; alist-get may return vector or list; coerce to list.
+     (if (vectorp notes) (append notes nil) notes))))
+
+(defun a3madkour-pub-citations--lookup-notes-ref (cite-key)
+  "If a ref-note exists for CITE-KEY, is published as garden, and resolves
+in the manifest snapshot, return its garden slug.  Otherwise nil."
+  (let ((path (expand-file-name
+               (format "%s.org" cite-key)
+               a3madkour-pub-citations--ref-notes-dir)))
+    (when (file-exists-p path)
+      (let ((publish (a3madkour-pub-citations--read-keyword path "HUGO_PUBLISH"))
+            (section (a3madkour-pub-citations--read-keyword path "HUGO_SECTION"))
+            (slug-override (a3madkour-pub-citations--read-keyword path "HUGO_SLUG")))
+        (when (and (equal publish "t")
+                   (equal section "garden"))
+          (let* ((default-slug (or slug-override
+                                   (downcase
+                                    (file-name-base path))))
+                 (url (format "/garden/%s/" default-slug)))
+            (a3madkour-pub-citations--manifest-slug-for-garden-url
+             (and (boundp 'a3madkour-pub--manifest-snapshot)
+                  a3madkour-pub--manifest-snapshot)
+             url)))))))
+
 (provide 'a3madkour-publish-citations)
 
 ;;; a3madkour-publish-citations.el ends here
