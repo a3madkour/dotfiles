@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-05-29 Fri]
+:LAST_MODIFIED: [2026-06-01 Mon]
 :END:
 
 * Bootstrap
@@ -103,6 +103,7 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 							 (float-time
 							  (time-subtract after-init-time before-init-time)))
 					 gcs-done)))
+
 #+end_src
 
 * General configuration
@@ -236,7 +237,13 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 										  :diagnosticSeverity "hint"
 										  :isolateEnglish :json-false
 										  :dialect "American")))
+;;TODO website shit needs it is own heading
+ (add-to-list 'load-path "~/dotfiles/emacs-configs/custom/lisp/")
+  (require 'a3madkour-publish-bib)
+  (require 'a3madkour-publish-citations)
 
+(setq a3madkour-pub/site-data-dir
+        (expand-file-name "~/Sync/Workspace/a3madkour.github.io/data/"))
 #+end_src
 * Editor
 ** Evil
@@ -1351,6 +1358,7 @@ Looks for .venv directory in project root and activates the Python interpreter."
 #+end_src
 *** Yaml
 #+begin_src emacs-lisp
+(use-package yaml)
 (use-package yaml-mode)
 #+end_src
 *** ESS
