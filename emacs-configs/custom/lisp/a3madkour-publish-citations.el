@@ -361,6 +361,72 @@ Skips file write entirely if the accumulator is empty and MODE is merge."
             (insert (cdr pair) "\n")))
         (rename-file tmp-path yaml-path t)))))
 
+;; ---------------------------------------------------------------------
+;; a3-sync-citations: full rebuild (Task 15)
+;; ---------------------------------------------------------------------
+
+(defun a3madkour-pub-citations--published-source-files ()
+  "Walk the manifest snapshot, return list of currently-published `.org'
+source-file paths.  Skips entries whose state ≠ \"live\" or whose id
+does not resolve via org-roam-id-find."
+  (let* ((manifest (and (boundp 'a3madkour-pub--manifest-snapshot)
+                        a3madkour-pub--manifest-snapshot))
+         (notes (alist-get 'notes manifest)))
+    (when (vectorp notes) (setq notes (append notes nil)))
+    (delq nil
+          (mapcar
+           (lambda (note)
+             (let ((id (alist-get 'id note))
+                   (state (alist-get 'state note)))
+               (when (and (equal state "live")
+                          (fboundp 'org-roam-id-find))
+                 (let ((hit (org-roam-id-find id)))
+                   (when hit (car hit))))))
+           notes))))
+
+;;;###autoload
+(defun a3-sync-citations ()
+  "Full rebuild: refresh library.bib from Zotero (best-effort), walk
+all currently-published org source files, re-resolve every cite-key,
+and overwrite data/citations.yaml in replace mode (purge unused keys).
+
+Errors fail-fast on first unresolvable cite-key."
+  (interactive)
+  ;; 1. Refresh .bib (best effort).  When it succeeds (returns non-nil),
+  ;; re-parse the file so the updated content is in the parser cache.
+  ;; When it fails or is skipped (returns nil), keep the existing cache
+  ;; — the on-disk file is used as-is (no re-parse, no cache wipe).
+  (let ((refreshed (a3madkour-pub-bib/refresh-from-zotero)))
+    ;; 2. Re-parse only if Zotero actually wrote a new file to disk.
+    (when (and refreshed
+               (not (a3madkour-pub-bib--citar-loaded-p))
+               a3madkour-pub-bib/library-path
+               (file-exists-p a3madkour-pub-bib/library-path))
+      (a3madkour-pub-bib/parse-file a3madkour-pub-bib/library-path)))
+  ;; 3. Walk corpus + accumulate.
+  (a3madkour-pub-citations--accumulator-init)
+  (let ((added 0))
+    (dolist (src (a3madkour-pub-citations--published-source-files))
+      (when (file-exists-p src)
+        (with-temp-buffer
+          (insert-file-contents src)
+          (org-mode)
+          (let ((pairs (a3madkour-pub-citations--scan-buffer)))
+            (dolist (pair pairs)
+              (let* ((k (car pair))
+                     (pos (cdr pair))
+                     (existing (gethash k a3madkour-pub-citations--accumulator)))
+                (unless (a3madkour-pub-bib/resolve k)
+                  (error "%s:%d: cite key %s not found in library.bib" src pos k))
+                (puthash k (cons (cons src pos) existing)
+                         a3madkour-pub-citations--accumulator)
+                (setq added (1+ added))))))))
+    ;; 4. Overwrite yaml in replace mode.
+    (a3madkour-pub-citations/emit-yaml :mode 'replace)
+    (message "[a3-sync-citations] %d cite refs across %d keys synced."
+             added
+             (hash-table-count a3madkour-pub-citations--accumulator))))
+
 (provide 'a3madkour-publish-citations)
 
 ;;; a3madkour-publish-citations.el ends here

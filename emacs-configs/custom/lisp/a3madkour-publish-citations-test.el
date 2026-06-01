@@ -435,6 +435,79 @@ returns <slug> string."
             (should (cl-some (lambda (pair) (string-match-p "\\.tmp\\'" (car pair)))
                              calls))))))))
 
+;; -- Task 15: a3-sync-citations --
+
+(ert-deftest a3madkour-pub-citations-test/sync-rebuilds-from-corpus ()
+  "F Task 15: a3-sync-citations walks the corpus, accumulates, and writes
+data/citations.yaml in replace mode."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{a, author={A,A}, title={A}, date={2020}, publisher={P}}
+@misc{b, author={A,A}, title={B}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero) (lambda () nil))
+                ((symbol-function 'a3madkour-pub-citations--published-source-files)
+                 (lambda ()
+                   (let ((src (make-temp-file "f-sync-" nil ".org")))
+                     (with-temp-file src
+                       (insert "Body [cite:@a] [cite:@b]\n"))
+                     (list src))))
+                ((symbol-function 'a3madkour-pub-rewrite/rewrite-buffer-links)
+                 (lambda (&rest _) nil)))
+        (a3-sync-citations)
+        (let ((yaml (with-temp-buffer
+                      (insert-file-contents
+                       (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                      (buffer-string))))
+          (should (string-match-p "  a:" yaml))
+          (should (string-match-p "  b:" yaml)))))))
+
+(ert-deftest a3madkour-pub-citations-test/sync-purges-stale-keys ()
+  "F Task 15: sync drops keys present in yaml but not in corpus."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (let ((existing (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir)))
+      (with-temp-file existing
+        (insert "citations:\n  stale:\n    authors: [\"X\"]\n"
+                "    year: 2010\n    title: \"S\"\n    venue: \"V\"\n"))
+      (a3madkour-pub-bib-test--with-bib
+          "@misc{kept, author={A,A}, title={K}, date={2020}, publisher={P}}"
+        (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                  ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero) (lambda () nil))
+                  ((symbol-function 'a3madkour-pub-citations--published-source-files)
+                   (lambda ()
+                     (let ((src (make-temp-file "f-sync-" nil ".org")))
+                       (with-temp-file src (insert "[cite:@kept]"))
+                       (list src))))
+                  ((symbol-function 'a3madkour-pub-rewrite/rewrite-buffer-links)
+                   (lambda (&rest _) nil)))
+          (a3-sync-citations)
+          (let ((yaml (with-temp-buffer (insert-file-contents existing) (buffer-string))))
+            (should     (string-match-p "  kept:"  yaml))
+            (should-not (string-match-p "  stale:" yaml))))))))
+
+(ert-deftest a3madkour-pub-citations-test/sync-bbt-failure-continues ()
+  "F Task 15: BBT refresh failing (returns nil) does NOT block sync; the
+on-disk .bib is used as-is."
+  (a3madkour-pub-citations-test--with-yaml-dir
+    (a3madkour-pub-bib-test--with-bib
+        "@misc{a, author={A,A}, title={A}, date={2020}, publisher={P}}"
+      (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero)
+                 (lambda () (message "[bbt mock] refused") nil))
+                ((symbol-function 'a3madkour-pub-citations--published-source-files)
+                 (lambda ()
+                   (let ((src (make-temp-file "f-sync-" nil ".org")))
+                     (with-temp-file src (insert "[cite:@a]"))
+                     (list src))))
+                ((symbol-function 'a3madkour-pub-rewrite/rewrite-buffer-links)
+                 (lambda (&rest _) nil)))
+        (a3-sync-citations)
+        (let ((yaml (with-temp-buffer
+                      (insert-file-contents
+                       (expand-file-name "citations.yaml" a3madkour-pub/site-data-dir))
+                      (buffer-string))))
+          (should (string-match-p "  a:" yaml)))))))
+
 (provide 'a3madkour-publish-citations-test)
 
 ;;; a3madkour-publish-citations-test.el ends here

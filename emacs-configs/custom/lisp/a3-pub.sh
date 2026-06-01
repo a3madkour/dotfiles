@@ -113,6 +113,8 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
     -l a3madkour-publish-research \
+    -l a3madkour-publish-bib \
+    -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
     --eval "(a3-publish-living)" \
     --eval "(kill-emacs 0)" \
@@ -161,11 +163,46 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-library \
     -l a3madkour-publish-research \
     -l a3madkour-publish-essays \
+    -l a3madkour-publish-bib \
+    -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
     --eval "(condition-case err
               (a3-publish-deliberate \"$target_path\")
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
                      (kill-emacs 1)))" \
+    --eval "(kill-emacs 0)" \
+    "$@"
+fi
+
+# F Task 15: --sync-citations flag intercept.  Refreshes library.bib via BBT
+# JSON-RPC (best-effort) then re-resolves every cite-key in the published
+# corpus and overwrites data/citations.yaml in replace mode.
+if [ "${1:-}" = "--sync-citations" ]; then
+  shift
+  if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
+    echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
+    exit 2
+  fi
+  SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  exec emacs --batch \
+    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
+    --eval "(setq straight-base-dir user-emacs-directory)" \
+    -l "$STRAIGHT_BOOTSTRAP" \
+    --eval "(straight-use-package 'org-roam)" \
+    --eval "(straight-use-package 'yaml)" \
+    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
+    -L "$LISP_DIR" \
+    -l a3madkour-publish \
+    -l a3madkour-publish-rewrite \
+    -l a3madkour-publish-assets \
+    -l a3madkour-publish-unpublish \
+    -l a3madkour-publish-history \
+    -l a3madkour-publish-bib \
+    -l a3madkour-publish-citations \
+    --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(a3madkour-pub/begin-publish)" \
+    --eval "(a3-sync-citations)" \
+    --eval "(a3madkour-pub/finish-publish)" \
     --eval "(kill-emacs 0)" \
     "$@"
 fi
