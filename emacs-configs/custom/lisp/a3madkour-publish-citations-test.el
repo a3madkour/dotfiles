@@ -445,6 +445,10 @@ data/citations.yaml in replace mode."
         "@misc{a, author={A,A}, title={A}, date={2020}, publisher={P}}
 @misc{b, author={A,A}, title={B}, date={2020}, publisher={P}}"
       (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                ;; Stub begin-publish so sync doesn't wipe the test-primed
+                ;; bib parser cache.  (Real begin-publish re-parses the
+                ;; on-disk library.bib, clobbering the --with-bib fixture.)
+                ((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
                 ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero) (lambda () nil))
                 ((symbol-function 'a3madkour-pub-citations--published-source-files)
                  (lambda ()
@@ -472,6 +476,7 @@ data/citations.yaml in replace mode."
       (a3madkour-pub-bib-test--with-bib
           "@misc{kept, author={A,A}, title={K}, date={2020}, publisher={P}}"
         (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                  ((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
                   ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero) (lambda () nil))
                   ((symbol-function 'a3madkour-pub-citations--published-source-files)
                    (lambda ()
@@ -492,6 +497,7 @@ on-disk .bib is used as-is."
     (a3madkour-pub-bib-test--with-bib
         "@misc{a, author={A,A}, title={A}, date={2020}, publisher={P}}"
       (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil))
+                ((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
                 ((symbol-function 'a3madkour-pub-bib/refresh-from-zotero)
                  (lambda () (message "[bbt mock] refused") nil))
                 ((symbol-function 'a3madkour-pub-citations--published-source-files)

@@ -200,11 +200,20 @@ junk).  Returns int or nil."
   "Known yaml :type enum.  Unknown @entrytypes collapse to \"misc\".")
 
 (defun a3madkour-pub-bib--normalize-venue (raw)
-  "Pick venue from RAW alist by priority chain."
+  "Pick venue from RAW alist by priority chain.
+
+Falls back to eprint metadata (e.g. \"arXiv (cs.CL)\") for preprint-style
+entries that omit traditional venue fields — common for @online entries
+exported from Zotero + Better-BibTeX."
   (or (alist-get 'journaltitle raw)
       (alist-get 'booktitle raw)
       (alist-get 'publisher raw)
-      (alist-get 'eventtitle raw)))
+      (alist-get 'eventtitle raw)
+      (when-let ((etype (alist-get 'eprinttype raw)))
+        (let ((eclass (alist-get 'eprintclass raw)))
+          (if (and eclass (not (string-empty-p eclass)))
+              (format "%s (%s)" etype eclass)
+            etype)))))
 
 (defun a3madkour-pub-bib--normalize-url (raw)
   "Return RAW's url field iff it starts with http(s)://; else nil."

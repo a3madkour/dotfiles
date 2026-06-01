@@ -17,6 +17,13 @@
 (require 'org-element)
 (require 'a3madkour-publish-bib)
 
+;; Forward declaration only — the real defcustom lives in
+;; `a3madkour-publish-history.el'.  We avoid `require'ing history here
+;; because it transitively pulls in `yaml', which may not be on
+;; load-path yet during early init (straight bootstrap order).
+;; Callers MUST `setq' this before invoking emit-yaml / a3-sync-citations.
+(defvar a3madkour-pub/site-data-dir)
+
 (defvar a3madkour-pub-citations--accumulator nil
   "Hash table mapping cite-key (string) to list of (SOURCE-FILE . POS)
 pairs, populated by the rewriter during the publish run.")
@@ -392,6 +399,18 @@ and overwrite data/citations.yaml in replace mode (purge unused keys).
 
 Errors fail-fast on first unresolvable cite-key."
   (interactive)
+  ;; 0. Ensure the manifest snapshot + roam DB are ready.  The shell
+  ;; wrapper invokes `begin-publish' before this; the interactive M-x
+  ;; path does not.  Lazy-require the parent modules at call time so
+  ;; this file can still load early in init (before straight bootstraps
+  ;; yaml, which `a3madkour-publish-history' depends on).  Skip
+  ;; `begin-publish' when the snapshot is already populated to avoid
+  ;; double-init when called from inside an existing publish run.
+  (require 'a3madkour-publish-history)
+  (require 'a3madkour-publish)
+  (unless (and (boundp 'a3madkour-pub--manifest-snapshot)
+               a3madkour-pub--manifest-snapshot)
+    (a3madkour-pub/begin-publish))
   ;; 1. Refresh .bib (best effort).  When it succeeds (returns non-nil),
   ;; re-parse the file so the updated content is in the parser cache.
   ;; When it fails or is skipped (returns nil), keep the existing cache
