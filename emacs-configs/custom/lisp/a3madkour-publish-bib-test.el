@@ -158,6 +158,45 @@ string (normalize is Task 6)."
       (should (string-match-p "Line one" title))
       (should (string-match-p "line two" title)))))
 
+;; -- Task 5: @string substitution + error paths --
+
+(ert-deftest a3madkour-pub-bib-test/string-substitution ()
+  "F Task 5: @string{shortcut = \"expansion\"} substitutes when a field
+value is the bare shortcut token (BibTeX `concat`-by-#-of-strings is OUT
+of V1; we only handle the bare-reference form because real Zotero/BBT
+output doesn't use the `#` concat form)."
+  (a3madkour-pub-bib-test--with-bib
+      "@string{acm = \"ACM\"}\n@article{k, title = {T}, publisher = acm}"
+    (should (equal "ACM"
+                   (alist-get 'publisher
+                              (gethash "k" a3madkour-pub-bib--parser-cache))))))
+
+(ert-deftest a3madkour-pub-bib-test/unbalanced-braces-signals ()
+  "F Task 5: unbalanced braces in a field value signal a clear error."
+  (should-error
+   (a3madkour-pub-bib-test--with-bib
+       "@article{k, title = {Hello"
+     nil)))
+
+(ert-deftest a3madkour-pub-bib-test/malformed-entry-header-signals ()
+  "F Task 5: an `@type' without `{key,' signals."
+  (should-error
+   (a3madkour-pub-bib-test--with-bib
+       "@article corrupt"
+     nil)))
+
+(ert-deftest a3madkour-pub-bib-test/unterminated-quoted-value-signals ()
+  "F Task 5: an opened `\"' with no closing `\"' signals."
+  (should-error
+   (a3madkour-pub-bib-test--with-bib
+       "@article{k, title = \"unterminated"
+     nil)))
+
+(ert-deftest a3madkour-pub-bib-test/empty-file-returns-zero ()
+  "F Task 5: parsing an empty buffer is a no-op returning 0."
+  (a3madkour-pub-bib-test--with-bib ""
+    (should (= 0 (hash-table-count a3madkour-pub-bib--parser-cache)))))
+
 (provide 'a3madkour-publish-bib-test)
 
 ;;; a3madkour-publish-bib-test.el ends here

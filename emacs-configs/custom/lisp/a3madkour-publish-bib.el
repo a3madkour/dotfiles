@@ -44,14 +44,18 @@ Zotero/BBT-exported file."
   "Hash table mapping cite-key (string) to raw-field-alist for the
 current publish run.  Reset by `a3madkour-pub-bib--parser-init'.")
 
+(defvar a3madkour-pub-bib--string-table nil
+  "Hash table mapping @string shortcut symbol to its expansion (string).
+Reset by `parser-init'; populated during buffer parse.")
+
 ;; ---------------------------------------------------------------------
 ;; Parser: entry recognition + simple field reading
 ;; ---------------------------------------------------------------------
 
 (defun a3madkour-pub-bib--parser-init ()
-  "Allocate a fresh empty parser cache hash."
-  (setq a3madkour-pub-bib--parser-cache
-        (make-hash-table :test 'equal :size 256)))
+  "Allocate a fresh empty parser cache + @string table."
+  (setq a3madkour-pub-bib--parser-cache (make-hash-table :test 'equal :size 256))
+  (setq a3madkour-pub-bib--string-table (make-hash-table :test 'eq :size 32)))
 
 (defun a3madkour-pub-bib--strip-outer-braces (s)
   "Strip exactly one pair of OUTERMOST braces from S if present.
@@ -92,8 +96,8 @@ closing quote."
 
 (defun a3madkour-pub-bib--parse-field-value ()
   "Reader: at point at the first non-whitespace char of a field value,
-read one value form: `{...}', `\"...\"', or a bare numeric token like
-`2018'.  Returns the value string."
+read one value form: `{...}', `\"...\"', a bare numeric token, or a
+bare identifier matched against the @string table."
   (skip-chars-forward " \t\n\r")
   (cond
    ((eq (char-after) ?{)  (forward-char 1) (a3madkour-pub-bib--read-balanced-braces))
@@ -101,6 +105,12 @@ read one value form: `{...}', `\"...\"', or a bare numeric token like
    ((looking-at "\\([0-9]+\\)")
     (goto-char (match-end 0))
     (match-string-no-properties 1))
+   ((looking-at "\\([A-Za-z][A-Za-z0-9_-]*\\)")
+    (let ((token (intern (downcase (match-string-no-properties 1)))))
+      (goto-char (match-end 0))
+      (or (and a3madkour-pub-bib--string-table
+               (gethash token a3madkour-pub-bib--string-table))
+          (symbol-name token))))
    (t (error "a3-pub-bib: unexpected field-value start at pos %d" (point)))))
 
 (defun a3madkour-pub-bib--parse-one-entry ()
@@ -139,9 +149,15 @@ Returns the number of entries cached."
     (while (re-search-forward "^@" nil t)
       (backward-char 1)
       (cond
-       ((looking-at "@string[ \t]*{")
-        (goto-char (match-end 0))
-        (a3madkour-pub-bib--read-balanced-braces))     ;; skip for Task 3
+       ((looking-at "@string[ \t]*{[ \t]*\\([A-Za-z][A-Za-z0-9_-]*\\)[ \t]*=[ \t]*")
+        (let ((shortcut (intern (downcase (match-string-no-properties 1)))))
+          (goto-char (match-end 0))
+          (let ((expansion (a3madkour-pub-bib--parse-field-value)))
+            (puthash shortcut expansion a3madkour-pub-bib--string-table)
+            ;; Skip the trailing `}'.
+            (skip-chars-forward " \t\n\r")
+            (when (eq (char-after) ?})
+              (forward-char 1)))))
        ((looking-at "@preamble[ \t]*{")
         (goto-char (match-end 0))
         (a3madkour-pub-bib--read-balanced-braces))
