@@ -197,6 +197,100 @@ output doesn't use the `#` concat form)."
   (a3madkour-pub-bib-test--with-bib ""
     (should (= 0 (hash-table-count a3madkour-pub-bib--parser-cache)))))
 
+;; -- Task 6: normalize-entry --
+
+(defmacro a3madkour-pub-bib-test--normalized (bib-string key &rest body)
+  "Parse BIB-STRING, fetch KEY's raw alist, normalize it; bind ENTRY."
+  (declare (indent 2))
+  `(a3madkour-pub-bib-test--with-bib ,bib-string
+     (let ((entry (a3madkour-pub-bib--normalize-entry
+                   (gethash ,key a3madkour-pub-bib--parser-cache))))
+       ,@body)))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-authors-list ()
+  "F Task 6: authors split on ' and ' → list of strings."
+  (a3madkour-pub-bib-test--normalized
+      "@article{k, author = {Last, F. and Other, G.}, title={T}, date={2020}, journaltitle={J}}"
+      "k"
+    (should (equal '("Last, F." "Other, G.") (plist-get entry :authors)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-empty-author-fallback ()
+  "F Task 6: missing author → :authors '(\"Unknown\")."
+  (a3madkour-pub-bib-test--normalized
+      "@online{k, title={T}, date={2024}, url={https://example.invalid/x}}"
+      "k"
+    (should (equal '("Unknown") (plist-get entry :authors)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-year-from-iso-date ()
+  "F Task 6: ISO date → integer year."
+  (a3madkour-pub-bib-test--normalized
+      "@article{k, author={A, A}, title={T}, date={2014-12-27}, journaltitle={J}}"
+      "k"
+    (should (= 2014 (plist-get entry :year)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-year-from-legacy-year ()
+  "F Task 6: legacy `year = 2018' (no date) extracts to int."
+  (a3madkour-pub-bib-test--normalized
+      "@book{k, author={A, A}, title={T}, year={2018}, publisher={P}}"
+      "k"
+    (should (= 2018 (plist-get entry :year)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-venue-journaltitle-wins ()
+  "F Task 6: journaltitle is preferred over booktitle/publisher."
+  (a3madkour-pub-bib-test--normalized
+      "@article{k, author={A, A}, title={T}, date={2020}, journaltitle={J}, publisher={P}}"
+      "k"
+    (should (equal "J" (plist-get entry :venue)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-venue-booktitle-fallback ()
+  "F Task 6: no journaltitle → booktitle wins."
+  (a3madkour-pub-bib-test--normalized
+      "@inproceedings{k, author={A, A}, title={T}, date={2020}, booktitle={Proc Conf}}"
+      "k"
+    (should (equal "Proc Conf" (plist-get entry :venue)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-venue-publisher-fallback ()
+  "F Task 6: no journaltitle/booktitle → publisher wins."
+  (a3madkour-pub-bib-test--normalized
+      "@book{k, author={A, A}, title={T}, date={2020}, publisher={Book Co}}"
+      "k"
+    (should (equal "Book Co" (plist-get entry :venue)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-venue-eventtitle-fallback ()
+  "F Task 6: no journaltitle/booktitle/publisher → eventtitle wins."
+  (a3madkour-pub-bib-test--normalized
+      "@misc{k, author={A, A}, title={T}, date={2020}, eventtitle={Some Event}}"
+      "k"
+    (should (equal "Some Event" (plist-get entry :venue)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-type-known-enum ()
+  "F Task 6: @article → \"article\"; @inproceedings → \"inproceedings\"."
+  (a3madkour-pub-bib-test--normalized
+      "@article{k, author={A, A}, title={T}, date={2020}, journaltitle={J}}"
+      "k"
+    (should (equal "article" (plist-get entry :type)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-type-unknown-to-misc ()
+  "F Task 6: unknown @entrytype maps to \"misc\"."
+  (a3madkour-pub-bib-test--normalized
+      "@weirdtype{k, author={A, A}, title={T}, date={2020}, publisher={P}}"
+      "k"
+    (should (equal "misc" (plist-get entry :type)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-strips-outer-title-braces ()
+  "F Task 6: title outer braces stripped; inner survive."
+  (a3madkour-pub-bib-test--normalized
+      "@article{k, author={A, A}, title={{Egyptian Streets}}, date={2014}, journaltitle={J}}"
+      "k"
+    (should (equal "{Egyptian Streets}" (plist-get entry :title)))))
+
+(ert-deftest a3madkour-pub-bib-test/normalize-rejects-bad-url ()
+  "F Task 6: non-http URL is dropped to nil."
+  (a3madkour-pub-bib-test--normalized
+      "@misc{k, author={A, A}, title={T}, date={2020}, publisher={P}, url={ftp://nope}}"
+      "k"
+    (should-not (plist-get entry :url))))
+
 (provide 'a3madkour-publish-bib-test)
 
 ;;; a3madkour-publish-bib-test.el ends here

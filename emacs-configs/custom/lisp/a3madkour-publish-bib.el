@@ -190,6 +190,66 @@ junk).  Returns int or nil."
              (string-match "\\`\\([0-9]\\{4\\}\\)" s))
     (string-to-number (match-string 1 s))))
 
+;; ---------------------------------------------------------------------
+;; normalize-entry: raw alist → schema plist (Task 6)
+;; ---------------------------------------------------------------------
+
+(defconst a3madkour-pub-bib--type-enum
+  '("article" "book" "inproceedings" "incollection" "online" "misc"
+    "report" "thesis" "unpublished")
+  "Known yaml :type enum.  Unknown @entrytypes collapse to \"misc\".")
+
+(defun a3madkour-pub-bib--normalize-venue (raw)
+  "Pick venue from RAW alist by priority chain."
+  (or (alist-get 'journaltitle raw)
+      (alist-get 'booktitle raw)
+      (alist-get 'publisher raw)
+      (alist-get 'eventtitle raw)))
+
+(defun a3madkour-pub-bib--normalize-url (raw)
+  "Return RAW's url field iff it starts with http(s)://; else nil."
+  (let ((u (alist-get 'url raw)))
+    (and (stringp u)
+         (or (string-prefix-p "http://" u) (string-prefix-p "https://" u))
+         u)))
+
+(defun a3madkour-pub-bib--normalize-type (raw)
+  "Return RAW's :bibtype iff in the known enum; else \"misc\"."
+  (let ((t1 (alist-get :bibtype raw)))
+    (if (and t1 (member t1 a3madkour-pub-bib--type-enum))
+        t1
+      "misc")))
+
+(defun a3madkour-pub-bib--normalize-entry (raw)
+  "Map a parser-cache RAW alist to the schema plist.  Returns nil for nil."
+  (when raw
+    (let* ((authors-raw (alist-get 'author raw))
+           (authors (or (a3madkour-pub-bib--split-authors authors-raw)
+                        '("Unknown")))
+           (year (or (a3madkour-pub-bib--year-from-date (alist-get 'date raw))
+                     (a3madkour-pub-bib--year-from-date (alist-get 'year raw))))
+           (title-raw (alist-get 'title raw))
+           ;; The parser already stripped the outer brace-pair that delimited
+           ;; the field value ({...}).  A second call to strip-outer-braces
+           ;; would remove the inner case-protection braces (e.g. the inner
+           ;; `{Egyptian Streets}' inside `{{Egyptian Streets}}').  We keep
+           ;; the raw title string verbatim so callers can decide whether to
+           ;; strip case-protection braces when serialising to YAML.
+           (title title-raw)
+           (venue (a3madkour-pub-bib--normalize-venue raw)))
+      (list :authors   authors
+            :year      year
+            :title     title
+            :venue     venue
+            :url       (a3madkour-pub-bib--normalize-url raw)
+            :doi       (alist-get 'doi raw)
+            :publisher (alist-get 'publisher raw)
+            :volume    (alist-get 'volume raw)
+            :issue     (or (alist-get 'issue raw) (alist-get 'number raw))
+            :pages     (alist-get 'pages raw)
+            :isbn      (alist-get 'isbn raw)
+            :type      (a3madkour-pub-bib--normalize-type raw)))))
+
 (provide 'a3madkour-publish-bib)
 
 ;;; a3madkour-publish-bib.el ends here
