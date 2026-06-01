@@ -126,6 +126,134 @@
             (should (eq (plist-get merged :has_footnotes) t))))
       (delete-file tmp))))
 
+;; -- B.4 Task 8: publish-essay-file end-to-end (stubbed) --
+
+(ert-deftest a3madkour-pub-essays-test/publish-essay-file-writes-bundle-and-records ()
+  "End-to-end stubbed: handler exports stub body, writes content/essays/<slug>/index.md,
+calls record-publish with the correct URL."
+  (let ((tmp-essays-dir (make-temp-file "essays-pub-src-" t))
+        (tmp-site-data (make-temp-file "essays-pub-site-" t))
+        (tmp-site-content (make-temp-file "essays-pub-content-" t))
+        recorded)
+    (unwind-protect
+        (let* ((src (expand-file-name "example-one.org" tmp-essays-dir))
+               (site-root (file-name-as-directory
+                           (directory-file-name
+                            (file-name-directory
+                             (file-name-as-directory tmp-site-data)))))
+               (a3madkour-pub/site-data-dir (file-name-as-directory tmp-site-data)))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:ID: essay-one-uuid\n:END:\n"
+                    "#+title: Example essay one\n"
+                    "#+date: 2026-04-12\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: essays\n"
+                    "#+HUGO_SUMMARY: Lorem ipsum.\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_) (list :id "essay-one-uuid" :slug "example-one" :section "essays")))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_) "example-one"))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_) "/essays/example-one/"))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_) (list :frontmatter '((title . "Example essay one")
+                                                     (date . "2026-04-12")
+                                                     (summary . "Lorem ipsum."))
+                                       :body "Lorem ipsum body.")))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (id url state)
+                       (setq recorded (list id url state))))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () site-root)))
+            (a3madkour-pub-essays/publish-essay-file src))
+          ;; Bundle exists.
+          (should (file-exists-p (expand-file-name
+                                  "content/essays/example-one/index.md" site-root)))
+          ;; record-publish called with correct URL + state.
+          (should (equal recorded '("essay-one-uuid" "/essays/example-one/" live)))
+          ;; Body present in output.
+          (let ((written (with-temp-buffer
+                           (insert-file-contents
+                            (expand-file-name "content/essays/example-one/index.md" site-root))
+                           (buffer-string))))
+            (should (string-match-p "Lorem ipsum body\\." written))
+            ;; Frontmatter has all 14 required keys.
+            (dolist (k '("title" "date" "lastmod" "draft" "summary" "tags"
+                         "series" "series_order" "toc"
+                         "has_sidenotes" "has_citations" "has_footnotes"
+                         "has_math" "has_widgets" "has_video_sync"))
+              (should (string-match-p (format "^%s:" k) written)))))
+      (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
+      (when (file-exists-p tmp-site-data) (delete-directory tmp-site-data t))
+      (when (file-exists-p tmp-site-content) (delete-directory tmp-site-content t)))))
+
+(ert-deftest a3madkour-pub-essays-test/publish-essay-file-injects-scan-plist ()
+  "Handler scans body and threads the result into normalize via :scan-plist."
+  (let ((tmp-essays-dir (make-temp-file "essays-pub-src-" t))
+        (tmp-site-data (make-temp-file "essays-pub-site-" t))
+        injected-raw)
+    (unwind-protect
+        (let* ((src (expand-file-name "example-x.org" tmp-essays-dir))
+               (site-root (file-name-as-directory
+                           (directory-file-name
+                            (file-name-directory
+                             (file-name-as-directory tmp-site-data)))))
+               (a3madkour-pub/site-data-dir (file-name-as-directory tmp-site-data)))
+          (with-temp-file src (insert ":PROPERTIES:\n:ID: x\n:END:\n#+title: x\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_) (list :id "x" :slug "x" :section "essays")))
+                    ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "x"))
+                    ((symbol-function 'a3madkour-pub/note-url) (lambda (_) "/essays/x/"))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_) (list :frontmatter nil
+                                       :body "lorem {{< sidenote >}}n{{< /sidenote >}} ipsum")))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy) (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (section raw _)
+                       (when (eq section 'essays) (setq injected-raw raw))
+                       (or raw '())))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () site-root)))
+            (a3madkour-pub-essays/publish-essay-file src))
+          (should (assq :scan-plist injected-raw))
+          (should (eq (plist-get (alist-get :scan-plist injected-raw) :has_sidenotes) t)))
+      (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
+      (when (file-exists-p tmp-site-data) (delete-directory tmp-site-data t)))))
+
+(ert-deftest a3madkour-pub-essays-test/publish-essay-file-no-hero-still-runs-asset-copy ()
+  "asset-validate-and-copy is always called (it handles per-bundle assets
+generally); absence of #+HUGO_HERO does not skip it."
+  (let ((tmp-essays-dir (make-temp-file "essays-pub-src-" t))
+        (tmp-site-data (make-temp-file "essays-pub-site-" t))
+        asset-call-count)
+    (setq asset-call-count 0)
+    (unwind-protect
+        (let* ((src (expand-file-name "example-x.org" tmp-essays-dir))
+               (site-root (file-name-as-directory
+                           (directory-file-name
+                            (file-name-directory
+                             (file-name-as-directory tmp-site-data)))))
+               (a3madkour-pub/site-data-dir (file-name-as-directory tmp-site-data)))
+          (with-temp-file src (insert ":PROPERTIES:\n:ID: x\n:END:\n#+title: x\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_) (list :id "x" :slug "x" :section "essays")))
+                    ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "x"))
+                    ((symbol-function 'a3madkour-pub/note-url) (lambda (_) "/essays/x/"))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_) (list :frontmatter nil :body "body")))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                     (lambda (&rest _) (cl-incf asset-call-count)))
+                    ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () site-root)))
+            (a3madkour-pub-essays/publish-essay-file src))
+          (should (= asset-call-count 1)))
+      (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
+      (when (file-exists-p tmp-site-data) (delete-directory tmp-site-data t)))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

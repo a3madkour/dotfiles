@@ -246,6 +246,9 @@ Returns the normalized alist."
       (push (cons 'series "") out))
     (unless (assq 'series_order out)
       (push (cons 'series_order 0) out))
+    ;; tags default: emit tags: [] when absent (linter requires the key).
+    (unless (assq 'tags out)
+      (push (cons 'tags '()) out))
     (when-let ((so (alist-get 'series_order out)))
       (when (stringp so)
         (setf (alist-get 'series_order out) (string-to-number so))))

@@ -79,6 +79,112 @@ else SCAN-PLIST's value passes through.  Returns a new plist."
           (setq out (plist-put out k override)))))
     out))
 
+;; Task 8: rendering helpers (mirror garden's; future shared extraction
+;; tracked as B.4 follow-up #3).
+
+(defcustom a3madkour-pub-essays/section-dir-name "essays"
+  "Hugo content section directory name for essays (relative to site root)."
+  :type 'string
+  :group 'a3madkour-pub)
+
+(defun a3madkour-pub-essays--site-root ()
+  "Derive the Hugo site root from `a3madkour-pub/site-data-dir'."
+  (file-name-as-directory
+   (directory-file-name
+    (file-name-directory
+     (directory-file-name
+      (file-name-as-directory a3madkour-pub/site-data-dir))))))
+
+(defun a3madkour-pub-essays--write-if-different (path content)
+  "Write CONTENT to PATH only if it differs from existing on-disk content.
+Returns t if a write happened, nil if no-op."
+  (let ((existing (when (file-exists-p path)
+                    (with-temp-buffer
+                      (insert-file-contents path)
+                      (buffer-string)))))
+    (unless (string= existing content)
+      (make-directory (file-name-directory path) t)
+      (with-temp-file path (insert content))
+      t)))
+
+(defconst a3madkour-pub-essays--date-re
+  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
+  "Regex for bare YYYY-MM-DD date strings (emitted unquoted in YAML).")
+
+(defun a3madkour-pub-essays--render-yaml-value (v)
+  "Render V as a YAML scalar/list value.  Same contract as garden's
+helper: strings quoted; YYYY-MM-DD dates unquoted; numbers as-is;
+t/nil → true/false; lists of strings → JSON-style array.
+
+NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
+  (cond
+   ((null v)    "false")
+   ((eq v t)    "true")
+   ((and (stringp v)
+         (string-match-p a3madkour-pub-essays--date-re v))
+    v)
+   ((stringp v) (format "\"%s\"" v))
+   ((numberp v) (format "%s" v))
+   ((listp v)
+    (format "[%s]"
+            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+
+(defun a3madkour-pub-essays--render-frontmatter (alist)
+  "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
+Returns a string with leading/trailing `---' delimiters."
+  (let ((sorted (sort (copy-sequence alist)
+                      (lambda (a b)
+                        (string< (symbol-name (car a)) (symbol-name (car b)))))))
+    (concat "---\n"
+            (mapconcat
+             (lambda (cell)
+               (format "%s: %s"
+                       (symbol-name (car cell))
+                       (a3madkour-pub-essays--render-yaml-value (cdr cell))))
+             sorted "\n")
+            "\n---\n")))
+
+;; Task 8: pipeline entry.
+
+(defun a3madkour-pub-essays/publish-essay-file (file)
+  "Publish a single essay FILE to content/essays/<slug>/index.md.
+
+Pipeline:
+  1. resolve metadata (id / slug)
+  2. pre-export rewrite via shared rewrite-to-tmp-file (B.4 cleanup commit)
+  3. ox-hugo export
+  4. scan post-export body for has_* shortcodes
+  5. inject :scan-plist into raw fm; normalize via \\='essays dispatch arm
+  6. asset-validate-and-copy (hero.svg etc.)
+  7. render frontmatter + body; write if different
+  8. record-publish"
+  (let* ((md         (a3madkour-pub/note-metadata file))
+         (id         (plist-get md :id))
+         (slug       (plist-get md :slug))
+         (new-url    (a3madkour-pub/note-url file))
+         (site-root  (a3madkour-pub-essays--site-root))
+         (bundle-dir (expand-file-name
+                      (format "content/%s/%s/"
+                              a3madkour-pub-essays/section-dir-name slug)
+                      site-root))
+         (out-path   (expand-file-name "index.md" bundle-dir))
+         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                      file id "a3-pub-essays"))
+         (exported   (unwind-protect
+                         (a3madkour-pub-export/export-file tmp-src)
+                       (when (file-exists-p tmp-src)
+                         (delete-file tmp-src))))
+         (body       (plist-get exported :body))
+         (scan-pl    (a3madkour-pub-essays--scan-has-flags (or body "")))
+         (raw-fm     (cons (cons :scan-plist scan-pl)
+                           (or (plist-get exported :frontmatter) '())))
+         (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
+    (a3madkour-pub/asset-validate-and-copy file bundle-dir)
+    (a3madkour-pub-essays--write-if-different
+     out-path
+     (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
+    (a3madkour-pub-history/record-publish id new-url 'live)))
+
 (provide 'a3madkour-publish-essays)
 
 ;;; a3madkour-publish-essays.el ends here
