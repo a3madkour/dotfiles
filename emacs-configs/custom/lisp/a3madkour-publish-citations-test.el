@@ -4,6 +4,7 @@
 (require 'cl-lib)
 (require 'org)
 (require 'a3madkour-publish-citations)
+(require 'a3madkour-publish-bib-test)
 
 ;; -- Helpers --
 
@@ -71,6 +72,146 @@
   "F Task 8: empty buffer returns nil."
   (a3madkour-pub-citations-test--with-org ""
     (should-not (a3madkour-pub-citations--scan-buffer))))
+
+;; -- Task 9: rewrite-cite-keys-in-buffer --
+
+(defmacro a3madkour-pub-citations-test--rewritten (org-string &rest body)
+  "Insert ORG-STRING, init accumulator, prime parser cache with a stub
+.bib that resolves a/b/c/key1/fnkey/tab/public, run rewriter, run BODY."
+  (declare (indent 1))
+  `(progn
+     (a3madkour-pub-citations--accumulator-init)
+     (a3madkour-pub-bib-test--with-bib
+         "@misc{key1, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{a, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{b, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{c, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{fnkey, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{tab, title={T}, date={2020}, author={A, A}, publisher={P}}
+@misc{public, title={T}, date={2020}, author={A, A}, publisher={P}}"
+       (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+                  (lambda () nil)))
+         (a3madkour-pub-citations-test--with-org ,org-string
+           (a3madkour-pub-citations/rewrite-cite-keys-in-buffer "/fake/source.org")
+           ,@body)))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-bare-cite ()
+  "F Task 9: [cite:@key1] becomes @@hugo:{{< cite \"key1\" >}}@@."
+  (a3madkour-pub-citations-test--rewritten
+      "Body [cite:@key1] tail.\n"
+    (goto-char (point-min))
+    (should (search-forward "@@hugo:{{< cite \"key1\" >}}@@" nil t))
+    (should-not (search-forward "[cite:" nil t))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-multi-cite ()
+  "F Task 9: [cite:@a;@b;@c] becomes 3 adjacent shortcodes inside one
+@@hugo: wrapper."
+  (a3madkour-pub-citations-test--rewritten
+      "Body [cite:@a;@b;@c] tail.\n"
+    (goto-char (point-min))
+    (should (search-forward
+             "@@hugo:{{< cite \"a\" >}}{{< cite \"b\" >}}{{< cite \"c\" >}}@@"
+             nil t))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-populates-accumulator ()
+  "F Task 9: each rewritten key lands in the accumulator with source file."
+  (a3madkour-pub-citations-test--rewritten
+      "Body [cite:@a;@b] tail.\n"
+    (should (gethash "a" a3madkour-pub-citations--accumulator))
+    (should (gethash "b" a3madkour-pub-citations--accumulator))
+    (let ((a-entries (gethash "a" a3madkour-pub-citations--accumulator)))
+      (should (equal "/fake/source.org" (caar a-entries))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-fails-on-unknown-key ()
+  "F Task 9: missing bib entry → fail-fast with source pointer."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib "@misc{known, title={T}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org "Body [cite:@nope] tail.\n"
+        (let ((err (should-error
+                    (a3madkour-pub-citations/rewrite-cite-keys-in-buffer
+                     "/fake/source.org"))))
+          (should (string-match-p "nope" (format "%s" err))))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-fails-on-style-override ()
+  "F Task 9: [cite/text:@k] signals an unsupported-form error."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib "@misc{k, title={T}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org "[cite/text:@k]"
+        (let ((err (should-error
+                    (a3madkour-pub-citations/rewrite-cite-keys-in-buffer
+                     "/fake/source.org"))))
+          (should (string-match-p "cite/style\\|not supported"
+                                  (format "%s" err))))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-fails-on-prefix-suffix ()
+  "F Task 9: [cite:see @k] (prefix text) signals unsupported."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib "@misc{k, title={T}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org "[cite:see @k]"
+        (should-error
+         (a3madkour-pub-citations/rewrite-cite-keys-in-buffer
+          "/fake/source.org"))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-strips-print-bibliography ()
+  "F Task 9: #+print_bibliography: lines are removed."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib "@misc{k, title={T}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org
+          "Body [cite:@k]\n\n#+print_bibliography:\n"
+        (a3madkour-pub-citations/rewrite-cite-keys-in-buffer "/fake/source.org")
+        (goto-char (point-min))
+        (should-not (search-forward "#+print_bibliography" nil t))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-no-cites-is-noop ()
+  "F Task 9: buffer without any [cite:] is unchanged."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib ""
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org "Body without cites.\n"
+        (let ((before (buffer-string)))
+          (a3madkour-pub-citations/rewrite-cite-keys-in-buffer "/fake/source.org")
+          (should (equal before (buffer-string))))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-stops-on-first-error ()
+  "F Task 9: when [cite:@nope1] and [cite:@nope2] both fail, the first one
+stops the run (no second-error reporting)."
+  (a3madkour-pub-citations--accumulator-init)
+  (a3madkour-pub-bib-test--with-bib ""
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (a3madkour-pub-citations-test--with-org "[cite:@nope1] [cite:@nope2]"
+        (let ((err (should-error
+                    (a3madkour-pub-citations/rewrite-cite-keys-in-buffer
+                     "/fake/source.org"))))
+          (should (string-match-p "nope1" (format "%s" err)))
+          (should-not (string-match-p "nope2" (format "%s" err))))))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-preserves-non-cite-content ()
+  "F Task 9: rewriter only touches [cite:...] forms; everything else is verbatim."
+  (a3madkour-pub-citations-test--rewritten
+      "* Heading\n\nA paragraph with [cite:@key1] inline.\n\nSecond paragraph.\n"
+    (goto-char (point-min))
+    (should (search-forward "Heading" nil t))
+    (goto-char (point-min))
+    (should (search-forward "Second paragraph" nil t))))
+
+(ert-deftest a3madkour-pub-citations-test/rewrite-multiple-bare-cites ()
+  "F Task 9: two separate [cite:@a] [cite:@b] sites both rewrite."
+  (a3madkour-pub-citations-test--rewritten
+      "First [cite:@a] middle [cite:@b] last.\n"
+    (goto-char (point-min))
+    (should (search-forward "@@hugo:{{< cite \"a\" >}}@@" nil t))
+    (goto-char (point-min))
+    (should (search-forward "@@hugo:{{< cite \"b\" >}}@@" nil t))))
 
 (provide 'a3madkour-publish-citations-test)
 
