@@ -88,6 +88,76 @@
   (should-error
    (a3madkour-pub-bib/parse-file "/nonexistent/path/library.bib")))
 
+;; -- Task 4: nested braces + author splitting + date extraction --
+
+(ert-deftest a3madkour-pub-bib-test/preserves-nested-braces ()
+  "F Task 4: nested {{...}} brace protection — outer pair stripped by
+normalize-entry; for the raw parser, both braces survive on the value
+string (normalize is Task 6)."
+  (a3madkour-pub-bib-test--with-bib
+      "@article{k, title = {{Egyptian Streets}}}"
+    (let ((title (alist-get 'title (gethash "k" a3madkour-pub-bib--parser-cache))))
+      (should (equal title "{Egyptian Streets}")))))
+
+(ert-deftest a3madkour-pub-bib-test/strip-outer-braces-one-pair ()
+  "F Task 4: helper strips exactly one outer brace-pair."
+  (should (equal (a3madkour-pub-bib--strip-outer-braces "{Hello}")    "Hello"))
+  (should (equal (a3madkour-pub-bib--strip-outer-braces "{{Hello}}")  "{Hello}"))
+  (should (equal (a3madkour-pub-bib--strip-outer-braces "Hello")      "Hello"))
+  (should (equal (a3madkour-pub-bib--strip-outer-braces "  {Hi}  ")   "Hi")))
+
+(ert-deftest a3madkour-pub-bib-test/split-authors-on-and ()
+  "F Task 4: BibTeX author field splits on ' and ' (BibTeX convention)."
+  (should (equal (a3madkour-pub-bib--split-authors "Lastname, F. and Other, G.")
+                 '("Lastname, F." "Other, G.")))
+  (should (equal (a3madkour-pub-bib--split-authors "One, A. and Two, B. and Three, C.")
+                 '("One, A." "Two, B." "Three, C.")))
+  (should (equal (a3madkour-pub-bib--split-authors "Solo, A.")
+                 '("Solo, A."))))
+
+(ert-deftest a3madkour-pub-bib-test/split-authors-empty-string ()
+  "F Task 4: empty author field returns empty list."
+  (should (equal (a3madkour-pub-bib--split-authors "") nil))
+  (should (equal (a3madkour-pub-bib--split-authors "   ") nil)))
+
+(ert-deftest a3madkour-pub-bib-test/year-from-date-iso ()
+  "F Task 4: extract year int from ISO date string."
+  (should (= 2014 (a3madkour-pub-bib--year-from-date "2014-12-27")))
+  (should (= 2014 (a3madkour-pub-bib--year-from-date "2014-12-27T16:00:18+00:00")))
+  (should (= 2014 (a3madkour-pub-bib--year-from-date "2014"))))
+
+(ert-deftest a3madkour-pub-bib-test/year-from-date-nil-on-junk ()
+  "F Task 4: junk input returns nil."
+  (should-not (a3madkour-pub-bib--year-from-date "junk"))
+  (should-not (a3madkour-pub-bib--year-from-date ""))
+  (should-not (a3madkour-pub-bib--year-from-date nil)))
+
+(ert-deftest a3madkour-pub-bib-test/parser-handles-real-fixture ()
+  "F Task 4: the stub library.bib fixture parses without error and yields
+9 entries, including the BBT camelCase key from Task 3."
+  ;; tools/fixtures/citations/library.bib lives in the SITE repo; locate
+  ;; via a robust path discovery (a3-pub.sh sets cwd, so use $PWD or env).
+  (let ((fixture
+         (or (and (boundp 'a3madkour-pub-test/site-root)
+                  (expand-file-name
+                   "tools/fixtures/citations/library.bib"
+                   a3madkour-pub-test/site-root))
+             (expand-file-name
+              "../../../../Sync/Workspace/a3madkour.github.io/tools/fixtures/citations/library.bib"
+              (file-name-directory (or load-file-name buffer-file-name "."))))))
+    (skip-unless (file-exists-p fixture))
+    (let ((n (a3madkour-pub-bib/parse-file fixture)))
+      (should (= 9 n))
+      (should (gethash "loremIpsumDolorSit2020" a3madkour-pub-bib--parser-cache)))))
+
+(ert-deftest a3madkour-pub-bib-test/multiline-field-value-survives ()
+  "F Task 4: a {...} value spanning multiple lines reads as one string."
+  (a3madkour-pub-bib-test--with-bib
+      "@article{k,\n  title = {Line one\n  line two},\n  year = 2020}"
+    (let ((title (alist-get 'title (gethash "k" a3madkour-pub-bib--parser-cache))))
+      (should (string-match-p "Line one" title))
+      (should (string-match-p "line two" title)))))
+
 (provide 'a3madkour-publish-bib-test)
 
 ;;; a3madkour-publish-bib-test.el ends here

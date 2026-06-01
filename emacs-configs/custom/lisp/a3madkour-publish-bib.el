@@ -160,6 +160,20 @@ number of entries cached.  Signals if PATH does not exist."
     (insert-file-contents path)
     (a3madkour-pub-bib--parse-buffer)))
 
+(defun a3madkour-pub-bib--split-authors (s)
+  "Split S on ` and ' (BibTeX author-list convention).  Returns a list
+of trimmed author strings; empty input → nil."
+  (when (and (stringp s) (not (string-empty-p (string-trim s))))
+    (mapcar #'string-trim
+            (split-string s " and " t "[ \t\n\r]+"))))
+
+(defun a3madkour-pub-bib--year-from-date (s)
+  "Extract a 4-digit year int from S (an ISO date string, year-only, or
+junk).  Returns int or nil."
+  (when (and (stringp s)
+             (string-match "\\`\\([0-9]\\{4\\}\\)" s))
+    (string-to-number (match-string 1 s))))
+
 (provide 'a3madkour-publish-bib)
 
 ;;; a3madkour-publish-bib.el ends here
