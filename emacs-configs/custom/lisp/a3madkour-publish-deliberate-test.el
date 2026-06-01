@@ -34,5 +34,11 @@ control reaches the dispatch."
               (should (string-match-p "garden" (cadr err-data))))))
       (delete-directory tmp-data t))))
 
+(ert-deftest a3madkour-pub-deliberate-test/essays-handler-registered ()
+  "B.4 Task 9: 'essays is registered in the deliberate handler alist."
+  (require 'a3madkour-publish-deliberate)
+  (should (eq (cdr (assq 'essays a3madkour-pub-deliberate--handlers))
+              'a3madkour-pub-essays/publish-essay-file)))
+
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here

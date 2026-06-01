@@ -15,8 +15,10 @@
 
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-unpublish)
+(require 'a3madkour-publish-essays)
 
-(defvar a3madkour-pub-deliberate--handlers nil
+(defvar a3madkour-pub-deliberate--handlers
+  '((essays . a3madkour-pub-essays/publish-essay-file))
   "Alist of (SECTION-SYMBOL . HANDLER-FUNCTION) for deliberate sections.
 
 HANDLER-FUNCTION takes one argument (a source file path) and emits the
@@ -24,8 +26,8 @@ corresponding Hugo content + calls `record-publish'.
 
 Same shape as `a3madkour-pub-living--handlers' but a separate registry
 because some sections might exist in both (uncommon but possible).
-B.0 ships this empty; B.4 (essays), B.5 (works), B.6 (streams), B.7
-(about) each populate one entry.")
+B.4 registers `essays'; B.5 (works), B.6 (streams), B.7 (about) each
+add their own entry.")
 
 ;;;###autoload
 (defun a3-publish-deliberate (file-or-id)
@@ -51,7 +53,7 @@ See parent design spec §4 (command surface)."
           (error "a3madkour-pub-deliberate: no handler registered for section %S (file: %s)"
                  section file))
         (funcall handler file))
-    (a3madkour-pub/finish-publish)))
+    (a3madkour-pub/finish-publish :scope 'deliberate)))
 
 (provide 'a3madkour-publish-deliberate)
 
