@@ -600,5 +600,50 @@ alist value (if any) passes through unchanged."
             (should-not (assq 'slug out))))
       (delete-file tmp))))
 
+;; -- B.4 Task 6: lastmod cascade in essays normalizer --
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-lastmod-from-drawer ()
+  "Tier 1: :LAST_MODIFIED: drawer wins."
+  (let ((tmp (make-temp-file "essays-lm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12")
+                        (last_modified . "2025-01-15"))
+                      tmp)))
+            (should (equal (alist-get 'lastmod out) "2025-01-15"))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-lastmod-from-keyword ()
+  "Tier 2: HUGO_LASTMOD keyword (ISO datetime trimmed to date)."
+  (let ((tmp (make-temp-file "essays-lm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12")
+                        (lastmod . "2025-03-22T18:00:00+00:00"))
+                      tmp)))
+            (should (equal (alist-get 'lastmod out) "2025-03-22"))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-lastmod-from-fs-mtime ()
+  "Tier 4: drawer + keyword absent + not a git repo → fs-mtime."
+  (let ((tmp (make-temp-file "essays-lm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12"))
+                      tmp)))
+            ;; fs-mtime is today (we just created the temp file).
+            (should (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
+                                    (alist-get 'lastmod out)))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
