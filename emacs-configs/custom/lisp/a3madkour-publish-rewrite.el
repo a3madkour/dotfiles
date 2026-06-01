@@ -407,6 +407,12 @@ the happy-path return."
             (insert-file-contents source-file)
             (setq warnings
                   (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id))
+            ;; F Task 12: cite-key rewrite runs in the same pre-export pass.
+            ;; Loaded lazily so non-F-aware tests of rewrite-to-tmp-file still
+            ;; work; the citations module is part of a3-pub.sh's `-l' list
+            ;; in publish-living / publish-deliberate / sync exec blocks.
+            (when (require 'a3madkour-publish-citations nil 'noerror)
+              (a3madkour-pub-citations/rewrite-cite-keys-in-buffer source-file))
             (write-region (point-min) (point-max) tmp nil 'quiet))
           (dolist (w warnings)
             (message "[%s] rewrite WARN (%s): %s" tag source-file w))

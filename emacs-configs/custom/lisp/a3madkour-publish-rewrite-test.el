@@ -5,6 +5,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-rewrite)
+(require 'a3madkour-publish-bib-test)
 
 ;;; Heading-anchor slugifier — Goldmark `github` algorithm.
 
@@ -778,6 +779,35 @@ or omitted-arm regression would leave the link untouched)."
           (let ((tmps-after (directory-files temporary-file-directory t "\\`a3-pub-pre-export-")))
             (should (equal (length tmps-before) (length tmps-after)))))
       (when (file-exists-p src) (delete-file src)))))
+
+;; -- F Task 12: rewrite-to-tmp-file also runs cite rewriter --
+
+(ert-deftest a3madkour-pub-rewrite-test/tmp-file-runs-cite-rewriter ()
+  "F Task 12: rewrite-to-tmp-file calls the citation rewriter, so the
+written tmp file contains the @@hugo: shortcode in place of [cite:@k]."
+  (require 'a3madkour-publish-citations)
+  (let* ((src (make-temp-file "rewrite-cite-" nil ".org"))
+         tmp)
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "* H\nBody [cite:@k1] tail.\n"))
+          (a3madkour-pub-bib-test--with-bib
+              "@misc{k1, author={A,A}, title={T}, date={2020}, publisher={P}}"
+            (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+                       (lambda () nil))
+                      ;; Stub id-link rewriter: just return the buffer string unchanged.
+                      ((symbol-function 'a3madkour-pub-rewrite/rewrite-buffer-links)
+                       (lambda (&rest _) nil)))
+              (a3madkour-pub-citations--accumulator-init)
+              (setq tmp (a3madkour-pub-rewrite/rewrite-to-tmp-file src "id-x"))
+              (let ((written (with-temp-buffer
+                               (insert-file-contents tmp)
+                               (buffer-string))))
+                (should (string-match-p "@@hugo:{{< cite \"k1\" >}}@@" written))
+                (should-not (string-match-p "\\[cite:" written))))))
+      (when tmp (delete-file tmp))
+      (delete-file src))))
 
 (provide 'a3madkour-publish-rewrite-test)
 
