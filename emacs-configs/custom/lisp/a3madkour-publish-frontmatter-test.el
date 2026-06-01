@@ -32,11 +32,12 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
   "normalize dispatches to per-section logic; unknown sections still error."
   (should-error
    (a3madkour-pub-frontmatter/normalize 'bogus '((title . "x")) "/tmp/x.org"))
-  ;; Non-garden known sections still pass-through (B.1 only adds garden).
-  (should (equal (a3madkour-pub-frontmatter/normalize 'essays
-                                                       '((title . "Hi"))
-                                                       "/tmp/x.org")
-                 '((title . "Hi")))))
+  ;; B.4 adds the real essays normalizer; verify it returns an alist with title.
+  (let ((out (a3madkour-pub-frontmatter/normalize 'essays
+                                                   '((title . "Hi"))
+                                                   "/tmp/x.org")))
+    (should (listp out))
+    (should (equal (alist-get 'title out) "Hi"))))
 
 (ert-deftest a3madkour-pub-frontmatter--growth-stage-from-progress ()
   "PROGRESS property maps to growth_stage per spec §7."
@@ -532,6 +533,72 @@ alist value (if any) passes through unchanged."
                   (supporting_notes . "")))
            (out (a3madkour-pub-frontmatter/normalize 'research-questions raw "/tmp/x.org")))
       (should-not (assq 'supporting_notes out)))))
+
+;; -- B.4 Task 3: essays normalizer skeleton --
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-known-section ()
+  "B.4 Task 3: dispatch accepts 'essays without erroring."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((result (a3madkour-pub-frontmatter/normalize
+                         'essays
+                         '((title . "x") (date . "2026-04-12"))
+                         tmp)))
+            (should (listp result))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-required-keys-present ()
+  "B.4 Task 3: normalize emits all 14 required essay frontmatter keys."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let* ((raw '((title . "Test") (date . "2026-04-12") (summary . "S")
+                        (tags . ("a"))))
+                 (out (a3madkour-pub-frontmatter/normalize 'essays raw tmp))
+                 (required '(title date lastmod draft summary tags series series_order
+                             toc has_sidenotes has_citations has_footnotes has_math
+                             has_widgets has_video_sync)))
+            (dolist (k required)
+              (should (assq k out)))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-draft-defaults-false ()
+  "B.4 Task 3: absent draft → false."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12")) tmp)))
+            (should (eq (alist-get 'draft out) nil))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-toc-defaults-true ()
+  "B.4 Task 3: absent toc → true."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12")) tmp)))
+            (should (eq (alist-get 'toc out) t))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-noise-keys-dropped ()
+  "B.4 Task 3: ox-hugo noise keys NOT in the essay contract are dropped."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let* ((raw '((title . "x") (date . "2026-04-12") (author . "noise")
+                        (slug . "noise")))
+                 (out (a3madkour-pub-frontmatter/normalize 'essays raw tmp)))
+            (should-not (assq 'author out))
+            (should-not (assq 'slug out))))
+      (delete-file tmp))))
 
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

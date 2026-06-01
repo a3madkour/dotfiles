@@ -73,6 +73,8 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
   (cond
    ((eq section 'garden)
     (a3madkour-pub-frontmatter--normalize-garden raw-alist source-file))
+   ((eq section 'essays)
+    (a3madkour-pub-frontmatter--normalize-essays raw-alist source-file))
    ((eq section 'research-themes)
     (a3madkour-pub-frontmatter--normalize-research-theme raw-alist source-file))
    ((eq section 'research-questions)
@@ -202,6 +204,69 @@ empty string that the downstream linter rejects."
         (nonempty (a3madkour-pub-history/git-mtime-of-file file))
         (nonempty (a3madkour-pub-history/filesystem-mtime-of-file file))
         (format-time-string "%Y-%m-%d"))))
+
+(defconst a3madkour-pub-frontmatter--essay-required-keys
+  '(title date lastmod draft summary tags series series_order toc
+          has_sidenotes has_citations has_footnotes has_math
+          has_widgets has_video_sync)
+  "14 required frontmatter keys per check_fixtures.py essay contract.")
+
+(defconst a3madkour-pub-frontmatter--essay-optional-keys
+  '(tile_size featured hero source_stream)
+  "4 optional frontmatter keys per CLAUDE.md essay contract.")
+
+(defun a3madkour-pub-frontmatter--normalize-essays (raw-alist source-file)
+  "B.4: essays frontmatter normalizer.
+
+Pipeline:
+  1. Drop ox-hugo noise keys (anything not in required ∪ optional).
+  2. Coerce draft to bool (default false), toc to bool (default true).
+  3. Default series=\"\", series_order=0 (always emitted for linter parity).
+  4. Resolve lastmod via last-modified-cascade (drawer → keyword → git → fs → today).
+  5. Default all 6 has_* flags to nil; Tasks 4-5 add real scan + override merge.
+Returns the normalized alist."
+  (let* ((allowed (append a3madkour-pub-frontmatter--essay-required-keys
+                          a3madkour-pub-frontmatter--essay-optional-keys))
+         (out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
+                                (copy-alist raw-alist))))
+    ;; draft default false
+    (unless (assq 'draft out)
+      (push (cons 'draft nil) out))
+    (when (assq 'draft out)
+      (let ((v (alist-get 'draft out)))
+        (setf (alist-get 'draft out) (and v (not (eq v nil)) t))))
+    ;; toc default true
+    (unless (assq 'toc out)
+      (push (cons 'toc t) out))
+    (when (assq 'toc out)
+      (let ((v (alist-get 'toc out)))
+        (setf (alist-get 'toc out) (if (memq v '(nil :nil)) nil t))))
+    ;; series defaults
+    (unless (assq 'series out)
+      (push (cons 'series "") out))
+    (unless (assq 'series_order out)
+      (push (cons 'series_order 0) out))
+    (when-let ((so (alist-get 'series_order out)))
+      (when (stringp so)
+        (setf (alist-get 'series_order out) (string-to-number so))))
+    ;; lastmod cascade
+    (let* ((drawer-lm (alist-get 'last_modified raw-alist))
+           (kw-lm     (alist-get 'lastmod raw-alist))
+           (kw-trim   (when (and (stringp kw-lm) (>= (length kw-lm) 10))
+                        (substring kw-lm 0 10))))
+      (setq out (assq-delete-all 'lastmod out))
+      (setq out (assq-delete-all 'last_modified out))
+      (setf (alist-get 'lastmod out)
+            (a3madkour-pub-frontmatter/last-modified-cascade
+             source-file
+             :drawer  drawer-lm
+             :keyword kw-trim)))
+    ;; Defaults for required has_* flags (Task 4-5 add real wiring).
+    (dolist (k '(has_sidenotes has_citations has_footnotes has_math
+                                has_widgets has_video_sync))
+      (unless (assq k out)
+        (push (cons k nil) out)))
+    out))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
   "B.1: garden frontmatter normalizer.  Covers Tasks 5-8 + hygiene fixes.
