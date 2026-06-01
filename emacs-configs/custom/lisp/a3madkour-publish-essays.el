@@ -44,6 +44,41 @@ merge with per-keyword `#+HUGO_HAS_<X>:' overrides (see Task 5)."
         :has_widgets    (and (string-match-p "{{< widget "      body) t)
         :has_video_sync (and (string-match-p "{{< video-sync "  body) t)))
 
+;; Task 5: has_* override merge.
+
+(defconst a3madkour-pub-essays--has-flag-keywords
+  '((:has_sidenotes  . "HUGO_HAS_SIDENOTES")
+    (:has_citations  . "HUGO_HAS_CITATIONS")
+    (:has_footnotes  . "HUGO_HAS_FOOTNOTES")
+    (:has_math       . "HUGO_HAS_MATH")
+    (:has_widgets    . "HUGO_HAS_WIDGETS")
+    (:has_video_sync . "HUGO_HAS_VIDEO_SYNC"))
+  "Alist mapping each has_* plist key to its `#+HUGO_HAS_<X>:' keyword.")
+
+(defun a3madkour-pub-essays--read-has-override (file plist-key)
+  "Read `#+HUGO_<KEYWORD>:' from FILE for PLIST-KEY.
+Returns a 3-state value: t (\"t\"/\"true\"/\"1\"/\"yes\" → t), nil (\"nil\"/\"false\"/\"0\"/\"no\" → nil),
+or `:unset' if the keyword is absent or value is empty."
+  (let* ((kw (cdr (assq plist-key a3madkour-pub-essays--has-flag-keywords)))
+         (raw (a3madkour-pub-frontmatter--read-org-keyword file kw)))
+    (cond
+     ((null raw) :unset)
+     ((member (downcase raw) '("t" "true" "1" "yes")) t)
+     ((member (downcase raw) '("nil" "false" "0" "no")) nil)
+     (t :unset))))
+
+(defun a3madkour-pub-essays--merge-has-flags (scan-plist file)
+  "Merge keyword override on top of SCAN-PLIST for FILE.
+For each has_* key: if `#+HUGO_HAS_<X>:' is set in FILE, its value wins;
+else SCAN-PLIST's value passes through.  Returns a new plist."
+  (let ((out (copy-sequence scan-plist)))
+    (dolist (cell a3madkour-pub-essays--has-flag-keywords)
+      (let* ((k (car cell))
+             (override (a3madkour-pub-essays--read-has-override file k)))
+        (unless (eq override :unset)
+          (setq out (plist-put out k override)))))
+    out))
+
 (provide 'a3madkour-publish-essays)
 
 ;;; a3madkour-publish-essays.el ends here

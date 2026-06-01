@@ -80,6 +80,52 @@
                (a3madkour-pub-essays--scan-has-flags "plain text only")
                :has_video_sync)))
 
+;; -- B.4 Task 5: has_* override merge --
+
+(ert-deftest a3madkour-pub-essays-test/merge-keyword-override-wins-false ()
+  "Body has sidenote shortcode AND #+HUGO_HAS_SIDENOTES: nil → false."
+  (let ((tmp (make-temp-file "essays-merge-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert "#+HUGO_HAS_SIDENOTES: nil\n"))
+          (let* ((scan '(:has_sidenotes t :has_citations nil
+                         :has_footnotes nil :has_math nil
+                         :has_widgets nil :has_video_sync nil))
+                 (merged (a3madkour-pub-essays--merge-has-flags scan tmp)))
+            (should (eq (plist-get merged :has_sidenotes) nil))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-essays-test/merge-keyword-override-wins-true ()
+  "No body shortcode but #+HUGO_HAS_WIDGETS: t → true."
+  (let ((tmp (make-temp-file "essays-merge-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert "#+HUGO_HAS_WIDGETS: t\n"))
+          (let* ((scan '(:has_sidenotes nil :has_citations nil
+                         :has_footnotes nil :has_math nil
+                         :has_widgets nil :has_video_sync nil))
+                 (merged (a3madkour-pub-essays--merge-has-flags scan tmp)))
+            (should (eq (plist-get merged :has_widgets) t))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-essays-test/merge-absent-keyword-uses-scan ()
+  "No #+HUGO_HAS_* keywords → scan result wins."
+  (let ((tmp (make-temp-file "essays-merge-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert "#+title: x\n"))
+          (let* ((scan '(:has_sidenotes t :has_citations nil
+                         :has_footnotes t :has_math nil
+                         :has_widgets nil :has_video_sync nil))
+                 (merged (a3madkour-pub-essays--merge-has-flags scan tmp)))
+            (should (eq (plist-get merged :has_sidenotes) t))
+            (should (eq (plist-get merged :has_citations) nil))
+            (should (eq (plist-get merged :has_footnotes) t))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

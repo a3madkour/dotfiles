@@ -261,11 +261,20 @@ Returns the normalized alist."
              source-file
              :drawer  drawer-lm
              :keyword kw-trim)))
-    ;; Defaults for required has_* flags (Task 4-5 add real wiring).
-    (dolist (k '(has_sidenotes has_citations has_footnotes has_math
-                                has_widgets has_video_sync))
-      (unless (assq k out)
-        (push (cons k nil) out)))
+    ;; Task 5: has_* flags.  Caller (publish-essay-file) injects a `:scan-plist'
+    ;; key into raw-alist BEFORE calling normalize.  Merge with #+HUGO_HAS_<X>:
+    ;; keyword overrides via the essays module helper.  When :scan-plist is
+    ;; absent (e.g. unit tests of the normalizer alone), default all flags to nil.
+    (require 'a3madkour-publish-essays)
+    (let* ((scan-pl (alist-get :scan-plist raw-alist))
+           (merged (if scan-pl
+                       (a3madkour-pub-essays--merge-has-flags scan-pl source-file)
+                     '(:has_sidenotes nil :has_citations nil :has_footnotes nil
+                       :has_math nil :has_widgets nil :has_video_sync nil))))
+      (setq out (assq-delete-all :scan-plist out))
+      (dolist (cell a3madkour-pub-essays--has-flag-keywords)
+        (let ((k (intern (substring (symbol-name (car cell)) 1))))  ; :has_x → has_x
+          (setf (alist-get k out) (and (plist-get merged (car cell)) t)))))
     out))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)
