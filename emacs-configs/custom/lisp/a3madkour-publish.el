@@ -292,6 +292,17 @@ that reason."
   ;; citations module at load time.
   (when (fboundp 'a3madkour-pub-citations--accumulator-init)
     (a3madkour-pub-citations--accumulator-init))
+  ;; F Task 16: prime the bib parser cache.  Without this the cite rewriter's
+  ;; bib-resolve calls hit an empty cache and fail every cite-key.  Skipped
+  ;; when citar is loaded (citar manages its own cache).  Skipped when the
+  ;; library path doesn't exist (publish runs without F don't need the cache).
+  (when (and (fboundp 'a3madkour-pub-bib/parse-file)
+             (boundp  'a3madkour-pub-bib/library-path)
+             a3madkour-pub-bib/library-path
+             (file-exists-p a3madkour-pub-bib/library-path)
+             (not (and (fboundp 'a3madkour-pub-bib--citar-loaded-p)
+                       (a3madkour-pub-bib--citar-loaded-p))))
+    (a3madkour-pub-bib/parse-file a3madkour-pub-bib/library-path))
   ;; B.0: snapshot the URL-history manifest so diff-published-set reads
   ;; pre-publish state regardless of mid-publish record-publish calls.
   (setq a3madkour-pub--manifest-snapshot

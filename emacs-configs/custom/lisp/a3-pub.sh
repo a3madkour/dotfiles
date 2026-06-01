@@ -116,6 +116,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(a3-publish-living)" \
     --eval "(kill-emacs 0)" \
     "$@"
@@ -166,6 +167,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
               (a3-publish-deliberate \"$target_path\")
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
@@ -200,6 +202,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(a3madkour-pub/begin-publish)" \
     --eval "(a3-sync-citations)" \
     --eval "(a3madkour-pub/finish-publish)" \
