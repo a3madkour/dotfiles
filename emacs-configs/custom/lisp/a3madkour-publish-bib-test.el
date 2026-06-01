@@ -359,6 +359,85 @@ its API symbols are bound."
              (lambda (sym) (memq sym '(citar-get-entry citar-get-value)))))
     (should (a3madkour-pub-bib--citar-loaded-p))))
 
+;; -- Task 14: BBT JSON-RPC client --
+
+(ert-deftest a3madkour-pub-bib-test/refresh-disabled-when-endpoint-nil ()
+  "F Task 14: bbt-endpoint=nil disables refresh; returns nil; no HTTP call."
+  (let ((a3madkour-pub-bib/bbt-endpoint nil)
+        (calls 0))
+    (cl-letf (((symbol-function 'url-retrieve-synchronously)
+               (lambda (&rest _) (setq calls (1+ calls)) nil)))
+      (should-not (a3madkour-pub-bib/refresh-from-zotero))
+      (should (= 0 calls)))))
+
+(ert-deftest a3madkour-pub-bib-test/refresh-200-writes-file ()
+  "F Task 14: 200 response with valid body atomic-writes the .bib path."
+  (let* ((tmp-bib (make-temp-file "f-bbt-" nil ".bib"))
+         (a3madkour-pub-bib/library-path tmp-bib)
+         (a3madkour-pub-bib/bbt-endpoint "http://localhost:23119/x"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve-synchronously)
+                   (lambda (&rest _)
+                     (with-current-buffer (generate-new-buffer "*bbt-mock*")
+                       (insert "HTTP/1.1 200 OK\r\n"
+                               "Content-Type: application/json\r\n\r\n"
+                               "{\"jsonrpc\":\"2.0\",\"result\":\"@article{ok, title={T}}\\n\"}")
+                       (current-buffer)))))
+          (should (a3madkour-pub-bib/refresh-from-zotero))
+          (let ((written (with-temp-buffer
+                           (insert-file-contents tmp-bib) (buffer-string))))
+            (should (string-match-p "@article{ok" written))))
+      (when (file-exists-p tmp-bib) (delete-file tmp-bib)))))
+
+(ert-deftest a3madkour-pub-bib-test/refresh-non-200-warns-and-returns-nil ()
+  "F Task 14: non-2xx response returns nil without writing the .bib."
+  (let* ((tmp-bib (make-temp-file "f-bbt-" nil ".bib"))
+         (a3madkour-pub-bib/library-path tmp-bib)
+         (a3madkour-pub-bib/bbt-endpoint "http://localhost:23119/x"))
+    (with-temp-file tmp-bib (insert "@misc{original, title={Orig}}"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve-synchronously)
+                   (lambda (&rest _)
+                     (with-current-buffer (generate-new-buffer "*bbt-mock*")
+                       (insert "HTTP/1.1 503 Service Unavailable\r\n\r\n{}")
+                       (current-buffer)))))
+          (should-not (a3madkour-pub-bib/refresh-from-zotero))
+          (let ((post (with-temp-buffer
+                        (insert-file-contents tmp-bib) (buffer-string))))
+            (should (string-match-p "original" post))))
+      (when (file-exists-p tmp-bib) (delete-file tmp-bib)))))
+
+(ert-deftest a3madkour-pub-bib-test/refresh-connection-refused-returns-nil ()
+  "F Task 14: ECONNREFUSED (url-retrieve-synchronously signals or returns nil)."
+  (let ((a3madkour-pub-bib/library-path
+         (make-temp-file "f-bbt-" nil ".bib"))
+        (a3madkour-pub-bib/bbt-endpoint "http://localhost:23119/x"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve-synchronously)
+                   (lambda (&rest _)
+                     (signal 'file-error '("Connection refused")))))
+          (should-not (a3madkour-pub-bib/refresh-from-zotero)))
+      (when (file-exists-p a3madkour-pub-bib/library-path)
+        (delete-file a3madkour-pub-bib/library-path)))))
+
+(ert-deftest a3madkour-pub-bib-test/refresh-malformed-json-returns-nil ()
+  "F Task 14: 200 with garbage body returns nil without writing."
+  (let* ((tmp-bib (make-temp-file "f-bbt-" nil ".bib"))
+         (a3madkour-pub-bib/library-path tmp-bib)
+         (a3madkour-pub-bib/bbt-endpoint "http://localhost:23119/x"))
+    (with-temp-file tmp-bib (insert "@misc{original, title={Orig}}"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-retrieve-synchronously)
+                   (lambda (&rest _)
+                     (with-current-buffer (generate-new-buffer "*bbt-mock*")
+                       (insert "HTTP/1.1 200 OK\r\n\r\nNOT VALID JSON")
+                       (current-buffer)))))
+          (should-not (a3madkour-pub-bib/refresh-from-zotero))
+          (let ((post (with-temp-buffer
+                        (insert-file-contents tmp-bib) (buffer-string))))
+            (should (string-match-p "original" post))))
+      (when (file-exists-p tmp-bib) (delete-file tmp-bib)))))
+
 (provide 'a3madkour-publish-bib-test)
 
 ;;; a3madkour-publish-bib-test.el ends here

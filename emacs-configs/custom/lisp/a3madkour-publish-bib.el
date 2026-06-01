@@ -302,6 +302,77 @@ the parser path."
       (a3madkour-pub-bib--read-via-citar key)
     (a3madkour-pub-bib--read-via-parser key)))
 
+;; ---------------------------------------------------------------------
+;; BBT JSON-RPC client (Task 14)
+;; ---------------------------------------------------------------------
+
+(require 'url)
+(require 'url-http)
+(require 'json)
+
+(defconst a3madkour-pub-bib--bbt-timeout 2
+  "Connection/read timeout (seconds) for BBT JSON-RPC.")
+
+(defun a3madkour-pub-bib--bbt-payload ()
+  "Build the JSON-RPC request body for item.export → Better BibTeX."
+  (json-encode
+   '(("jsonrpc" . "2.0")
+     ("method"  . "item.export")
+     ("params"  . (("library_id" . 1)
+                   ("translator" . "Better BibTeX"))))))
+
+(defun a3madkour-pub-bib--parse-bbt-response (response-buffer)
+  "Parse RESPONSE-BUFFER (raw HTTP response) and return the BBT result
+string on 2xx + valid JSON, else nil.  Buffer is killed at end."
+  (unwind-protect
+      (with-current-buffer response-buffer
+        (goto-char (point-min))
+        (cond
+         ;; Status line
+         ((not (re-search-forward "^HTTP/[0-9.]+ \\([0-9]+\\)" nil t)) nil)
+         ((not (let ((code (string-to-number (match-string 1))))
+                 (and (>= code 200) (< code 300)))) nil)
+         (t
+          ;; Skip headers (CRLF/CRLF or LF/LF) to the body.
+          (goto-char (point-min))
+          (when (re-search-forward "\r?\n\r?\n" nil t)
+            (let ((body (buffer-substring-no-properties (point) (point-max))))
+              (condition-case nil
+                  (let ((parsed (json-read-from-string body)))
+                    (or (cdr (assoc 'result parsed))
+                        ;; alist alternative
+                        (cdr (assq 'result parsed))))
+                (error nil)))))))
+    (when (buffer-live-p response-buffer)
+      (kill-buffer response-buffer))))
+
+(defun a3madkour-pub-bib/refresh-from-zotero ()
+  "Fetch a fresh BibTeX dump via BBT JSON-RPC and atomic-write it to
+`a3madkour-pub-bib/library-path'.  Returns t on success, nil on
+disabled / unreachable / non-2xx / malformed response."
+  (when a3madkour-pub-bib/bbt-endpoint
+    (let* ((url-request-method "POST")
+           (url-request-extra-headers '(("Content-Type" . "application/json")))
+           (url-request-data (a3madkour-pub-bib--bbt-payload))
+           (url-show-status nil)
+           (timeout a3madkour-pub-bib--bbt-timeout)
+           (result
+            (condition-case _
+                (with-timeout (timeout nil)
+                  (a3madkour-pub-bib--parse-bbt-response
+                   (url-retrieve-synchronously
+                    a3madkour-pub-bib/bbt-endpoint t t timeout)))
+              (error nil))))
+      (cond
+       ((not (stringp result))
+        (message "[a3-pub-bib] BBT JSON-RPC: refresh failed; keeping on-disk .bib")
+        nil)
+       (t
+        (let ((tmp (concat a3madkour-pub-bib/library-path ".tmp")))
+          (with-temp-file tmp (insert result))
+          (rename-file tmp a3madkour-pub-bib/library-path t)
+          t))))))
+
 (provide 'a3madkour-publish-bib)
 
 ;;; a3madkour-publish-bib.el ends here
