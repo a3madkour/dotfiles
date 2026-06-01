@@ -249,6 +249,12 @@ Returns the normalized alist."
     ;; tags default: emit tags: [] when absent (linter requires the key).
     (unless (assq 'tags out)
       (push (cons 'tags '()) out))
+    ;; summary: inject from #+HUGO_SUMMARY: keyword; default "" (linter requires key).
+    ;; ox-hugo has no built-in HUGO_SUMMARY keyword, so we read it directly and
+    ;; inject it unconditionally (ensuring the key is always present).
+    (let ((src-summary (a3madkour-pub-frontmatter--read-org-keyword
+                        source-file "HUGO_SUMMARY")))
+      (setf (alist-get 'summary out) (or src-summary "")))
     (when-let ((so (alist-get 'series_order out)))
       (when (stringp so)
         (setf (alist-get 'series_order out) (string-to-number so))))

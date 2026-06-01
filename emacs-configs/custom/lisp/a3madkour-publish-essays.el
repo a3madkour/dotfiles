@@ -175,7 +175,16 @@ Pipeline:
                        (when (file-exists-p tmp-src)
                          (delete-file tmp-src))))
          (body       (plist-get exported :body))
-         (scan-pl    (a3madkour-pub-essays--scan-has-flags (or body "")))
+         ;; Scan the org source content for shortcode patterns.  ox-hugo
+         ;; HTML-encodes `{{<' to `{{&lt;' in the exported body, so shortcodes
+         ;; are only reliably detected in the unescaped org source.  Append
+         ;; the post-export markdown body so that markdown-native patterns
+         ;; (e.g. footnote references `[^N]') are also found.
+         (src-content (with-temp-buffer
+                        (insert-file-contents file)
+                        (buffer-string)))
+         (scan-pl    (a3madkour-pub-essays--scan-has-flags
+                      (concat src-content "\n" (or body ""))))
          (raw-fm     (cons (cons :scan-plist scan-pl)
                            (or (plist-get exported :frontmatter) '())))
          (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
