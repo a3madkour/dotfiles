@@ -254,6 +254,42 @@ generally); absence of #+HUGO_HERO does not skip it."
       (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
       (when (file-exists-p tmp-site-data) (delete-directory tmp-site-data t)))))
 
+;; -- B.4 spot-check fix: render empty tags --
+
+(ert-deftest a3madkour-pub-essays-test/render-empty-tags-as-array ()
+  "Issue B: render-frontmatter must emit `tags: []' (not `tags: false')
+when the tags value is an empty list.  The render-yaml-value cond tests
+null BEFORE listp, so `nil' alone → \"false\".  The fix must ensure that
+an empty-list tags value is rendered as `[]' rather than `false'."
+  ;; This test drives the render path directly: given a normalized alist
+  ;; containing (tags . nil) or (tags . []) or similar empty-list marker,
+  ;; the rendered YAML must contain "tags: []".
+  (let* ((alist-with-nil-tags
+          '((title . "T") (date . "2026-04-12") (lastmod . "2026-04-12")
+            (draft . nil) (summary . "") (tags . nil)
+            (series . "") (series_order . 0) (toc . t)
+            (has_sidenotes . nil) (has_citations . nil) (has_footnotes . nil)
+            (has_math . nil) (has_widgets . nil) (has_video_sync . nil)))
+         ;; We test the rendered output — the fix must NOT regress bool nil fields
+         ;; (draft, has_*) which render as "false" — only tags must be [].
+         ;; Since render-frontmatter dispatches by key for tags (option d),
+         ;; we cannot pass nil directly and expect []; instead pass the
+         ;; normalizer-produced value.  We normalise first, then render.
+         (tmp (make-temp-file "render-tags-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: T\n"))
+          (let* ((raw '((title . "T") (date . "2026-04-12")))
+                 (normalized (a3madkour-pub-frontmatter/normalize 'essays raw tmp))
+                 (rendered (a3madkour-pub-essays--render-frontmatter normalized)))
+            ;; tags line must be the array form.
+            (should (string-match-p "^tags: \\[\\]$" rendered))
+            ;; draft line must still be false (nil bool field untouched).
+            (should (string-match-p "^draft: false$" rendered))
+            ;; has_* fields must still be false.
+            (should (string-match-p "^has_sidenotes: false$" rendered))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

@@ -131,16 +131,27 @@ NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
 
 (defun a3madkour-pub-essays--render-frontmatter (alist)
   "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
-Returns a string with leading/trailing `---' delimiters."
+Returns a string with leading/trailing `---' delimiters.
+
+Key-aware special cases applied before the generic --render-yaml-value dispatch:
+  `tags' with an empty list → `[]' (not `false').  All other nil values (e.g.
+  `draft', `has_*') render as `false' via the standard dispatch, which is
+  correct for boolean fields."
   (let ((sorted (sort (copy-sequence alist)
                       (lambda (a b)
                         (string< (symbol-name (car a)) (symbol-name (car b)))))))
     (concat "---\n"
             (mapconcat
              (lambda (cell)
-               (format "%s: %s"
-                       (symbol-name (car cell))
-                       (a3madkour-pub-essays--render-yaml-value (cdr cell))))
+               (let* ((k   (car cell))
+                      (v   (cdr cell))
+                      ;; tags: [] when value is an empty list (nil).
+                      ;; Boolean fields like draft/has_* must keep the standard
+                      ;; nil → "false" path, so this special-case is key-scoped.
+                      (str (if (and (eq k 'tags) (null v))
+                               "[]"
+                             (a3madkour-pub-essays--render-yaml-value v))))
+                 (format "%s: %s" (symbol-name k) str)))
              sorted "\n")
             "\n---\n")))
 

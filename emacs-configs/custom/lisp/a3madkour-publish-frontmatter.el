@@ -241,11 +241,25 @@ Returns the normalized alist."
     (when (assq 'toc out)
       (let ((v (alist-get 'toc out)))
         (setf (alist-get 'toc out) (if (memq v '(nil :nil)) nil t))))
-    ;; series defaults
-    (unless (assq 'series out)
+    ;; series defaults + coercions.
+    ;; ox-hugo emits #+HUGO_SERIES: as a single-element list ("name"); coerce
+    ;; to bare string.  Multi-element lists pass through unchanged (unlikely
+    ;; in practice but we don't silently drop data).
+    (if (assq 'series out)
+        (let ((sv (alist-get 'series out)))
+          (when (and (listp sv) (= (length sv) 1))
+            (setf (alist-get 'series out) (car sv))))
       (push (cons 'series "") out))
+    ;; series_order: ox-hugo does not parse #+HUGO_SERIES_ORDER: at all (not
+    ;; a built-in keyword).  Default to 0, then read from source if present.
     (unless (assq 'series_order out)
       (push (cons 'series_order 0) out))
+    ;; Override the default (0) with the source keyword value when present.
+    (when-let ((src-so (a3madkour-pub-frontmatter--read-org-keyword
+                        source-file "HUGO_SERIES_ORDER")))
+      (let ((coerced (string-to-number src-so)))
+        (when (> coerced 0)
+          (setf (alist-get 'series_order out) coerced))))
     ;; tags default: emit tags: [] when absent (linter requires the key).
     (unless (assq 'tags out)
       (push (cons 'tags '()) out))

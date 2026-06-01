@@ -674,5 +674,66 @@ alist value (if any) passes through unchanged."
             (should (eq (alist-get 'series_order out) 2))))
       (delete-file tmp))))
 
+;; -- B.4 spot-check fix: Issue B + C --
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-tags-empty-list-when-absent ()
+  "Issue B: when raw-alist has no tags key, the normalizer should default tags
+to an empty list marker so the YAML renders as `tags: []' — not `tags: false'.
+The rendered frontmatter must contain `tags: []' (not `tags: false')."
+  (let ((tmp (make-temp-file "essays-tags-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let* ((out (a3madkour-pub-frontmatter/normalize
+                       'essays '((title . "x") (date . "2026-04-12")) tmp))
+                 ;; The tags value must not be nil (which renders as false).
+                 ;; It should be an empty list so the render path can emit [].
+                 (tags-val (alist-get 'tags out)))
+            ;; Key must be present.
+            (should (assq 'tags out))
+            ;; Value must NOT be nil (nil → "false" in YAML).
+            ;; An empty list or vector sentinel both satisfy this.
+            ;; We test the rendered output string to be definitive.
+            (require 'a3madkour-publish-essays)
+            (let ((rendered (a3madkour-pub-essays--render-frontmatter out)))
+              (should (string-match-p "^tags: \\[\\]$" rendered))
+              (should-not (string-match-p "^tags: false$" rendered)))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-series-list-coerced-to-string ()
+  "Issue C-1: ox-hugo emits series as a single-element list (\"example-series\").
+The normalizer must coerce it to the bare string \"example-series\"."
+  (let ((tmp (make-temp-file "essays-ser-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12")
+                        (series . ("example-series")))
+                      tmp)))
+            (should (stringp (alist-get 'series out)))
+            (should (equal (alist-get 'series out) "example-series"))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-series-order-from-keyword ()
+  "Issue C-2: #+HUGO_SERIES_ORDER: is not read by ox-hugo; the normalizer
+must read it from the source file and coerce to int."
+  (let ((tmp (make-temp-file "essays-ser-ord-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert ":PROPERTIES:\n:ID: e1\n:END:\n"
+                    "#+title: x\n"
+                    "#+HUGO_SERIES_ORDER: 3\n"))
+          ;; raw-alist has no series_order (ox-hugo never emits it).
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays
+                      '((title . "x") (date . "2026-04-12")
+                        (series . "example-series"))
+                      tmp)))
+            (should (eq (alist-get 'series_order out) 3))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
