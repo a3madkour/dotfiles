@@ -291,6 +291,74 @@ output doesn't use the `#` concat form)."
       "k"
     (should-not (plist-get entry :url))))
 
+;; -- Task 7: bib-resolve dispatch + citar adapter --
+
+(ert-deftest a3madkour-pub-bib-test/resolve-via-parser ()
+  "F Task 7: when citar is NOT loaded (forced), resolve goes through
+the parser path and returns the schema plist."
+  (a3madkour-pub-bib-test--with-bib
+      "@article{k, author={A, A}, title={T}, date={2020}, journaltitle={J}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (let ((entry (a3madkour-pub-bib/resolve "k")))
+        (should entry)
+        (should (equal "T" (plist-get entry :title)))
+        (should (equal '("A, A") (plist-get entry :authors)))))))
+
+(ert-deftest a3madkour-pub-bib-test/resolve-unknown-returns-nil ()
+  "F Task 7: resolve returns nil for unknown keys."
+  (a3madkour-pub-bib-test--with-bib "@article{a, title={A}}"
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () nil)))
+      (should-not (a3madkour-pub-bib/resolve "nonexistent")))))
+
+(ert-deftest a3madkour-pub-bib-test/resolve-via-citar-when-loaded ()
+  "F Task 7: when citar IS loaded (forced), resolve calls citar."
+  (let ((calls 0))
+    (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+               (lambda () t))
+              ((symbol-function 'a3madkour-pub-bib--read-via-citar)
+               (lambda (key)
+                 (setq calls (1+ calls))
+                 (list :authors '("CitarA, A") :year 2020 :title "CitarT"
+                       :venue "CitarV" :url nil :doi nil :publisher nil
+                       :volume nil :issue nil :pages nil :isbn nil
+                       :type "article"))))
+      (let ((entry (a3madkour-pub-bib/resolve "k")))
+        (should (= 1 calls))
+        (should (equal "CitarT" (plist-get entry :title)))))))
+
+(ert-deftest a3madkour-pub-bib-test/resolve-parity-parser-vs-citar ()
+  "F Task 7: parser and citar paths return plist-equal results for the
+same fixture entry.  Drift safeguard — see spec §9."
+  (a3madkour-pub-bib-test--with-bib
+      "@article{k, author={Last, F.}, title={T}, date={2020}, journaltitle={J}}"
+    (let* ((parser-result
+            (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+                       (lambda () nil)))
+              (a3madkour-pub-bib/resolve "k")))
+           (citar-result
+            (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p)
+                       (lambda () t))
+                      ((symbol-function 'a3madkour-pub-bib--read-via-citar)
+                       (lambda (_) parser-result)))   ;; stub returns same plist
+              (a3madkour-pub-bib/resolve "k"))))
+      (should (equal parser-result citar-result)))))
+
+(ert-deftest a3madkour-pub-bib-test/citar-loaded-p-detection ()
+  "F Task 7: citar-loaded-p returns truthy iff citar is featurep'd AND
+its API symbols are bound."
+  ;; Force not loaded: featurep returns nil for citar.
+  (cl-letf (((symbol-function 'featurep)
+             (lambda (sym) (and (not (eq sym 'citar))))))
+    (should-not (a3madkour-pub-bib--citar-loaded-p)))
+  ;; Force loaded: featurep returns t for citar AND fboundp returns t for API.
+  (cl-letf (((symbol-function 'featurep)
+             (lambda (sym) (or (eq sym 'citar))))
+            ((symbol-function 'fboundp)
+             (lambda (sym) (memq sym '(citar-get-entry citar-get-value)))))
+    (should (a3madkour-pub-bib--citar-loaded-p))))
+
 (provide 'a3madkour-publish-bib-test)
 
 ;;; a3madkour-publish-bib-test.el ends here

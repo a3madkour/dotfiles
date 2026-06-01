@@ -250,6 +250,58 @@ junk).  Returns int or nil."
             :isbn      (alist-get 'isbn raw)
             :type      (a3madkour-pub-bib--normalize-type raw)))))
 
+;; ---------------------------------------------------------------------
+;; bib-resolve: dispatch + citar adapter (Task 7)
+;; ---------------------------------------------------------------------
+
+(defun a3madkour-pub-bib--citar-loaded-p ()
+  "Return non-nil iff citar is loaded (featurep) AND its API is bound."
+  (and (featurep 'citar)
+       (fboundp 'citar-get-entry)
+       (fboundp 'citar-get-value)))
+
+(defun a3madkour-pub-bib--read-via-parser (key)
+  "Parser path: KEY → schema plist via parser cache + normalize-entry."
+  (a3madkour-pub-bib--normalize-entry
+   (and a3madkour-pub-bib--parser-cache
+        (gethash key a3madkour-pub-bib--parser-cache))))
+
+(defun a3madkour-pub-bib--read-via-citar (key)
+  "Citar path: KEY → schema plist via citar's API.  Mirrors normalize-entry
+by reading citar's field accessors.  Returns nil if citar doesn't know KEY."
+  (when (a3madkour-pub-bib--citar-loaded-p)
+    (let ((entry (citar-get-entry key)))
+      (when entry
+        ;; citar-get-value returns a string or nil; behave like the parser's
+        ;; raw alist by building a synthetic alist and feeding normalize-entry.
+        (let ((raw
+               (delq nil
+                     (mapcar
+                      (lambda (field)
+                        (let ((v (citar-get-value field entry)))
+                          (and v (cons (intern (downcase (symbol-name field))) v))))
+                      '(:bibtype author title date year journaltitle booktitle
+                                 publisher eventtitle url doi volume issue
+                                 number pages isbn)))))
+          ;; citar's :bibtype isn't a real field name; pull it from entry.
+          (let ((bt (or (citar-get-value 'type entry)
+                        (alist-get '=type= entry)
+                        (citar-get-value '=type= entry))))
+            (when bt
+              (push (cons :bibtype (downcase (format "%s" bt))) raw)))
+          (a3madkour-pub-bib--normalize-entry raw))))))
+
+(defun a3madkour-pub-bib/resolve (key)
+  "Resolve KEY (string) to a schema plist or nil.
+
+Dispatcher: prefers citar when loaded; otherwise uses parser cache.
+The parser cache must be primed by `parse-file' or an in-test
+`parser-init'+`parse-buffer' before resolve can return non-nil on
+the parser path."
+  (if (a3madkour-pub-bib--citar-loaded-p)
+      (a3madkour-pub-bib--read-via-citar key)
+    (a3madkour-pub-bib--read-via-parser key)))
+
 (provide 'a3madkour-publish-bib)
 
 ;;; a3madkour-publish-bib.el ends here
