@@ -269,6 +269,19 @@ Returns the normalized alist."
     (let ((src-summary (a3madkour-pub-frontmatter--read-org-keyword
                         source-file "HUGO_SUMMARY")))
       (setf (alist-get 'summary out) (or src-summary "")))
+    ;; Optional keys not natively surfaced by ox-hugo's frontmatter alist.
+    ;; Read each #+HUGO_<X>: keyword directly; emit only when present so the
+    ;; YAML render omits the key when the author hasn't set it.
+    (dolist (cell '((hero          . "HUGO_HERO")
+                    (tile_size     . "HUGO_TILE_SIZE")
+                    (source_stream . "HUGO_SOURCE_STREAM")))
+      (when-let ((v (a3madkour-pub-frontmatter--read-org-keyword
+                     source-file (cdr cell))))
+        (setf (alist-get (car cell) out) v)))
+    (when-let ((feat (a3madkour-pub-frontmatter--read-org-keyword
+                      source-file "HUGO_FEATURED")))
+      (setf (alist-get 'featured out)
+            (and (member (downcase feat) '("t" "true" "1" "yes")) t)))
     (when-let ((so (alist-get 'series_order out)))
       (when (stringp so)
         (setf (alist-get 'series_order out) (string-to-number so))))
