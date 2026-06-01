@@ -48,7 +48,7 @@ See parent design spec §4 (command surface)."
   (unwind-protect
       (let* ((file (a3madkour-pub--resolve-file-or-id file-or-id))
              (section (a3madkour-pub/note-section file))
-             (handler (cdr (assq section a3madkour-pub-deliberate--handlers))))
+             (handler (cdr (assq (intern (or section "")) a3madkour-pub-deliberate--handlers))))
         (unless handler
           (error "a3madkour-pub-deliberate: no handler registered for section %S (file: %s)"
                  section file))
