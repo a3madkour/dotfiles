@@ -95,6 +95,29 @@ else SCAN-PLIST's value passes through.  Returns a new plist."
      (directory-file-name
       (file-name-as-directory a3madkour-pub/site-data-dir))))))
 
+;; Spot-check fix-up: per-essay asset directory copy.
+;; `asset-validate-and-copy' only walks [[org-link]] references; this helper
+;; covers the `#+HUGO_HERO: hero.svg' + `{{< figure src="hero.svg" >}}'
+;; patterns where the source lives at `essays-dir/assets/<id>/'.
+
+(defun a3madkour-pub-essays--copy-asset-dir (id bundle-dest-dir)
+  "Recursively copy `essays-dir/assets/ID/' into BUNDLE-DEST-DIR.
+No-op when the source directory does not exist.  Returns the list of
+basenames copied, or nil if no source dir."
+  (let* ((src-dir (expand-file-name (format "assets/%s/" id)
+                                    a3madkour-pub/essays-dir))
+         (src-dir-as-dir (file-name-as-directory src-dir)))
+    (when (file-directory-p src-dir-as-dir)
+      (make-directory bundle-dest-dir t)
+      (let ((copied nil))
+        (dolist (f (directory-files src-dir-as-dir t directory-files-no-dot-files-regexp))
+          (let ((dest (expand-file-name (file-name-nondirectory f) bundle-dest-dir)))
+            (if (file-directory-p f)
+                (copy-directory f dest t t t)
+              (copy-file f dest t))
+            (push (file-name-nondirectory f) copied)))
+        (nreverse copied)))))
+
 (defun a3madkour-pub-essays--write-if-different (path content)
   "Write CONTENT to PATH only if it differs from existing on-disk content.
 Returns t if a write happened, nil if no-op."
@@ -200,6 +223,7 @@ Pipeline:
                            (or (plist-get exported :frontmatter) '())))
          (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
     (a3madkour-pub/asset-validate-and-copy file bundle-dir)
+    (a3madkour-pub-essays--copy-asset-dir id bundle-dir)
     (a3madkour-pub-essays--write-if-different
      out-path
      (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))

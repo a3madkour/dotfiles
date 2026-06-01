@@ -290,6 +290,39 @@ an empty-list tags value is rendered as `[]' rather than `false'."
             (should (string-match-p "^has_sidenotes: false$" rendered))))
       (delete-file tmp))))
 
+;; -- B.4 spot-check fix-up: per-essay asset directory copy --
+
+(ert-deftest a3madkour-pub-essays-test/copy-asset-dir-copies-when-source-exists ()
+  "Per-essay asset dir at essays-dir/assets/<id>/ → copied into bundle."
+  (let* ((tmp-essays-root (make-temp-file "essays-asset-src-" t))
+         (tmp-bundle (make-temp-file "essays-bundle-" t))
+         (assets-src (expand-file-name "assets/test-uuid/" tmp-essays-root))
+         (hero (expand-file-name "hero.svg" assets-src))
+         (other (expand-file-name "fig.svg" assets-src)))
+    (unwind-protect
+        (let ((a3madkour-pub/essays-dir (file-name-as-directory tmp-essays-root)))
+          (make-directory assets-src t)
+          (with-temp-file hero (insert "<svg/>"))
+          (with-temp-file other (insert "<svg/>"))
+          (a3madkour-pub-essays--copy-asset-dir "test-uuid" tmp-bundle)
+          (should (file-exists-p (expand-file-name "hero.svg" tmp-bundle)))
+          (should (file-exists-p (expand-file-name "fig.svg" tmp-bundle))))
+      (delete-directory tmp-essays-root t)
+      (delete-directory tmp-bundle t))))
+
+(ert-deftest a3madkour-pub-essays-test/copy-asset-dir-no-op-when-source-absent ()
+  "No asset dir for id → silent no-op (returns nil, does nothing)."
+  (let ((tmp-essays-root (make-temp-file "essays-asset-src-" t))
+        (tmp-bundle (make-temp-file "essays-bundle-" t)))
+    (unwind-protect
+        (let ((a3madkour-pub/essays-dir (file-name-as-directory tmp-essays-root)))
+          (should-not (a3madkour-pub-essays--copy-asset-dir "nonexistent-uuid"
+                                                            tmp-bundle))
+          (should (equal '("." "..")
+                         (directory-files tmp-bundle))))
+      (delete-directory tmp-essays-root t)
+      (delete-directory tmp-bundle t))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here
