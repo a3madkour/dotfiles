@@ -40,5 +40,29 @@ control reaches the dispatch."
   (should (eq (cdr (assq 'essays a3madkour-pub-deliberate--handlers))
               'a3madkour-pub-essays/publish-essay-file)))
 
+;; -- F Task 13: deliberate triggers cite emit-yaml --
+
+(ert-deftest a3madkour-pub-deliberate-test/citations-emit-fires-after-finish ()
+  "F Task 13: a3-publish-deliberate calls emit-yaml after finish-publish.
+Stub begin-publish, finish-publish, resolve-file-or-id, note-section, and
+emit-yaml; bind handlers to a no-op essays entry.  Assert call order:
+finish-publish first, then emit-yaml."
+  (let ((calls nil)
+        (a3madkour-pub-deliberate--handlers
+         (list (cons 'essays (lambda (_file) nil)))))
+    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
+              ((symbol-function 'a3madkour-pub/finish-publish)
+               (lambda (&rest _) (push 'finish calls)))
+              ((symbol-function 'a3madkour-pub--resolve-file-or-id)
+               (lambda (_) "/fake/file.org"))
+              ((symbol-function 'a3madkour-pub/note-section)
+               (lambda (_) "essays"))
+              ((symbol-function 'a3madkour-pub-citations/emit-yaml)
+               (lambda (&rest _) (push 'emit calls)))
+              ((symbol-function 'require)
+               (lambda (feat &rest _) (or (memq feat features) t))))
+      (a3-publish-deliberate "/fake/file.org")
+      (should (equal (reverse calls) '(finish emit))))))
+
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here

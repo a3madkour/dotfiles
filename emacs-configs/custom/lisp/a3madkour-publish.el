@@ -287,6 +287,11 @@ in effect across the call, org-roam must already be loaded (so that
 that reason."
   (a3madkour-pub--reset-metadata-cache)
   (clrhash a3madkour-pub--publish-run-accumulator)
+  ;; F Task 13: reset the citations accumulator so each publish run starts
+  ;; fresh.  Guard on fboundp so this module stays independent of the
+  ;; citations module at load time.
+  (when (fboundp 'a3madkour-pub-citations--accumulator-init)
+    (a3madkour-pub-citations--accumulator-init))
   ;; B.0: snapshot the URL-history manifest so diff-published-set reads
   ;; pre-publish state regardless of mid-publish record-publish calls.
   (setq a3madkour-pub--manifest-snapshot

@@ -61,7 +61,10 @@ See parent design spec §4 (command surface) and §11 (idempotency)."
     (let ((section (car entry))
           (handler (cdr entry)))
       (a3madkour-pub-living--walk-section section handler)))
-  (a3madkour-pub/finish-publish))
+  (a3madkour-pub/finish-publish)
+  ;; F Task 13: flush accumulated cite-keys to data/citations.yaml.
+  (when (require 'a3madkour-publish-citations nil 'noerror)
+    (a3madkour-pub-citations/emit-yaml :mode 'merge)))
 
 (defun a3madkour-pub-living--walk-section (section handler)
   "Walk `org-notes-dir' for SECTION and invoke HANDLER per matching file.

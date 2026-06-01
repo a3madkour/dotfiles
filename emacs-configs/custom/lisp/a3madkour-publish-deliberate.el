@@ -53,7 +53,10 @@ See parent design spec §4 (command surface)."
           (error "a3madkour-pub-deliberate: no handler registered for section %S (file: %s)"
                  section file))
         (funcall handler file))
-    (a3madkour-pub/finish-publish :scope 'deliberate)))
+    (a3madkour-pub/finish-publish :scope 'deliberate))
+  ;; F Task 13: flush accumulated cite-keys to data/citations.yaml.
+  (when (require 'a3madkour-publish-citations nil 'noerror)
+    (a3madkour-pub-citations/emit-yaml :mode 'merge)))
 
 (provide 'a3madkour-publish-deliberate)
 
