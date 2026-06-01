@@ -238,13 +238,14 @@ exported from Zotero + Better-BibTeX."
            (year (or (a3madkour-pub-bib--year-from-date (alist-get 'date raw))
                      (a3madkour-pub-bib--year-from-date (alist-get 'year raw))))
            (title-raw (alist-get 'title raw))
-           ;; The parser already stripped the outer brace-pair that delimited
-           ;; the field value ({...}).  A second call to strip-outer-braces
-           ;; would remove the inner case-protection braces (e.g. the inner
-           ;; `{Egyptian Streets}' inside `{{Egyptian Streets}}').  We keep
-           ;; the raw title string verbatim so callers can decide whether to
-           ;; strip case-protection braces when serialising to YAML.
-           (title title-raw)
+           ;; BBT-exported titles wrap every capitalized word in {{ }} for
+           ;; case protection (a BibTeX convention).  Hugo renders those
+           ;; braces literally, which is ugly in the page.  We strip ALL
+           ;; brace chars from titles.  Edge case: math literals like
+           ;; `{0,1}-vector' lose their braces — author can backslash-
+           ;; escape per-entry if it matters.
+           (title (and title-raw
+                       (replace-regexp-in-string "[{}]" "" title-raw)))
            (venue (a3madkour-pub-bib--normalize-venue raw)))
       (list :authors   authors
             :year      year

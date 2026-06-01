@@ -134,7 +134,9 @@ string (normalize is Task 6)."
 
 (ert-deftest a3madkour-pub-bib-test/parser-handles-real-fixture ()
   "F Task 4: the stub library.bib fixture parses without error and yields
-9 entries, including the BBT camelCase key from Task 3."
+10 entries (8 type-coverage + 1 no-author fallback + 1 dummyKey2024 for
+the cite-with-ref-note integration test), including the BBT camelCase
+key from Task 3."
   ;; tools/fixtures/citations/library.bib lives in the SITE repo; locate
   ;; via a robust path discovery (a3-pub.sh sets cwd, so use $PWD or env).
   (let ((fixture
@@ -147,7 +149,7 @@ string (normalize is Task 6)."
               (file-name-directory (or load-file-name buffer-file-name "."))))))
     (skip-unless (file-exists-p fixture))
     (let ((n (a3madkour-pub-bib/parse-file fixture)))
-      (should (= 9 n))
+      (should (= 10 n))
       (should (gethash "loremIpsumDolorSit2020" a3madkour-pub-bib--parser-cache)))))
 
 (ert-deftest a3madkour-pub-bib-test/multiline-field-value-survives ()
@@ -277,12 +279,16 @@ output doesn't use the `#` concat form)."
       "k"
     (should (equal "misc" (plist-get entry :type)))))
 
-(ert-deftest a3madkour-pub-bib-test/normalize-strips-outer-title-braces ()
-  "F Task 6: title outer braces stripped; inner survive."
+(ert-deftest a3madkour-pub-bib-test/normalize-strips-all-title-braces ()
+  "F Task 6 (revised): ALL brace chars stripped from titles.
+BBT-exported titles wrap every capitalized word in {{ }} for case
+protection; Hugo renders those literally.  Strip them.  Real-world
+spot-check (F Task 18) confirmed the previous inner-survive behavior
+rendered ugly titles like `R-{{WoM}}: {{...}}'."
   (a3madkour-pub-bib-test--normalized
       "@article{k, author={A, A}, title={{Egyptian Streets}}, date={2014}, journaltitle={J}}"
       "k"
-    (should (equal "{Egyptian Streets}" (plist-get entry :title)))))
+    (should (equal "Egyptian Streets" (plist-get entry :title)))))
 
 (ert-deftest a3madkour-pub-bib-test/normalize-rejects-bad-url ()
   "F Task 6: non-http URL is dropped to nil."

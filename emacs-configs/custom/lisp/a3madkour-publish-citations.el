@@ -239,8 +239,15 @@ in the manifest snapshot, return its garden slug.  Otherwise nil."
                                     (file-name-base path))))
                  (url (format "/garden/%s/" default-slug)))
             (a3madkour-pub-citations--manifest-slug-for-garden-url
-             (and (boundp 'a3madkour-pub--manifest-snapshot)
-                  a3madkour-pub--manifest-snapshot)
+             ;; finish-publish clears the snapshot defvar at its bottom.  Task
+             ;; 13 calls emit-yaml AFTER finish-publish, so the snapshot is
+             ;; gone by the time we lookup notes-ref.  Fall back to a fresh
+             ;; disk read — finish-publish step C has already written the
+             ;; post-publish manifest, which is exactly the state we want.
+             (or (and (boundp 'a3madkour-pub--manifest-snapshot)
+                      a3madkour-pub--manifest-snapshot)
+                 (and (fboundp 'a3madkour-pub-history/read-manifest)
+                      (a3madkour-pub-history/read-manifest)))
              url)))))))
 
 ;; ---------------------------------------------------------------------
