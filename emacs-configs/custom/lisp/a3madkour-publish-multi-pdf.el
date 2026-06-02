@@ -99,5 +99,17 @@ Returns the absolute path of the placed PDF on success, nil on failure."
           (rename-file built-pdf target t)
           target)))))
 
+(defun a3madkour-pub-multi-pdf--log-line (buf successp path elapsed err-snippet)
+  "Append a single log line to BUF for the PDF backend.
+SUCCESSP is t for ✓ / nil for ✗.  PATH is target path on success.
+ELAPSED is seconds (float).  ERR-SNIPPET is the stderr tail to inline on failure."
+  (with-current-buffer buf
+    (goto-char (point-max))
+    (if successp
+        (insert (format "  [✓] pdf    → %s   (%.1fs)\n" path elapsed))
+      (insert (format "  [✗] pdf    → exit %.1fs\n" elapsed))
+      (when err-snippet
+        (insert (format "              %s\n" err-snippet))))))
+
 (provide 'a3madkour-publish-multi-pdf)
 ;;; a3madkour-publish-multi-pdf.el ends here
