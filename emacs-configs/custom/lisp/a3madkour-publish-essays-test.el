@@ -55,6 +55,13 @@
                  (a3madkour-pub-essays--scan-has-flags "see \\[\\alpha\\] here")
                  :has_math))))
 
+(ert-deftest a3madkour-pub-essays-test/scan-math-environment ()
+  "Body contains \\begin{equation}...\\end{equation} → :has_math is t."
+  (should (eq t (plist-get
+                 (a3madkour-pub-essays--scan-has-flags
+                  "see \\begin{equation}E = mc^2\\end{equation} here")
+                 :has_math))))
+
 (ert-deftest a3madkour-pub-essays-test/scan-math-negative ()
   (should-not (plist-get
                (a3madkour-pub-essays--scan-has-flags "plain text only")

@@ -29,7 +29,7 @@ Patterns (all case-sensitive; shortcodes match the trailing space):
   :has_sidenotes  <- `{{< sidenote '
   :has_citations  <- `{{< cite '
   :has_footnotes  <- `[^N]' markdown footnote reference
-  :has_math       <- `{{< math ' OR raw KaTeX delim `\\(' OR `\\['
+  :has_math       <- `{{< math ' OR raw KaTeX delim `\\(' OR `\\[' OR `\\begin{<env>}'
   :has_widgets    <- `{{< widget '
   :has_video_sync <- `{{< video-sync '
 
@@ -40,7 +40,8 @@ merge with per-keyword `#+HUGO_HAS_<X>:' overrides (see Task 5)."
         :has_footnotes  (and (string-match-p "\\[\\^[^]]+\\]"  body) t)
         :has_math       (and (or (string-match-p "{{< math "    body)
                                  (string-match-p "\\\\("        body)
-                                 (string-match-p "\\\\\\["      body)) t)
+                                 (string-match-p "\\\\\\["      body)
+                                 (string-match-p "\\\\begin{[a-zA-Z]+\\*?}" body)) t)
         :has_widgets    (and (string-match-p "{{< widget "      body) t)
         :has_video_sync (and (string-match-p "{{< video-sync "  body) t)))
 
