@@ -141,6 +141,8 @@ if [ "${1:-}" = "--publish-living" ]; then
     exit 2
   fi
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  # C: source-side math validation before invoking emacs.
+  a3_pub_check_math "$HOME/org/notes" || exit $?
   exec emacs --batch \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -191,6 +193,8 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     exit 2
   fi
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  # C: source-side math validation on the file's parent dir.
+  a3_pub_check_math "$(dirname "$target_path")" || exit $?
   exec emacs --batch \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -233,6 +237,8 @@ if [ "${1:-}" = "--sync-citations" ]; then
     exit 2
   fi
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  # C: source-side math validation across all org dirs (sync walks the whole corpus).
+  a3_pub_check_math "$HOME/org" || exit $?
   exec emacs --batch \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
