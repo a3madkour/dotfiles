@@ -23,5 +23,59 @@
     (org-mode)
     (should-not (a3madkour-pub-multi-filter--doc-p))))
 
+(defun a3madkour-pub-multi-filter--test--collect-headings (backend buffer-text)
+  "Apply filter for BACKEND on BUFFER-TEXT, return remaining top-level headings."
+  (with-temp-buffer
+    (insert buffer-text)
+    (org-mode)
+    (a3madkour-pub-multi-filter--apply-visibility backend)
+    (let (headings)
+      (org-map-entries (lambda () (push (org-get-heading t t t t) headings)) "LEVEL=1")
+      (nreverse headings))))
+
+(defconst a3madkour-pub-multi-filter--test--tagged-doc
+  "#+multi_export: t
+
+* Universal
+* Web only                                          :WEB_ONLY:
+* Paper only                                        :PAPER_ONLY:
+* PDF skipped                                       :NOEXPORT_PDF:
+* Web skipped                                       :NOEXPORT_WEB:
+* Word skipped                                      :NOEXPORT_WORD:
+")
+
+(ert-deftest a3madkour-pub-multi-filter/visibility-hugo ()
+  "Hugo/md backend drops NOEXPORT_WEB and PAPER_ONLY."
+  (let ((kept (a3madkour-pub-multi-filter--test--collect-headings
+               'hugo a3madkour-pub-multi-filter--test--tagged-doc)))
+    (should (member "Universal" kept))
+    (should (member "Web only" kept))
+    (should (member "PDF skipped" kept))
+    (should (member "Word skipped" kept))
+    (should-not (member "Paper only" kept))
+    (should-not (member "Web skipped" kept))))
+
+(ert-deftest a3madkour-pub-multi-filter/visibility-latex ()
+  "LaTeX backend drops NOEXPORT_PDF and WEB_ONLY."
+  (let ((kept (a3madkour-pub-multi-filter--test--collect-headings
+               'latex a3madkour-pub-multi-filter--test--tagged-doc)))
+    (should (member "Universal" kept))
+    (should (member "Paper only" kept))
+    (should (member "Web skipped" kept))
+    (should (member "Word skipped" kept))
+    (should-not (member "Web only" kept))
+    (should-not (member "PDF skipped" kept))))
+
+(ert-deftest a3madkour-pub-multi-filter/visibility-pandoc ()
+  "Pandoc (word) backend drops NOEXPORT_WORD, WEB_ONLY, and PAPER_ONLY."
+  (let ((kept (a3madkour-pub-multi-filter--test--collect-headings
+               'pandoc a3madkour-pub-multi-filter--test--tagged-doc)))
+    (should (member "Universal" kept))
+    (should (member "PDF skipped" kept))
+    (should (member "Web skipped" kept))
+    (should-not (member "Web only" kept))
+    (should-not (member "Paper only" kept))
+    (should-not (member "Word skipped" kept))))
+
 (provide 'a3madkour-publish-multi-filter-test)
 ;;; a3madkour-publish-multi-filter-test.el ends here
