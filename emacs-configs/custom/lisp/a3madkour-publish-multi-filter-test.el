@@ -101,5 +101,59 @@ direct tag-bearers."
     (should-not (member "Child (no local tag)" kept))
     (should-not (member "Another child" kept))))
 
+(defconst a3madkour-pub-multi-filter--block-kinds
+  '("theorem" "lemma" "corollary" "proposition"
+    "definition" "proof" "remark" "example" "note"
+    "claim" "conjecture" "axiom"))
+
+(ert-deftest a3madkour-pub-multi-filter/vocab-latex-injects-attrs ()
+  "attr_shortcode on a D.1 block emits attr_latex + name for LaTeX backend."
+  (with-temp-buffer
+    (insert "#+multi_export: t\n\n"
+            "#+attr_shortcode: :title \"Intermediate Value\" :id thm-ivt\n"
+            "#+begin_theorem\nFoo.\n#+end_theorem\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--translate-vocab 'latex)
+    (let ((text (buffer-string)))
+      (should (string-match-p "#\\+attr_latex: :options \\[Intermediate Value\\]" text))
+      (should (string-match-p "#\\+name: thm-ivt" text)))))
+
+(ert-deftest a3madkour-pub-multi-filter/vocab-pandoc-injects-attrs ()
+  "attr_shortcode on a D.1 block emits attr_html for pandoc backend."
+  (with-temp-buffer
+    (insert "#+attr_shortcode: :title \"Intermediate Value\" :id thm-ivt\n"
+            "#+begin_theorem\nFoo.\n#+end_theorem\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--translate-vocab 'pandoc)
+    (let ((text (buffer-string)))
+      (should (string-match-p "#\\+attr_html: :class theorem :id thm-ivt :data-title \"Intermediate Value\"" text)))))
+
+(ert-deftest a3madkour-pub-multi-filter/vocab-skips-unknown-kinds ()
+  "Non-D.1 special blocks are untouched."
+  (with-temp-buffer
+    (insert "#+attr_shortcode: :title T :id x\n"
+            "#+begin_quote\nq\n#+end_quote\n")
+    (org-mode)
+    (let ((before (buffer-string)))
+      (a3madkour-pub-multi-filter--translate-vocab 'latex)
+      (should (string= before (buffer-string))))))
+
+(ert-deftest a3madkour-pub-multi-filter/crossref-latex ()
+  "[[#thm-ivt][text]] org link rewrites to \\hyperref for latex backend."
+  (with-temp-buffer
+    (insert "See [[#thm-ivt][Theorem 1]] for details.\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--rewrite-crossrefs 'latex)
+    (should (string-match-p "\\\\hyperref\\[thm-ivt\\]{Theorem 1}" (buffer-string)))))
+
+(ert-deftest a3madkour-pub-multi-filter/crossref-pandoc-untouched ()
+  "Pandoc handles [[#id]] natively; rewrite is a no-op."
+  (with-temp-buffer
+    (insert "See [[#thm-ivt][Theorem 1]] for details.\n")
+    (org-mode)
+    (let ((before (buffer-string)))
+      (a3madkour-pub-multi-filter--rewrite-crossrefs 'pandoc)
+      (should (string= before (buffer-string))))))
+
 (provide 'a3madkour-publish-multi-filter-test)
 ;;; a3madkour-publish-multi-filter-test.el ends here
