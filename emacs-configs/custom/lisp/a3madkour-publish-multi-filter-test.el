@@ -101,11 +101,6 @@ direct tag-bearers."
     (should-not (member "Child (no local tag)" kept))
     (should-not (member "Another child" kept))))
 
-(defconst a3madkour-pub-multi-filter--block-kinds
-  '("theorem" "lemma" "corollary" "proposition"
-    "definition" "proof" "remark" "example" "note"
-    "claim" "conjecture" "axiom"))
-
 (ert-deftest a3madkour-pub-multi-filter/vocab-latex-injects-attrs ()
   "attr_shortcode on a D.1 block emits attr_latex + name for LaTeX backend."
   (with-temp-buffer
@@ -139,12 +134,13 @@ direct tag-bearers."
       (should (string= before (buffer-string))))))
 
 (ert-deftest a3madkour-pub-multi-filter/crossref-latex ()
-  "[[#thm-ivt][text]] org link rewrites to \\hyperref for latex backend."
+  "[[#thm-ivt][text]] org link rewrites to @@latex:\\hyperref export snippet."
   (with-temp-buffer
     (insert "See [[#thm-ivt][Theorem 1]] for details.\n")
     (org-mode)
     (a3madkour-pub-multi-filter--rewrite-crossrefs 'latex)
-    (should (string-match-p "\\\\hyperref\\[thm-ivt\\]{Theorem 1}" (buffer-string)))))
+    (should (string-match-p "@@latex:\\\\hyperref\\[thm-ivt\\]{Theorem 1}@@"
+                            (buffer-string)))))
 
 (ert-deftest a3madkour-pub-multi-filter/crossref-pandoc-untouched ()
   "Pandoc handles [[#id]] natively; rewrite is a no-op."

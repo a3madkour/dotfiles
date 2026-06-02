@@ -69,7 +69,9 @@ Returns (cons TITLE-OR-NIL ID-OR-NIL)."
 
 (defun a3madkour-pub-multi-filter--translate-vocab (backend)
   "Walk current buffer; for each D.1 special block preceded by `#+attr_shortcode:',
-rewrite that attr line into BACKEND-appropriate org annotations."
+rewrite that attr line into BACKEND-appropriate org annotations.
+Note: `#+attr_shortcode:' must immediately precede `#+begin_<kind>' (no blank
+line between).  This matches the D.1 attr_shortcode convention."
   (when (memq backend '(latex pandoc))
     (save-excursion
       (goto-char (point-min))
@@ -99,17 +101,18 @@ rewrite that attr line into BACKEND-appropriate org annotations."
 
 (defun a3madkour-pub-multi-filter--rewrite-crossrefs (backend)
   "Rewrite [[#id][text]] org links for BACKEND.
-LaTeX → `\\hyperref[id]{text}'.  Other backends: no-op."
+LaTeX: emit `@@latex:\\hyperref[id]{text}@@' (export snippet so backslashes
+are not escaped by `org-latex-plain-text').  Other backends: no-op."
   (when (eq backend 'latex)
     (save-excursion
       (goto-char (point-min))
       (while (re-search-forward "\\[\\[#\\([a-zA-Z0-9_-]+\\)\\]\\[\\([^]]+\\)\\]\\]" nil t)
-        (replace-match (format "\\\\hyperref[%s]{%s}"
+        (replace-match (format "@@latex:\\hyperref[%s]{%s}@@"
                                (match-string 1) (match-string 2))
                        t t)))))
 
 (defun a3madkour-pub-multi-filter--before-processing (backend)
-  "`org-export-before-processing-hook' entry point.
+  "`org-export-before-processing-functions' entry point.
 Runs only when buffer is multi-export-opted-in.  Applies visibility + vocab + crossref."
   (when (a3madkour-pub-multi-filter--doc-p)
     (a3madkour-pub-multi-filter--apply-visibility backend)
@@ -117,8 +120,8 @@ Runs only when buffer is multi-export-opted-in.  Applies visibility + vocab + cr
     (a3madkour-pub-multi-filter--rewrite-crossrefs backend)))
 
 (defun a3madkour-pub-multi-filter-install ()
-  "Install the multi-export filter on org's pre-processing hook (idempotent)."
-  (add-hook 'org-export-before-processing-hook
+  "Install the multi-export filter on `org-export-before-processing-functions' (idempotent)."
+  (add-hook 'org-export-before-processing-functions
             #'a3madkour-pub-multi-filter--before-processing))
 
 (a3madkour-pub-multi-filter-install)
