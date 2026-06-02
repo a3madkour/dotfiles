@@ -341,6 +341,30 @@ an empty-list tags value is rendered as `[]' rather than `false'."
       (delete-directory tmp-essays-root t)
       (delete-directory tmp-bundle t))))
 
+;; -- D.1: ox-hugo paired-shortcodes for AMS blocks --
+
+(ert-deftest a3madkour-pub-essays-test/special-block-round-trip ()
+  "An org `#+begin_theorem' block with `#+attr_shortcode: :title Foo :id thm-foo'
+must emit as a paired Hugo shortcode `{{< theorem title=\"Foo\" id=\"thm-foo\" >}}
+... {{< /theorem >}}' in the post-export markdown body."
+  (require 'a3madkour-publish-export)
+  (let* ((tmp (make-temp-file "essays-special-block-" nil ".org"))
+         (body (concat "#+title: T\n"
+                       "#+date: <2026-06-01>\n"
+                       "\n"
+                       "#+attr_shortcode: :title Foo :id thm-foo\n"
+                       "#+begin_theorem\n"
+                       "Body content.\n"
+                       "#+end_theorem\n")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert body))
+          (let* ((result (a3madkour-pub-export/export-file tmp))
+                 (md     (plist-get result :body)))
+            (should (string-match-p "{{< theorem title=\"Foo\" id=\"thm-foo\" >}}" md))
+            (should (string-match-p "{{< /theorem >}}" md))))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

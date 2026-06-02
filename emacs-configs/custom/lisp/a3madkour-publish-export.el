@@ -26,6 +26,29 @@
 (require 'ox-hugo)
 (require 'yaml)
 
+;; D.1: enable 12 AMS-style block kinds as paired Hugo shortcodes.
+;; #+begin_<kind> blocks emit as {{< <kind> >}}…{{< /<kind> >}} markdown
+;; instead of the default <div class="<kind>">…</div>.
+;; Title + cross-ref ID come via #+attr_shortcode: :title <name> :id <slug>
+;; on a header line above the block (positional args are dropped in the
+;; paired-shortcode path; see spec §3.2).
+(setq org-hugo-paired-shortcodes
+      "theorem lemma corollary proposition definition proof remark example note claim conjecture axiom")
+
+(setq org-hugo-special-block-type-properties
+      '(("theorem"     :trim-pre t :trim-post t)
+        ("lemma"       :trim-pre t :trim-post t)
+        ("corollary"   :trim-pre t :trim-post t)
+        ("proposition" :trim-pre t :trim-post t)
+        ("definition"  :trim-pre t :trim-post t)
+        ("proof"       :trim-pre t :trim-post t)
+        ("remark"      :trim-pre t :trim-post t)
+        ("example"     :trim-pre t :trim-post t)
+        ("note"        :trim-pre t :trim-post t)
+        ("claim"       :trim-pre t :trim-post t)
+        ("conjecture"  :trim-pre t :trim-post t)
+        ("axiom"       :trim-pre t :trim-post t)))
+
 (defun a3madkour-pub-export--frontmatter-string-to-alist (yaml-str file)
   "Parse YAML-STR (the YAML frontmatter ox-hugo emitted) into a symbol-keyed alist.
 yaml.el with `:object-type \\='alist' already returns symbol-keyed alists.
