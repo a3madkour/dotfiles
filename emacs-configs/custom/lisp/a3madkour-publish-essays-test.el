@@ -62,6 +62,17 @@
                   "see \\begin{equation}E = mc^2\\end{equation} here")
                  :has_math))))
 
+(ert-deftest a3madkour-pub-essays-test/scan-math-inside-code-fence-ignored ()
+  "Body's only math marker is inside a ```-fenced code block → :has_math is nil."
+  (let ((body (concat "Prose line.\n"
+                      "```python\n"
+                      "# illustrative LaTeX: \\(x = 1\\)\n"
+                      "```\n"
+                      "More prose.\n")))
+    (should-not (plist-get
+                 (a3madkour-pub-essays--scan-has-flags body)
+                 :has_math))))
+
 (ert-deftest a3madkour-pub-essays-test/scan-math-negative ()
   (should-not (plist-get
                (a3madkour-pub-essays--scan-has-flags "plain text only")

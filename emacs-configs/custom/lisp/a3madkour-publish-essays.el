@@ -21,6 +21,25 @@
 
 ;; Task 4: has_* body scanner.
 
+(defun a3madkour-pub-essays--strip-code-fences (body)
+  "Return BODY with ```-fenced code blocks and org `#+begin_src'/`#+begin_example'
+regions removed.  Inline backtick spans and org `~…~' / `=…=' spans are NOT
+stripped (single-line, math-rare, stripping would over-complicate the helper).
+
+Used before the has_math marker scan so that code examples teaching LaTeX
+syntax don't false-positive on \\(, \\[, or \\begin{…}."
+  (let ((s body))
+    ;; ```-fenced (Hugo markdown style; post-export form)
+    (setq s (replace-regexp-in-string
+             "```[a-zA-Z0-9_+-]*\n\\(.\\|\n\\)*?\n```" "" s t t))
+    ;; #+begin_src / #+end_src (org-mode form; pre-export form)
+    (setq s (replace-regexp-in-string
+             "#\\+begin_src\\(.\\|\n\\)*?#\\+end_src" "" s t t))
+    ;; #+begin_example / #+end_example (org-mode form)
+    (setq s (replace-regexp-in-string
+             "#\\+begin_example\\(.\\|\n\\)*?#\\+end_example" "" s t t))
+    s))
+
 (defun a3madkour-pub-essays--scan-has-flags (body)
   "Return a plist of 6 has_* booleans derived from substring scan of BODY
 \(post-export markdown).
@@ -30,20 +49,23 @@ Patterns (all case-sensitive; shortcodes match the trailing space):
   :has_citations  <- `{{< cite '
   :has_footnotes  <- `[^N]' markdown footnote reference
   :has_math       <- `{{< math ' OR raw KaTeX delim `\\(' OR `\\[' OR `\\begin{<env>}'
+                     (fenced code blocks are stripped before this scan to avoid
+                     false-positives on code teaching LaTeX syntax)
   :has_widgets    <- `{{< widget '
   :has_video_sync <- `{{< video-sync '
 
 Each value is `t' on a positive match or `nil' on no match.  Callers
 merge with per-keyword `#+HUGO_HAS_<X>:' overrides (see Task 5)."
-  (list :has_sidenotes  (and (string-match-p "{{< sidenote "   body) t)
-        :has_citations  (and (string-match-p "{{< cite "        body) t)
-        :has_footnotes  (and (string-match-p "\\[\\^[^]]+\\]"  body) t)
-        :has_math       (and (or (string-match-p "{{< math "    body)
-                                 (string-match-p "\\\\("        body)
-                                 (string-match-p "\\\\\\["      body)
-                                 (string-match-p "\\\\begin{[a-zA-Z]+\\*?}" body)) t)
-        :has_widgets    (and (string-match-p "{{< widget "      body) t)
-        :has_video_sync (and (string-match-p "{{< video-sync "  body) t)))
+  (let ((math-body (a3madkour-pub-essays--strip-code-fences body)))
+    (list :has_sidenotes  (and (string-match-p "{{< sidenote "   body) t)
+          :has_citations  (and (string-match-p "{{< cite "        body) t)
+          :has_footnotes  (and (string-match-p "\\[\\^[^]]+\\]"  body) t)
+          :has_math       (and (or (string-match-p "{{< math "    math-body)
+                                   (string-match-p "\\\\("        math-body)
+                                   (string-match-p "\\\\\\["      math-body)
+                                   (string-match-p "\\\\begin{[a-zA-Z]+\\*?}" math-body)) t)
+          :has_widgets    (and (string-match-p "{{< widget "      body) t)
+          :has_video_sync (and (string-match-p "{{< video-sync "  body) t))))
 
 ;; Task 5: has_* override merge.
 
