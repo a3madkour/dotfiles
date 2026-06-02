@@ -45,6 +45,49 @@ a3_pub_resolve_site_data_dir() {
   return 1
 }
 
+# C: --skip-math-check flag init.  Default is on (run the check); the flag
+# (parsed below before any intercept) flips this to skip the check.
+A3_PUB_SKIP_MATH_CHECK="${A3_PUB_SKIP_MATH_CHECK:-0}"
+
+# C: invoke `org-math-lint check --root <dir>' against the org source
+# directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.  Exits
+# non-zero on validator failure or missing install (distinct exit codes
+# so callers can tell them apart):
+#   0  validation passed (or skipped via flag/env)
+#   1  validator reported issues (stderr already detailed)
+#   2  org-math-lint not installed at expected venv path
+a3_pub_check_math() {
+  local source_dir="$1"
+  if [ "$A3_PUB_SKIP_MATH_CHECK" = "1" ]; then
+    return 0
+  fi
+  local ml_venv="$HOME/org/notes/tools/org-math-lint/.venv/bin/python"
+  if [ ! -x "$ml_venv" ]; then
+    echo "a3-pub.sh: org-math-lint not installed at $ml_venv" >&2
+    echo "  Install: cd ~/org/notes/tools/org-math-lint && python3 -m venv .venv && .venv/bin/pip install -e ." >&2
+    echo "  Or rerun with --skip-math-check (sets A3_PUB_SKIP_MATH_CHECK=1)." >&2
+    return 2
+  fi
+  if ! "$ml_venv" -m org_math_lint.cli check --root "$source_dir"; then
+    echo "a3-pub.sh: math validation failed; publish aborted." >&2
+    echo "  Fix the issues above, or rerun with --skip-math-check." >&2
+    return 1
+  fi
+  return 0
+}
+
+# C: parse --skip-math-check anywhere in the arg list.  Done as a
+# pre-pass so the rest of the intercept logic (positional <path>
+# arguments, --eval pass-throughs) is unaffected.
+parsed_args=()
+for a in "$@"; do
+  case "$a" in
+    --skip-math-check) A3_PUB_SKIP_MATH_CHECK=1 ;;
+    *) parsed_args+=("$a") ;;
+  esac
+done
+set -- "${parsed_args[@]}"
+
 # A.1.d: --check-orphans flag intercept.  Runs (begin-publish) + (check-orphans)
 # in standalone mode (walks source tree), prints the dry-run plist, exits 0.
 if [ "${1:-}" = "--check-orphans" ]; then
