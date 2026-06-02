@@ -35,5 +35,69 @@
         (push cmd missing)))
     (nreverse missing)))
 
+(defun a3madkour-pub-multi-pdf--convert-svg (src dst)
+  "Convert SVG at SRC to PDF at DST via `rsvg-convert -f pdf'.
+Returns 0 on success."
+  (make-directory (file-name-directory dst) t)
+  (call-process a3madkour-pub-multi-rsvg-convert-command nil nil nil
+                "-f" "pdf" src "-o" dst))
+
+(defun a3madkour-pub-multi-pdf--compile-tex (tex-path)
+  "Run xelatex → biber → xelatex → xelatex on TEX-PATH in its own directory.
+Returns t on full success, nil on any non-zero exit."
+  (let* ((dir (file-name-directory tex-path))
+         (base (file-name-base tex-path))
+         (default-directory dir)
+         (seq (list a3madkour-pub-multi-xelatex-command
+                    a3madkour-pub-multi-biber-command
+                    a3madkour-pub-multi-xelatex-command
+                    a3madkour-pub-multi-xelatex-command)))
+    (cl-loop for cmd in seq
+             for arg = (if (string= cmd a3madkour-pub-multi-biber-command) base
+                         (concat base ".tex"))
+             for rc = (call-process cmd nil nil nil "-interaction=nonstopmode" arg)
+             unless (zerop rc) return nil
+             finally return t)))
+
+(defun a3madkour-pub-multi-pdf--list-svg-figures (source-file)
+  "Return list of absolute SVG paths referenced by SOURCE-FILE via `[[file:…]]'.
+Delegates to B.4's existing asset walker if available; falls back to nil."
+  (when (fboundp 'a3madkour-pub-assets/list-referenced-files)
+    (cl-remove-if-not
+     (lambda (p) (string= "svg" (file-name-extension p)))
+     (a3madkour-pub-assets/list-referenced-files source-file))))
+
+(defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir)
+  "Run the PDF backend for SOURCE-FILE / SLUG → BUNDLE-DIR/SLUG.pdf.
+TEMPLATES-DIR is the path to `tools/templates/' (contains `madkour-paper.cls').
+Returns the absolute path of the placed PDF on success, nil on failure."
+  (let* ((work-dir (expand-file-name (format "multi-export-%s/" slug)
+                                     temporary-file-directory))
+         (fig-dir (expand-file-name "figures/" work-dir))
+         (tex-path (expand-file-name (concat slug ".tex") work-dir)))
+    (make-directory fig-dir t)
+    ;; Make madkour-paper.cls discoverable to xelatex (place a symlink/copy in work-dir).
+    (copy-file (expand-file-name "madkour-paper.cls" templates-dir)
+               (expand-file-name "madkour-paper.cls" work-dir) t)
+    ;; Convert referenced SVGs to PDF for LaTeX.
+    (dolist (svg (a3madkour-pub-multi-pdf--list-svg-figures source-file))
+      (a3madkour-pub-multi-pdf--convert-svg
+       svg (expand-file-name (concat (file-name-base svg) ".pdf") fig-dir)))
+    ;; Export org → LaTeX (hooks fire automatically).
+    (with-current-buffer (find-file-noselect source-file)
+      (let ((org-latex-with-hyperref t))
+        (org-latex-export-to-latex)))
+    ;; Move the produced .tex into the work dir, then compile.
+    (let ((source-tex (expand-file-name (concat slug ".tex")
+                                        (file-name-directory source-file))))
+      (when (file-exists-p source-tex)
+        (rename-file source-tex tex-path t)))
+    (when (a3madkour-pub-multi-pdf--compile-tex tex-path)
+      (let ((built-pdf (expand-file-name (concat slug ".pdf") work-dir))
+            (target (expand-file-name (concat slug ".pdf") bundle-dir)))
+        (when (file-exists-p built-pdf)
+          (rename-file built-pdf target t)
+          target)))))
+
 (provide 'a3madkour-publish-multi-pdf)
 ;;; a3madkour-publish-multi-pdf.el ends here
