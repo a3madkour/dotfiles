@@ -77,5 +77,29 @@
     (should-not (member "Paper only" kept))
     (should-not (member "Word skipped" kept))))
 
+(defconst a3madkour-pub-multi-filter--test--nested-doc
+  "#+multi_export: t
+
+* Section :PAPER_ONLY:
+** Child (no local tag)
+** Another child :WEB_ONLY:
+* After
+"
+  "Doc with a `:PAPER_ONLY:' parent that has un-tagged + WEB_ONLY-tagged children.
+The hugo backend drops PAPER_ONLY; LOCAL=t means only the parent is a direct
+tag-bearer so `org-cut-subtree' removes the whole subtree in one cut.")
+
+(ert-deftest a3madkour-pub-multi-filter/visibility-nested-parent-cut ()
+  "Cutting a :PAPER_ONLY: parent for hugo backend removes the whole subtree
+in one cut (LOCAL=t semantics); only `Section' and `After' are evaluated as
+direct tag-bearers."
+  (let ((kept (a3madkour-pub-multi-filter--test--collect-headings
+               'hugo a3madkour-pub-multi-filter--test--nested-doc)))
+    ;; Section and its descendants gone; After remains.
+    (should (member "After" kept))
+    (should-not (member "Section" kept))
+    (should-not (member "Child (no local tag)" kept))
+    (should-not (member "Another child" kept))))
+
 (provide 'a3madkour-publish-multi-filter-test)
 ;;; a3madkour-publish-multi-filter-test.el ends here

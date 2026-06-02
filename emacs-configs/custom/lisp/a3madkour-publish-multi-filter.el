@@ -39,16 +39,16 @@ do not invalidate the position of earlier subtrees."
   (let ((skip-tags (a3madkour-pub-multi-filter--skip-tags-for backend)))
     (when skip-tags
       (save-excursion
-        (goto-char (point-max))
         (let (positions)
           (org-map-entries
            (lambda ()
-             (let ((tags (org-get-tags nil nil)))
+             (let ((tags (org-get-tags nil t)))
                (when (cl-some (lambda (tag) (member tag tags)) skip-tags)
                  (push (point) positions)))))
           (dolist (pos (sort positions #'>))
             (goto-char pos)
-            (org-cut-subtree)))))))
+            (let ((inhibit-message t))
+              (org-cut-subtree))))))))
 
 (provide 'a3madkour-publish-multi-filter)
 ;;; a3madkour-publish-multi-filter.el ends here
