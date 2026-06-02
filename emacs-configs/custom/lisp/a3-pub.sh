@@ -86,7 +86,11 @@ for a in "$@"; do
     *) parsed_args+=("$a") ;;
   esac
 done
-set -- "${parsed_args[@]}"
+if [ "${#parsed_args[@]}" -gt 0 ]; then
+  set -- "${parsed_args[@]}"
+else
+  set --
+fi
 
 # A.1.d: --check-orphans flag intercept.  Runs (begin-publish) + (check-orphans)
 # in standalone mode (walks source tree), prints the dry-run plist, exits 0.
