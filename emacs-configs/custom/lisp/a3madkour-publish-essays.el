@@ -201,6 +201,13 @@ Key-aware special cases applied before the generic --render-yaml-value dispatch:
              sorted "\n")
             "\n---\n")))
 
+;; Task 14: after-publish hook surface (consumed by D.2's auto-trigger).
+
+(defvar a3madkour-pub-essays-after-publish-hook nil
+  "Hook run after a successful essay publish.
+Args: SOURCE-FILE (org), SLUG (string), BUNDLE-DIR (path).
+D.2's multi-target export orchestrator installs here.")
+
 ;; Task 8: pipeline entry.
 
 (defun a3madkour-pub-essays/publish-essay-file (file)
@@ -250,7 +257,9 @@ Pipeline:
     (a3madkour-pub-essays--write-if-different
      out-path
      (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
-    (a3madkour-pub-history/record-publish id new-url 'live)))
+    (a3madkour-pub-history/record-publish id new-url 'live)
+    (run-hook-with-args 'a3madkour-pub-essays-after-publish-hook
+                        file slug bundle-dir)))
 
 (provide 'a3madkour-publish-essays)
 

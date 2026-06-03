@@ -91,5 +91,35 @@
               (mtime-2 (file-attribute-modification-time after-second)))
          (should (equal mtime-1 mtime-2)))))))
 
+(ert-deftest a3madkour-pub-multi/auto-trigger-fires-on-opt-in ()
+  "When source has #+multi_export: t, the after-publish hook dispatches orchestrate."
+  (let* ((called nil)
+         (tmp (make-temp-file "multi-trigger-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert "#+title: T\n#+multi_export: t\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub-multi/orchestrate)
+                     (lambda (&rest args) (setq called args))))
+            (a3madkour-pub-multi--after-essay-publish-handler
+             tmp "demo-slug" "/bundle/demo-slug/")
+            (should called)))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-multi/auto-trigger-skips-without-opt-in ()
+  "When source lacks the opt-in keyword, orchestrate is not called."
+  (let* ((called nil)
+         (tmp (make-temp-file "multi-trigger-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert "#+title: T\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub-multi/orchestrate)
+                     (lambda (&rest args) (setq called args))))
+            (a3madkour-pub-multi--after-essay-publish-handler
+             tmp "demo-slug" "/bundle/demo-slug/")
+            (should-not called)))
+      (delete-file tmp))))
+
 (provide 'a3madkour-publish-multi-test)
 ;;; a3madkour-publish-multi-test.el ends here

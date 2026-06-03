@@ -152,5 +152,22 @@ Idempotent — writes only when content differs."
     (unless (string= original updated)
       (with-temp-file index-path (insert updated)))))
 
+(defun a3madkour-pub-multi--after-essay-publish-handler (source-file slug bundle-dir)
+  "Hook target for B.4's after-essay-publish hook.
+Checks SOURCE-FILE for `#+multi_export: t' and runs `orchestrate' if opted-in."
+  (when (with-temp-buffer
+          (insert-file-contents source-file)
+          (org-mode)
+          (a3madkour-pub-multi-filter--doc-p))
+    (a3madkour-pub-multi/orchestrate source-file slug bundle-dir)))
+
+(defun a3madkour-pub-multi-install ()
+  "Install the auto-trigger on B.4's after-essay-publish hook (idempotent)."
+  (when (boundp 'a3madkour-pub-essays-after-publish-hook)
+    (add-hook 'a3madkour-pub-essays-after-publish-hook
+              #'a3madkour-pub-multi--after-essay-publish-handler)))
+
+(a3madkour-pub-multi-install)
+
 (provide 'a3madkour-publish-multi)
 ;;; a3madkour-publish-multi.el ends here
