@@ -111,10 +111,46 @@ Each backend runs in `condition-case'.  Returns a plist:
      (expand-file-name "index.md" bundle-dir) slug pdf-out word-out)
     (list :pdf pdf-out :word word-out)))
 
-;; Stub — implemented in Task 13.
-(defun a3madkour-pub-multi--patch-downloads-frontmatter (_index-path _slug _pdf _word)
-  "Stub for Task 13."
-  t)
+(defun a3madkour-pub-multi--render-downloads-line (pdf word)
+  "Return a YAML inline-flow `downloads: {…}' line, or nil if both missing."
+  (let ((parts nil))
+    (when pdf (push (format "pdf: \"%s.pdf\"" (file-name-base pdf)) parts))
+    (when word (push (format "word: \"%s.docx\"" (file-name-base word)) parts))
+    (when parts
+      (format "downloads: {%s}" (string-join (nreverse parts) ", ")))))
+
+(defun a3madkour-pub-multi--patch-downloads-frontmatter (index-path slug pdf word)
+  "Patch INDEX-PATH frontmatter with `multi_export:' + `downloads:' keys.
+INDEX-PATH is a Hugo bundle's index.md.  SLUG names the artifacts.
+PDF / WORD are absolute paths to placed artifacts, or nil if missing.
+Idempotent — writes only when content differs."
+  (unless (file-exists-p index-path)
+    (error "Cannot patch frontmatter — %s does not exist" index-path))
+  (let* ((original (with-temp-buffer
+                     (insert-file-contents index-path)
+                     (buffer-string)))
+         (success (or pdf word))
+         (downloads-line (a3madkour-pub-multi--render-downloads-line pdf word))
+         (multi-line (format "multi_export: %s" (if success "true" "false")))
+         updated)
+    (with-temp-buffer
+      (insert original)
+      (goto-char (point-min))
+      ;; Drop existing multi_export / downloads lines first.
+      (while (re-search-forward "^multi_export:.*\n" nil t) (replace-match ""))
+      (goto-char (point-min))
+      (while (re-search-forward "^downloads:.*\n" nil t) (replace-match ""))
+      ;; Insert before closing `---' of frontmatter.
+      (goto-char (point-min))
+      (when (re-search-forward "^---\n" nil t)
+        (when (re-search-forward "^---\n" nil t)
+          (goto-char (match-beginning 0))
+          (insert multi-line "\n")
+          (when downloads-line
+            (insert downloads-line "\n"))))
+      (setq updated (buffer-string)))
+    (unless (string= original updated)
+      (with-temp-file index-path (insert updated)))))
 
 (provide 'a3madkour-publish-multi)
 ;;; a3madkour-publish-multi.el ends here

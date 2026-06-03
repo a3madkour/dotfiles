@@ -53,5 +53,43 @@
       (should-not (plist-get result :pdf))
       (should-not (plist-get result :word)))))
 
+(defun a3madkour-pub-multi--test--with-temp-bundle (body)
+  (let* ((dir (make-temp-file "multi-bundle-" t))
+         (idx (expand-file-name "index.md" dir)))
+    (unwind-protect (funcall body dir idx)
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-multi/patch-adds-keys-when-pdf-only ()
+  (a3madkour-pub-multi--test--with-temp-bundle
+   (lambda (dir idx)
+     (write-region "---\ntitle: \"X\"\n---\nBody\n" nil idx)
+     (a3madkour-pub-multi--patch-downloads-frontmatter idx "x" "/b/x.pdf" nil)
+     (let ((text (with-temp-buffer (insert-file-contents idx) (buffer-string))))
+       (should (string-match-p "multi_export: true" text))
+       (should (string-match-p "downloads: {pdf: \"x\\.pdf\"}" text))
+       (should-not (string-match-p "word:" text))))))
+
+(ert-deftest a3madkour-pub-multi/patch-emits-false-when-both-fail ()
+  (a3madkour-pub-multi--test--with-temp-bundle
+   (lambda (dir idx)
+     (write-region "---\ntitle: \"X\"\n---\nBody\n" nil idx)
+     (a3madkour-pub-multi--patch-downloads-frontmatter idx "x" nil nil)
+     (let ((text (with-temp-buffer (insert-file-contents idx) (buffer-string))))
+       (should (string-match-p "multi_export: false" text))
+       (should-not (string-match-p "downloads:" text))))))
+
+(ert-deftest a3madkour-pub-multi/patch-idempotent ()
+  (a3madkour-pub-multi--test--with-temp-bundle
+   (lambda (dir idx)
+     (write-region "---\ntitle: \"X\"\n---\nBody\n" nil idx)
+     (a3madkour-pub-multi--patch-downloads-frontmatter idx "x" "/b/x.pdf" "/b/x.docx")
+     (let* ((after-first (file-attributes idx))
+            (mtime-1 (file-attribute-modification-time after-first)))
+       (sleep-for 1.1)  ;; ensure mtime resolution; tolerated for the idempotency check
+       (a3madkour-pub-multi--patch-downloads-frontmatter idx "x" "/b/x.pdf" "/b/x.docx")
+       (let* ((after-second (file-attributes idx))
+              (mtime-2 (file-attribute-modification-time after-second)))
+         (should (equal mtime-1 mtime-2)))))))
+
 (provide 'a3madkour-publish-multi-test)
 ;;; a3madkour-publish-multi-test.el ends here
