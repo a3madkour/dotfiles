@@ -101,6 +101,38 @@ direct tag-bearers."
     (should-not (member "Child (no local tag)" kept))
     (should-not (member "Another child" kept))))
 
+(ert-deftest a3madkour-pub-multi-filter/all-visibility-tags-covers-known ()
+  "Union of skip-rule values includes every known visibility tag once."
+  (let ((tags (a3madkour-pub-multi-filter--all-visibility-tags)))
+    (dolist (expected '("WEB_ONLY" "PAPER_ONLY"
+                        "NOEXPORT_WEB" "NOEXPORT_PDF" "NOEXPORT_WORD"))
+      (should (member expected tags)))
+    (should (= (length tags) (length (cl-remove-duplicates tags :test #'equal))))))
+
+(ert-deftest a3madkour-pub-multi-filter/strip-visibility-tags-clears-vis ()
+  "Strip removes our D.2 tags from kept headlines without touching unrelated tags."
+  (with-temp-buffer
+    (insert "* Universal\n"
+            "* Kept :NOEXPORT_WORD:draft:\n"
+            "* Plain\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--strip-visibility-tags)
+    (goto-char (point-min))
+    (re-search-forward "^\\* Kept")
+    (should (equal (org-get-tags nil t) '("draft")))
+    (goto-char (point-min))
+    (re-search-forward "^\\* Universal")
+    (should (equal (org-get-tags nil t) nil))))
+
+(ert-deftest a3madkour-pub-multi-filter/strip-visibility-tags-noop-when-clean ()
+  "Strip is a no-op when no headline carries a visibility tag."
+  (with-temp-buffer
+    (insert "* One\n* Two :keep:\n")
+    (org-mode)
+    (let ((before (buffer-string)))
+      (a3madkour-pub-multi-filter--strip-visibility-tags)
+      (should (string= before (buffer-string))))))
+
 (ert-deftest a3madkour-pub-multi-filter/vocab-latex-injects-attrs ()
   "attr_shortcode on a D.1 block emits attr_latex + name for LaTeX backend."
   (with-temp-buffer

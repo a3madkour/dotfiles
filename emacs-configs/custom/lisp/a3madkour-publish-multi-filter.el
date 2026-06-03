@@ -50,6 +50,32 @@ do not invalidate the position of earlier subtrees."
             (let ((inhibit-message t))
               (org-cut-subtree))))))))
 
+(defun a3madkour-pub-multi-filter--all-visibility-tags ()
+  "Return the union of all skip-tag names across every backend.
+Used to strip our D.2 visibility-control tags from kept headings, so
+ox-latex / pandoc / ox-hugo don't render them in the output (e.g.
+ox-latex's default `\\section{Title\\hfill\\textsc{TAG}}' treatment)."
+  (cl-remove-duplicates
+   (apply #'append
+          (mapcar #'cdr a3madkour-pub-multi-filter--skip-rules))
+   :test #'equal))
+
+(defun a3madkour-pub-multi-filter--strip-visibility-tags ()
+  "Remove D.2 visibility-control tags from every remaining headline.
+Runs after `--apply-visibility' has cut the subtrees the current backend
+doesn't want.  The kept subtrees may still carry their tag (e.g. a
+`:NOEXPORT_PDF:' heading survives in the Hugo + Word passes); strip it
+so the tag never reaches the output text."
+  (let ((vis-tags (a3madkour-pub-multi-filter--all-visibility-tags)))
+    (save-excursion
+      (org-map-entries
+       (lambda ()
+         (let* ((current (org-get-tags nil t))
+                (kept (cl-remove-if (lambda (tag) (member tag vis-tags))
+                                    current)))
+           (unless (equal current kept)
+             (org-set-tags kept))))))))
+
 (defconst a3madkour-pub-multi-filter--vocab-kinds
   '("theorem" "lemma" "corollary" "proposition"
     "definition" "proof" "remark" "example" "note"
@@ -139,6 +165,7 @@ that can spin into an effective hang on non-trivial buffers."
   (when (a3madkour-pub-multi-filter--doc-p)
     (let ((inhibit-modification-hooks t))
       (a3madkour-pub-multi-filter--apply-visibility backend)
+      (a3madkour-pub-multi-filter--strip-visibility-tags)
       (a3madkour-pub-multi-filter--translate-vocab backend)
       (a3madkour-pub-multi-filter--rewrite-crossrefs backend))))
 
