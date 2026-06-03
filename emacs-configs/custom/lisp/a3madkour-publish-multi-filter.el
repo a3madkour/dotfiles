@@ -71,33 +71,50 @@ Returns (cons TITLE-OR-NIL ID-OR-NIL)."
   "Walk current buffer; for each D.1 special block preceded by `#+attr_shortcode:',
 rewrite that attr line into BACKEND-appropriate org annotations.
 Note: `#+attr_shortcode:' must immediately precede `#+begin_<kind>' (no blank
-line between).  This matches the D.1 attr_shortcode convention."
+line between).  This matches the D.1 attr_shortcode convention.
+
+Uses the collect-then-mutate pattern (same as `--apply-visibility'): scan the
+whole buffer first to gather match positions, then mutate from end to start.
+Mutating inside the search loop interacts poorly with `re-search-forward'
+point semantics when the search and replacement land adjacent in the buffer."
   (when (memq backend '(latex pandoc))
     (save-excursion
       (goto-char (point-min))
-      (while (re-search-forward
-              "^#\\+attr_shortcode:[ \t]+\\(.*\\)\n#\\+begin_\\([a-z]+\\)" nil t)
-        (let* ((attr-line (match-string 1))
-               (kind (match-string 2)))
-          (when (member kind a3madkour-pub-multi-filter--vocab-kinds)
-            (let* ((parsed (a3madkour-pub-multi-filter--parse-attr-shortcode attr-line))
-                   (title (car parsed))
-                   (id (cdr parsed)))
-              (goto-char (match-beginning 0))
-              (delete-region (match-beginning 0)
-                             (save-excursion (forward-line 1) (point)))
-              (pcase backend
-                ('latex
-                 (when title
-                   (insert (format "#+attr_latex: :options [%s]\n" title)))
-                 (when id
-                   (insert (format "#+name: %s\n" id))))
-                ('pandoc
-                 (insert "#+attr_html:")
-                 (insert (format " :class %s" kind))
-                 (when id (insert (format " :id %s" id)))
-                 (when title (insert (format " :data-title \"%s\"" title)))
-                 (insert "\n"))))))))))
+      (let (matches)
+        (while (re-search-forward
+                "^#\\+attr_shortcode:[ \t]+\\(.*\\)\n#\\+begin_\\([a-z]+\\)" nil t)
+          (let ((kind (match-string 2)))
+            (when (member kind a3madkour-pub-multi-filter--vocab-kinds)
+              (push (list (match-beginning 0)
+                          (save-excursion
+                            (goto-char (match-beginning 0))
+                            (forward-line 1)
+                            (point))
+                          (match-string 1)
+                          kind)
+                    matches))))
+        (dolist (m matches)
+          (let* ((start     (nth 0 m))
+                 (end       (nth 1 m))
+                 (attr-line (nth 2 m))
+                 (kind      (nth 3 m))
+                 (parsed    (a3madkour-pub-multi-filter--parse-attr-shortcode attr-line))
+                 (title     (car parsed))
+                 (id        (cdr parsed)))
+            (goto-char start)
+            (delete-region start end)
+            (pcase backend
+              ('latex
+               (when title
+                 (insert (format "#+attr_latex: :options [%s]\n" title)))
+               (when id
+                 (insert (format "#+name: %s\n" id))))
+              ('pandoc
+               (insert "#+attr_html:")
+               (insert (format " :class %s" kind))
+               (when id (insert (format " :id %s" id)))
+               (when title (insert (format " :data-title \"%s\"" title)))
+               (insert "\n")))))))))
 
 (defun a3madkour-pub-multi-filter--rewrite-crossrefs (backend)
   "Rewrite [[#id][text]] org links for BACKEND.
@@ -113,11 +130,17 @@ are not escaped by `org-latex-plain-text').  Other backends: no-op."
 
 (defun a3madkour-pub-multi-filter--before-processing (backend)
   "`org-export-before-processing-functions' entry point.
-Runs only when buffer is multi-export-opted-in.  Applies visibility + vocab + crossref."
+Runs only when buffer is multi-export-opted-in.  Applies visibility + vocab + crossref.
+
+`inhibit-modification-hooks' is bound around the mutations so org-element's
+cache invalidation (`org-element--cache-before-change') does not fire on
+every `delete-region' / `insert' — that handler does a wide `re-search-forward'
+that can spin into an effective hang on non-trivial buffers."
   (when (a3madkour-pub-multi-filter--doc-p)
-    (a3madkour-pub-multi-filter--apply-visibility backend)
-    (a3madkour-pub-multi-filter--translate-vocab backend)
-    (a3madkour-pub-multi-filter--rewrite-crossrefs backend)))
+    (let ((inhibit-modification-hooks t))
+      (a3madkour-pub-multi-filter--apply-visibility backend)
+      (a3madkour-pub-multi-filter--translate-vocab backend)
+      (a3madkour-pub-multi-filter--rewrite-crossrefs backend))))
 
 (defun a3madkour-pub-multi-filter-install ()
   "Install the multi-export filter on `org-export-before-processing-functions' (idempotent)."

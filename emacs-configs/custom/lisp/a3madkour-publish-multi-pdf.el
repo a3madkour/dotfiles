@@ -44,20 +44,27 @@ Returns 0 on success."
 
 (defun a3madkour-pub-multi-pdf--compile-tex (tex-path)
   "Run xelatex → biber → xelatex → xelatex on TEX-PATH in its own directory.
-Returns t on full success, nil on any non-zero exit."
+Returns t iff `<base>.pdf' exists after the run.
+
+xelatex routinely exits non-zero on harmless warnings (e.g. \"Label(s) may
+have changed\" on the first pass, font shape substitutions, etc.) even when
+the PDF builds successfully.  Biber exits 0 even when it has nothing to do
+(no `.bcf').  So we run all four passes unconditionally and gate success
+on the existence of the produced PDF, not on exit codes."
   (let* ((dir (file-name-directory tex-path))
          (base (file-name-base tex-path))
          (default-directory dir)
+         (pdf-path (expand-file-name (concat base ".pdf") dir))
          (seq (list a3madkour-pub-multi-xelatex-command
                     a3madkour-pub-multi-biber-command
                     a3madkour-pub-multi-xelatex-command
                     a3madkour-pub-multi-xelatex-command)))
-    (cl-loop for cmd in seq
-             for arg = (if (string= cmd a3madkour-pub-multi-biber-command) base
-                         (concat base ".tex"))
-             for rc = (call-process cmd nil nil nil "-interaction=nonstopmode" arg)
-             unless (zerop rc) return nil
-             finally return t)))
+    (dolist (cmd seq)
+      (let ((arg (if (string= cmd a3madkour-pub-multi-biber-command)
+                     base
+                   (concat base ".tex"))))
+        (call-process cmd nil nil nil "-interaction=nonstopmode" arg)))
+    (file-exists-p pdf-path)))
 
 (defun a3madkour-pub-multi-pdf--list-svg-figures (source-file)
   "Return list of absolute SVG paths referenced by SOURCE-FILE via `[[file:…]]'.

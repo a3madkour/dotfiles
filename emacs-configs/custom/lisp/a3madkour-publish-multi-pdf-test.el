@@ -46,11 +46,20 @@
         (should (string= (nth 2 sequence) a3madkour-pub-multi-xelatex-command))
         (should (string= (nth 3 sequence) a3madkour-pub-multi-xelatex-command))))))
 
-(ert-deftest a3madkour-pub-multi-pdf/compile-tex-returns-nil-on-failure ()
-  "When xelatex exits non-zero, compile-tex returns nil and stops the loop."
-  (cl-letf (((symbol-function 'call-process)
-             (lambda (&rest _) 1)))
+(ert-deftest a3madkour-pub-multi-pdf/compile-tex-returns-nil-when-pdf-absent ()
+  "When no .pdf exists after all 4 passes, compile-tex returns nil.
+Exit codes are intentionally ignored — xelatex routinely returns non-zero on
+harmless warnings; the only reliable success signal is the produced PDF."
+  (cl-letf (((symbol-function 'call-process) (lambda (&rest _) 1))
+            ((symbol-function 'file-exists-p) (lambda (_) nil)))
     (should-not (a3madkour-pub-multi-pdf--compile-tex "/tmp/x/foo.tex"))))
+
+(ert-deftest a3madkour-pub-multi-pdf/compile-tex-returns-t-when-pdf-exists ()
+  "When `<base>.pdf' exists after the 4 passes, compile-tex returns t even if
+some passes exited non-zero (the common LaTeX-warning case)."
+  (cl-letf (((symbol-function 'call-process) (lambda (&rest _) 1))
+            ((symbol-function 'file-exists-p) (lambda (_) t)))
+    (should (a3madkour-pub-multi-pdf--compile-tex "/tmp/x/foo.tex"))))
 
 (ert-deftest a3madkour-pub-multi-pdf/log-success-line ()
   (let ((buf (generate-new-buffer "*log-test*")))
