@@ -42,13 +42,17 @@ Returns the exit code from `rsvg-convert'."
 (defun a3madkour-pub-multi-word--invoke-pandoc (input-org output-docx
                                                  reference-doc lua-filter bib-path)
   "Run pandoc to convert INPUT-ORG → OUTPUT-DOCX using REFERENCE-DOC,
-LUA-FILTER, and BIB-PATH (bibliography).  Returns the pandoc exit code."
-  (let ((args (list "-f" "org" "-t" "docx"
-                    (format "--reference-doc=%s" reference-doc)
-                    (format "--lua-filter=%s" lua-filter)
-                    "--citeproc"
-                    (format "--bibliography=%s" bib-path)
-                    input-org "-o" output-docx)))
+LUA-FILTER, and BIB-PATH (bibliography).  BIB-PATH may be nil when the
+source has no citations; in that case the `--bibliography' flag is omitted
+(passing nil or the empty string would cause an opaque pandoc error).
+Returns the pandoc exit code."
+  (let ((args (append (list "-f" "org" "-t" "docx"
+                            (format "--reference-doc=%s" reference-doc)
+                            (format "--lua-filter=%s" lua-filter)
+                            "--citeproc")
+                      (when (and bib-path (not (string= bib-path "")))
+                        (list (format "--bibliography=%s" bib-path)))
+                      (list input-org "-o" output-docx))))
     (apply #'call-process a3madkour-pub-multi-pandoc-command nil nil nil args)))
 
 (defun a3madkour-pub-multi-word--serialize-filtered (source-file out-org backend)
