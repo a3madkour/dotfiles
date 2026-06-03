@@ -13,6 +13,21 @@
 (defgroup a3madkour-pub-multi nil
   "D.2 multi-target export pipeline." :group 'org)
 
+(with-eval-after-load 'ox-latex
+  (let ((entry
+         '("madkour-paper"
+           "\\documentclass[11pt]{madkour-paper}
+[NO-DEFAULT-PACKAGES]
+[PACKAGES]
+[EXTRA]"
+           ("\\section{%s}" . "\\section*{%s}")
+           ("\\subsection{%s}" . "\\subsection*{%s}")
+           ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+           ("\\paragraph{%s}" . "\\paragraph*{%s}")
+           ("\\subparagraph{%s}" . "\\subparagraph*{%s}"))))
+    (setf (alist-get "madkour-paper" org-latex-classes nil nil #'equal)
+          (cdr entry))))
+
 (defcustom a3madkour-pub-multi-xelatex-command "xelatex"
   "External `xelatex' command name or absolute path."
   :type 'string :group 'a3madkour-pub-multi)
@@ -92,7 +107,8 @@ Returns the absolute path of the placed PDF on success, nil on failure."
        svg (expand-file-name (concat (file-name-base svg) ".pdf") fig-dir)))
     ;; Export org → LaTeX (hooks fire automatically).
     (with-current-buffer (find-file-noselect source-file)
-      (let ((org-latex-with-hyperref t))
+      (let ((org-latex-with-hyperref t)
+            (org-latex-default-class "madkour-paper"))
         (org-latex-export-to-latex)))
     ;; Move the produced .tex into the work dir, then compile.
     (let ((source-tex (expand-file-name (concat slug ".tex")
