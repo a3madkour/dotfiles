@@ -99,8 +99,14 @@ Returns a plist:
 
 Forces YAML frontmatter format via let-bound `org-hugo-front-matter-format'.
 Uses `org-hugo-export-as-md' (buffer-emit variant) so no files are written to
-disk — writing is the caller's responsibility per spec §10."
+disk — writing is the caller's responsibility per spec §10.
+
+`org-export-show-temporary-export-buffer' defaults to t; ox-hugo would
+pop *Org Hugo Export* into a new window during interactive runs even
+though we read+kill it immediately.  Let-bind nil to suppress the
+window-flash during publish."
   (let* ((org-hugo-front-matter-format "yaml")
+         (org-export-show-temporary-export-buffer nil)
          (warnings nil)
          ;; Detect whether FILE is already open so we only kill what we create.
          (existing-buf (find-buffer-visiting file))

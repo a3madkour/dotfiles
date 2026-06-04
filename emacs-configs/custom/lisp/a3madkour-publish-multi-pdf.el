@@ -106,9 +106,13 @@ Returns the absolute path of the placed PDF on success, nil on failure."
       (a3madkour-pub-multi-pdf--convert-svg
        svg (expand-file-name (concat (file-name-base svg) ".pdf") fig-dir)))
     ;; Export org → LaTeX (hooks fire automatically).
+    ;; `org-export-show-temporary-export-buffer' defaults to t; with it on,
+    ;; ox-latex pops the intermediate buffer into a new window during a
+    ;; publish run.  Let-bind nil so the publish completes silently.
     (with-current-buffer (find-file-noselect source-file)
       (let ((org-latex-with-hyperref t)
-            (org-latex-default-class "madkour-paper"))
+            (org-latex-default-class "madkour-paper")
+            (org-export-show-temporary-export-buffer nil))
         (org-latex-export-to-latex)))
     ;; Move the produced .tex into the work dir, then compile.
     (let ((source-tex (expand-file-name (concat slug ".tex")
