@@ -58,11 +58,14 @@ Returns the pandoc exit code."
 (defun a3madkour-pub-multi-word--serialize-filtered (source-file out-org backend)
   "Read SOURCE-FILE, apply visibility + vocab + crossref filters for BACKEND,
 write the result to OUT-ORG.  Pandoc cannot see Emacs' export hooks, so this
-serializes the post-filter buffer for pandoc input."
+serializes the post-filter buffer for pandoc input.  Must mirror the steps in
+`a3madkour-pub-multi-filter--before-processing' — `--strip-visibility-tags'
+included — or backend-specific visibility tags would leak into the docx."
   (with-temp-buffer
     (insert-file-contents source-file)
     (org-mode)
     (a3madkour-pub-multi-filter--apply-visibility backend)
+    (a3madkour-pub-multi-filter--strip-visibility-tags)
     (a3madkour-pub-multi-filter--translate-vocab backend)
     (a3madkour-pub-multi-filter--rewrite-crossrefs backend)
     (write-region (point-min) (point-max) out-org nil 'silent)))
