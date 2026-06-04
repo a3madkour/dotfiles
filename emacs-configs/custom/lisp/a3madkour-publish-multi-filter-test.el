@@ -133,6 +133,25 @@ direct tag-bearers."
       (a3madkour-pub-multi-filter--strip-visibility-tags)
       (should (string= before (buffer-string))))))
 
+(ert-deftest a3madkour-pub-multi-filter/strip-visibility-tags-only-vis-drops-block ()
+  "When the only tag is a visibility tag, the whole `:TAG:' block is removed
+along with the leading whitespace separator."
+  (with-temp-buffer
+    (insert "* Plain :NOEXPORT_PDF:\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--strip-visibility-tags)
+    (should (string= "* Plain\n" (buffer-string)))))
+
+(ert-deftest a3madkour-pub-multi-filter/strip-visibility-tags-multiple-vis ()
+  "Two adjacent visibility tags are both removed, leaving non-vis tags intact."
+  (with-temp-buffer
+    (insert "* H :WEB_ONLY:PAPER_ONLY:keep:\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--strip-visibility-tags)
+    (goto-char (point-min))
+    (re-search-forward "^\\* H")
+    (should (equal (org-get-tags nil t) '("keep")))))
+
 (ert-deftest a3madkour-pub-multi-filter/vocab-latex-injects-attrs ()
   "attr_shortcode on a D.1 block emits attr_latex + name for LaTeX backend."
   (with-temp-buffer

@@ -65,16 +65,41 @@ ox-latex's default `\\section{Title\\hfill\\textsc{TAG}}' treatment)."
 Runs after `--apply-visibility' has cut the subtrees the current backend
 doesn't want.  The kept subtrees may still carry their tag (e.g. a
 `:NOEXPORT_PDF:' heading survives in the Hugo + Word passes); strip it
-so the tag never reaches the output text."
+so the tag never reaches the output text.
+
+Uses regex rewriting rather than `org-map-entries' + `org-set-tags' to
+avoid the org-element cache re-parse trap that hangs interactive Emacs
+on each tag mutation."
   (let ((vis-tags (a3madkour-pub-multi-filter--all-visibility-tags)))
     (save-excursion
-      (org-map-entries
-       (lambda ()
-         (let* ((current (org-get-tags nil t))
-                (kept (cl-remove-if (lambda (tag) (member tag vis-tags))
-                                    current)))
-           (unless (equal current kept)
-             (org-set-tags kept))))))))
+      (goto-char (point-min))
+      ;; Headline shape with a tag block:
+      ;;   ^stars SP heading-text SP+ :tag1:tag2:[…]: SP* $
+      ;; Greedy `.*' so the regex engine backs off from the right; non-greedy
+      ;; `.*?' grabs the shortest match and splits the heading text mid-word.
+      (while (re-search-forward
+              "^\\(\\*+[ \t]+.*\\)\\([ \t]+\\)\\(:[^:[:space:]]+\\(?::[^:[:space:]]+\\)*:\\)[ \t]*$"
+              nil t)
+        ;; Capture positions + match strings up-front; split-string / member
+        ;; below clobber match-data via internal regex ops, so any later
+        ;; `replace-match' / `match-string' would read stale captures.
+        (let* ((m-beg (match-beginning 0))
+               (m-end (match-end 0))
+               (heading (match-string 1))
+               (tag-block (match-string 3))
+               ;; Split ":a:b:c:" → ("" "a" "b" "c" "") then drop empties.
+               (tags (cl-remove-if #'string-empty-p
+                                   (split-string tag-block ":")))
+               (kept (cl-remove-if (lambda (tag) (member tag vis-tags))
+                                   tags)))
+          (when (not (equal tags kept))
+            (let ((replacement
+                   (if kept
+                       (concat heading "\t" ":" (mapconcat #'identity kept ":") ":")
+                     heading)))
+              (delete-region m-beg m-end)
+              (goto-char m-beg)
+              (insert replacement))))))))
 
 (defconst a3madkour-pub-multi-filter--vocab-kinds
   '("theorem" "lemma" "corollary" "proposition"
