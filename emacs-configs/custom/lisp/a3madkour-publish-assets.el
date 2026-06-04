@@ -161,7 +161,14 @@ FILENAME passes through `a3madkour-pub--html-escape' to handle weird names."
   "Return a list of (PATH . TEXT) pairs for every asset-shaped link in ORG-FILE.
 
 Walks all `[[<path>][<text>]]' and `[[<path>]]' forms; filters via
-`a3madkour-pub--asset-shaped-link-p' (no URL scheme; extension != org)."
+`a3madkour-pub--asset-shaped-link-p' (no URL scheme; extension != org).
+
+The org `file:' link type is normalized away before the shape check so
+`[[file:diagram-1.svg]]' and `[[diagram-1.svg]]' are treated as the
+same asset — without this normalization `[[file:…]]' forms used to
+fall through B.4's asset pipeline entirely (link-scheme \"file\" tripped
+the no-scheme filter), surfacing as publish-time errors when the
+referenced file wasn't somewhere ox-hugo expected."
   (let ((refs nil))
     (with-temp-buffer
       (insert-file-contents org-file)
@@ -169,8 +176,9 @@ Walks all `[[<path>][<text>]]' and `[[<path>]]' forms; filters via
       (while (re-search-forward
               "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
               nil t)
-        (let ((path (match-string 1))
-              (text (or (match-string 2) (match-string 1))))
+        (let* ((raw-path (match-string 1))
+               (path (replace-regexp-in-string "\\`file:" "" raw-path))
+               (text (or (match-string 2) path)))
           (when (a3madkour-pub--asset-shaped-link-p path)
             (push (cons path text) refs)))))
     (nreverse refs)))
@@ -483,6 +491,24 @@ in unit/integration tests."
             :removed removed
             :warnings warnings
             :errors (nreverse errors)))))
+
+(defun a3madkour-pub-assets/list-referenced-files (source-file)
+  "Return the absolute paths of every existing asset referenced by SOURCE-FILE.
+
+Walks `[[<path>][<text>]]' and `[[<path>]]' forms via
+`a3madkour-pub--extract-asset-refs', resolves each path via
+`a3madkour-pub--asset-resolve-path', and returns the subset whose
+resolved `:abs-path' exists on disk.  D.2's PDF + Word backends call
+this to find SVG figures that need rsvg-convert → PDF / PNG conversion
+ahead of the actual export."
+  (let ((result nil))
+    (dolist (ref (a3madkour-pub--extract-asset-refs source-file))
+      (let* ((path (car ref))
+             (resolved (a3madkour-pub--asset-resolve-path path source-file))
+             (abs (plist-get resolved :abs-path)))
+        (when (and abs (file-exists-p abs))
+          (push abs result))))
+    (nreverse result)))
 
 (provide 'a3madkour-publish-assets)
 

@@ -743,6 +743,34 @@
       (let ((normalized (a3madkour-pub--asset-normalize-link-path input org-file)))
         (should (equal normalized "/tmp/some-external-asset.png"))))))
 
+;; -- list-referenced-files (public adapter for D.2) --
+
+(ert-deftest a3madkour-pub-assets-test/list-referenced-files-returns-abs-paths ()
+  "Public adapter resolves [[file:NAME]] / [[NAME]] refs to absolute paths."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-pub-assets-list-" t))))
+    (unwind-protect
+        (let ((org-file (expand-file-name "x.org" tmp))
+              (svg (expand-file-name "diagram-1.svg" tmp)))
+          (with-temp-file svg (insert "<svg/>"))
+          (with-temp-file org-file
+            (insert "* H\n[[file:diagram-1.svg]]\n[[diagram-1.svg][caption]]\n"))
+          (let ((result (a3madkour-pub-assets/list-referenced-files org-file)))
+            (should (= 2 (length result)))
+            (should (cl-every #'file-exists-p result))
+            (should (cl-every (lambda (p) (string-suffix-p "diagram-1.svg" p))
+                              result))))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-assets-test/list-referenced-files-skips-missing ()
+  "Refs to non-existent files are not included."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-pub-assets-miss-" t))))
+    (unwind-protect
+        (let ((org-file (expand-file-name "x.org" tmp)))
+          (with-temp-file org-file
+            (insert "* H\n[[file:does-not-exist.png]]\n"))
+          (should (null (a3madkour-pub-assets/list-referenced-files org-file))))
+      (delete-directory tmp t))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here
