@@ -391,6 +391,32 @@ when non-nil, ignoring disk."
   (should-not (a3madkour-pub-history/filesystem-mtime-of-file
                "/nonexistent/path/x.org")))
 
+(ert-deftest a3madkour-pub-history-test/canonicalize-entry-reorders-keys ()
+  "Entry built in non-canonical order is re-ordered to id / current_url / history / state."
+  (let* ((entry '((current_url . "/x/") (history . []) (state . "live") (id . "abc")))
+         (got (a3madkour-pub-history--canonicalize-entry entry)))
+    (should (equal '(id current_url history state) (mapcar #'car got)))))
+
+(ert-deftest a3madkour-pub-history-test/canonicalize-entry-preserves-extras ()
+  "Unknown keys are kept (appended after the canonical ones)."
+  (let* ((entry '((state . "live") (id . "abc") (custom_field . "x")))
+         (got (a3madkour-pub-history--canonicalize-entry entry)))
+    (should (equal '(id state custom_field) (mapcar #'car got)))))
+
+(ert-deftest a3madkour-pub-history-test/write-manifest-is-byte-stable ()
+  "Two writes of equivalent-but-differently-ordered manifests produce
+byte-identical YAML output."
+  (a3-pub-history-test--with-tmp-manifest path
+    (let ((m1 '((notes . [((current_url . "/a/") (history . []) (state . "live") (id . "1"))
+                          ((state . "live") (history . []) (current_url . "/b/") (id . "2"))])))
+          (m2 '((notes . [((id . "1") (current_url . "/a/") (history . []) (state . "live"))
+                          ((id . "2") (current_url . "/b/") (history . []) (state . "live"))]))))
+      (a3madkour-pub-history/write-manifest m1)
+      (let ((bytes1 (with-temp-buffer (insert-file-contents path) (buffer-string))))
+        (a3madkour-pub-history/write-manifest m2)
+        (let ((bytes2 (with-temp-buffer (insert-file-contents path) (buffer-string))))
+          (should (string= bytes1 bytes2)))))))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here

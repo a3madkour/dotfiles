@@ -102,13 +102,49 @@ See parent design spec §6 (B-coupling fix)."
       a3madkour-pub--manifest-snapshot
     (a3madkour-pub-history/read-manifest)))
 
+(defconst a3madkour-pub-history--canonical-key-order
+  '(id current_url history state)
+  "Canonical key order for each entry in `url-history.yaml'.
+Applied at write time so the emitted file is byte-stable across publish runs
+regardless of construction order in upstream code (yaml.el serializes alists
+in list order — entries get re-shuffled keys depending on how they were
+updated).")
+
+(defun a3madkour-pub-history--canonicalize-entry (entry)
+  "Return ENTRY (an alist) with keys re-ordered per
+`a3madkour-pub-history--canonical-key-order'.  Unknown keys are appended
+after the canonical ones in their existing order, so adding a new key
+elsewhere in the codebase doesn't silently drop it from the emitted YAML."
+  (let* ((known (cl-remove-if-not
+                 (lambda (k) (assq k entry))
+                 a3madkour-pub-history--canonical-key-order))
+         (extras (cl-remove-if
+                  (lambda (cell)
+                    (memq (car cell)
+                          a3madkour-pub-history--canonical-key-order))
+                  entry)))
+    (append (mapcar (lambda (k) (assq k entry)) known) extras)))
+
+(defun a3madkour-pub-history--canonicalize-manifest (manifest)
+  "Return MANIFEST with each `notes' entry's keys re-ordered canonically."
+  (let ((notes (alist-get 'notes manifest)))
+    (if (vectorp notes)
+        (cons (cons 'notes
+                    (vconcat
+                     (mapcar #'a3madkour-pub-history--canonicalize-entry notes)))
+              (assq-delete-all 'notes (copy-alist manifest)))
+      manifest)))
+
 (defun a3madkour-pub-history/write-manifest (manifest)
   "Serialize MANIFEST (an alist) to `url-history.yaml' as block-style YAML.
-Creates the data dir if missing."
-  (let ((path (a3madkour-pub-history--manifest-path)))
+Creates the data dir if missing.  Each note entry's keys are pre-ordered
+canonically (id / current_url / history / state) so the emitted file is
+byte-stable across publish runs."
+  (let ((path (a3madkour-pub-history--manifest-path))
+        (canonical (a3madkour-pub-history--canonicalize-manifest manifest)))
     (make-directory (file-name-directory path) t)
     (with-temp-file path
-      (insert (yaml-encode manifest))
+      (insert (yaml-encode canonical))
       (unless (eq ?\n (char-before)) (insert "\n")))))
 
 (defun a3madkour-pub-history--find-note-by-id (notes-vec id)
