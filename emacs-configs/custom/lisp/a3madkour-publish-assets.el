@@ -441,7 +441,7 @@ Returns:
 SOURCE-NOTE-ID is the org-roam :ID: (UUID) of the source note containing
 the asset references.  When provided, the per-asset cross-namespace check
 runs against the source's slug.  When nil, the cross-namespace check is
-suppressed — appropriate for tests or for sources without an :ID:.  Sub-
+suppressed (no source slug to compare against).  Sub-
 project B's per-section publishers thread their `:id' here; see
 `a3madkour-pub-essays/publish-essay-file' for the canonical caller.
 
