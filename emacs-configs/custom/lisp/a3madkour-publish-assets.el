@@ -420,7 +420,8 @@ Any other relative path is resolved against ORG-FILE's directory via
       (expand-file-name path
                         (file-name-directory (expand-file-name org-file))))))
 
-(defun a3madkour-pub/asset-validate-and-copy (org-file bundle-dest-dir &optional dry-run)
+(defun a3madkour-pub/asset-validate-and-copy
+    (org-file bundle-dest-dir &optional source-note-id dry-run)
   "Walk ORG-FILE for asset links; copy referenced assets; remove stale per-page assets.
 
 For each `[[<path>][text]]' that is asset-shaped:
@@ -437,18 +438,15 @@ Returns:
    :warnings (WARN ...)
    :errors   (ERR ...))
 
-DRY-RUN, when non-nil, propagates to rewrite-asset-link's auto-remediation
-and suppresses file I/O for copies + cleanup.
+SOURCE-NOTE-ID is the org-roam :ID: (UUID) of the source note containing
+the asset references.  When provided, the per-asset cross-namespace check
+runs against the source's slug.  When nil, the cross-namespace check is
+suppressed — appropriate for tests or for sources without an :ID:.  Sub-
+project B's per-section publishers thread their `:id' here; see
+`a3madkour-pub-essays/publish-essay-file' for the canonical caller.
 
-Caller contract: this function passes \"from-validate\" as the
-source-note-id to `rewrite-asset-link', which then resolves it via
-`a3madkour-pub/note-slug'.  For ALL page-kind asset references to
-resolve correctly (instead of being flagged cross-namespace), the
-caller MUST either register \"from-validate\" in the live org-roam
-DB pointing at ORG-FILE, OR stub `a3madkour-pub/note-slug' via
-`cl-letf' to return the expected slug.  Sub-project B's per-section
-publisher will pass a real source-note-id; the stub is only needed
-in unit/integration tests."
+DRY-RUN, when non-nil, propagates to rewrite-asset-link's auto-remediation
+and suppresses file I/O for copies + cleanup."
   (let ((refs (a3madkour-pub--extract-asset-refs org-file))
         (copied nil)
         (warnings nil)
@@ -462,7 +460,7 @@ in unit/integration tests."
              (abs-path (a3madkour-pub--asset-normalize-link-path path org-file))
              (text (cdr ref))
              (rewrite-result (a3madkour-pub/rewrite-asset-link
-                              abs-path text "from-validate" dry-run))
+                              abs-path text source-note-id dry-run))
              (src (plist-get rewrite-result :source-path))
              (resolved (plist-get rewrite-result :resolved-path)))
         ;; Always merge WARNs:

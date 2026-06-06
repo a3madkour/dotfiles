@@ -771,6 +771,52 @@
           (should (null (a3madkour-pub-assets/list-referenced-files org-file))))
       (delete-directory tmp t))))
 
+;;; asset-validate-and-copy: source-note-id threading.
+
+(ert-deftest a3madkour-pub-assets-test/validate-threads-source-note-id ()
+  "Caller-supplied source-note-id is forwarded to rewrite-asset-link."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-validate-thread-" t)))
+        (captured-source-note-id nil))
+    (unwind-protect
+        (let ((org-file (expand-file-name "x.org" tmp))
+              (svg (expand-file-name "diagram.svg" tmp))
+              (bundle (file-name-as-directory
+                       (expand-file-name "bundle/" tmp))))
+          (make-directory bundle t)
+          (with-temp-file svg (insert "<svg/>"))
+          (with-temp-file org-file
+            (insert "* H\n[[file:diagram.svg]]\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/rewrite-asset-link)
+                     (lambda (_path _text source-note-id &optional _dry-run)
+                       (setq captured-source-note-id source-note-id)
+                       (list :inert "(stub)" :warnings nil))))
+            (a3madkour-pub/asset-validate-and-copy
+             org-file bundle "real-note-id-42"))
+          (should (equal captured-source-note-id "real-note-id-42")))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-assets-test/validate-nil-source-note-id-tolerated ()
+  "Omitting source-note-id passes nil through; no user-error fires."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-validate-nil-" t))))
+    (unwind-protect
+        (let ((org-file (expand-file-name "x.org" tmp))
+              (svg (expand-file-name "diagram.svg" tmp))
+              (bundle (file-name-as-directory
+                       (expand-file-name "bundle/" tmp)))
+              (captured-source-note-id 'unset))
+          (make-directory bundle t)
+          (with-temp-file svg (insert "<svg/>"))
+          (with-temp-file org-file
+            (insert "* H\n[[file:diagram.svg]]\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/rewrite-asset-link)
+                     (lambda (_path _text source-note-id &optional _dry-run)
+                       (setq captured-source-note-id source-note-id)
+                       (list :inert "(stub)" :warnings nil))))
+            ;; Should NOT signal — formerly threw user-error on "from-validate".
+            (a3madkour-pub/asset-validate-and-copy org-file bundle))
+          (should (null captured-source-note-id)))
+      (delete-directory tmp t))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here
