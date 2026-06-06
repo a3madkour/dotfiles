@@ -337,7 +337,7 @@ parse/strip steps run."
          (final-fm   (a3madkour-pub-research--inject-outputs normalized outputs))
          (body       (plist-get exported :body)))
     ;; Step 8: asset copy.
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir)
+    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
     ;; Step 9: write bundle.
     (a3madkour-pub-research--write-if-different
      out-path
