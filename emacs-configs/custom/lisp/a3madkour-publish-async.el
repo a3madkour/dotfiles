@@ -28,5 +28,31 @@
 bind this to t via `with-a3-pub-async-sync' so their `cl-letf'
 stubs continue to fire.")
 
+(cl-defun a3-pub-async/run-process (cmd args
+                                    &key name on-done stderr-buf cwd)
+  "Spawn CMD with ARGS; invoke ON-DONE with (rc stderr-tail) when done.
+
+NAME defaults to CMD (used for process + stderr buffer names).
+STDERR-BUF defaults to a buffer named `*a3-pub-stderr <name>*'.
+CWD, when non-nil, sets `default-directory' for the spawn.
+
+When `a3-pub-async--synchronous-p' is non-nil, runs `call-process'
+inline and fires ON-DONE in the calling frame (test path).
+
+The async path is implemented in Task 3."
+  (let* ((name (or name cmd))
+         (stderr-buf (or stderr-buf
+                         (get-buffer-create (format "*a3-pub-stderr %s*" name))))
+         (default-directory (or cwd default-directory)))
+    (if a3-pub-async--synchronous-p
+        ;; Sync test path.
+        (let ((rc (apply #'call-process cmd nil stderr-buf nil args))
+              (tail (with-current-buffer stderr-buf
+                      (buffer-substring-no-properties (point-min) (point-max)))))
+          (when on-done (funcall on-done rc tail))
+          nil)
+      ;; Async path — implemented in Task 3.
+      (error "a3-pub-async/run-process: async path not yet implemented"))))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here
