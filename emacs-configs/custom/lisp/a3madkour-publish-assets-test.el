@@ -836,6 +836,74 @@
       (should (plist-get result :html))
       (should (string-match-p "<img " (plist-get result :html))))))
 
+;;; asset-resolve-path: essays-aware branch.
+
+(ert-deftest a3madkour-pub-assets-test/resolve-path-essays-source-uses-assets-id-dir ()
+  "Source under essays-dir with :ID: → resolves to essays-dir/assets/<id>/."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-resolve-essays-" t))))
+    (unwind-protect
+        (let* ((essays-dir (file-name-as-directory
+                             (expand-file-name "essays/" tmp)))
+               (id "11111111-2222-3333-4444-555555555555")
+               (org-file (expand-file-name "essay.org" essays-dir))
+               (asset-dir (file-name-as-directory
+                            (expand-file-name (format "assets/%s/" id) essays-dir)))
+               (asset (expand-file-name "diagram.svg" asset-dir)))
+          (make-directory asset-dir t)
+          (with-temp-file org-file
+            (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: e\n" id)))
+          (with-temp-file asset (insert "<svg/>"))
+          (let ((a3madkour-pub/essays-dir essays-dir)
+                (a3madkour-pub-canonical-asset-root
+                 (expand-file-name "notes/assets/" tmp)))
+            (let ((result (a3madkour-pub--asset-resolve-path "diagram.svg" org-file)))
+              (should (eq 'page (plist-get result :kind)))
+              (should (equal asset (plist-get result :abs-path))))))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-assets-test/resolve-path-essays-fallback-to-canonical-root ()
+  "Source under essays-dir but no file in assets/<id>/ → falls through to existing logic."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-resolve-fallback-" t))))
+    (unwind-protect
+        (let* ((essays-dir (file-name-as-directory
+                             (expand-file-name "essays/" tmp)))
+               (id "11111111-2222-3333-4444-555555555555")
+               (org-file (expand-file-name "essay.org" essays-dir)))
+          (make-directory essays-dir t)
+          (with-temp-file org-file
+            (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: e\n" id)))
+          ;; assets/<id>/diagram.svg does NOT exist; fall through.
+          (let ((a3madkour-pub/essays-dir essays-dir)
+                (a3madkour-pub-canonical-asset-root
+                 (expand-file-name "notes/assets/" tmp)))
+            (let ((result (a3madkour-pub--asset-resolve-path "diagram.svg" org-file)))
+              ;; Falls back: not found anywhere → :missing.
+              (should (eq 'missing (plist-get result :kind))))))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-assets-test/resolve-path-non-essays-source-unchanged ()
+  "Source under garden (not essays) → existing canonical-root classification unchanged."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-resolve-nonessays-" t))))
+    (unwind-protect
+        (let* ((notes-dir (file-name-as-directory
+                            (expand-file-name "notes/" tmp)))
+               (assets-root (file-name-as-directory
+                              (expand-file-name "assets/page/foo/" notes-dir)))
+               (org-file (expand-file-name "note.org" notes-dir))
+               (asset (expand-file-name "diagram.svg" assets-root)))
+          (make-directory assets-root t)
+          (with-temp-file org-file (insert "* H\n"))
+          (with-temp-file asset (insert "<svg/>"))
+          (let ((a3madkour-pub/essays-dir
+                  (expand-file-name "essays/" tmp))   ; essays-dir set but source NOT under it
+                (a3madkour-pub-canonical-asset-root
+                 (expand-file-name "assets/" notes-dir)))
+            (let ((result (a3madkour-pub--asset-resolve-path
+                           "./assets/page/foo/diagram.svg" org-file)))
+              (should (eq 'page (plist-get result :kind)))
+              (should (equal asset (plist-get result :abs-path))))))
+      (delete-directory tmp t))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here

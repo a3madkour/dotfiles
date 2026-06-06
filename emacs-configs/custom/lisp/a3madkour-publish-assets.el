@@ -58,12 +58,26 @@ Shared assets are copied here once site-wide."
   :type '(choice (const :tag "Unset" nil) directory)
   :group 'a3madkour-pub-assets)
 
+(defun a3madkour-pub--essay-slug-from-source-file (source-file)
+  "Return the published slug for SOURCE-FILE, or nil.
+Thin wrapper around `a3madkour-pub/note-metadata' that pulls `:slug'.
+Used by `--asset-resolve-path' to synthesize the per-essay namespace
+key on the essays-aware branch."
+  (when source-file
+    (plist-get (a3madkour-pub/note-metadata source-file) :slug)))
+
 (defun a3madkour-pub--asset-resolve-path (path source-file)
   "Normalize PATH + classify against the canonical asset root.
 
 PATH may be relative (resolved against SOURCE-FILE's directory), absolute,
 or tilde-expanded.  SOURCE-FILE may be nil — in which case relative paths
 resolve against `default-directory'.
+
+When SOURCE-FILE is under `a3madkour-pub/essays-dir' AND carries a top-
+level :ID:, an essays-aware lookup runs first: PATH is looked up under
+`essays-dir/assets/<source-id>/'.  If found, classification is `:page'
+with the per-essay slug as the namespace key.  This matches the
+convention enforced by `a3madkour-pub-essays--copy-asset-dir'.
 
 Returns a plist:
   (:kind page|shared|out-of-root|missing
@@ -74,7 +88,21 @@ Returns a plist:
 non-existent file at a canonical-looking path still reports missing."
   (let* ((source-dir (or (and source-file (file-name-directory source-file))
                          default-directory))
-         (abs (expand-file-name path source-dir))
+         (essays-dir (and (boundp 'a3madkour-pub/essays-dir)
+                          a3madkour-pub/essays-dir))
+         (essays-page-path
+          (and source-file essays-dir
+               (string-prefix-p (expand-file-name essays-dir) source-file)
+               (let* ((id (a3madkour-pub--file-top-level-id source-file))
+                      (page-dir (and id
+                                     (expand-file-name
+                                      (format "assets/%s/" id) essays-dir)))
+                      (candidate (and page-dir
+                                      (expand-file-name
+                                       (file-name-nondirectory path) page-dir))))
+                 (and candidate (file-exists-p candidate) candidate))))
+         (abs (or essays-page-path
+                  (expand-file-name path source-dir)))
          (root (expand-file-name a3madkour-pub-canonical-asset-root))
          (root-page (file-name-as-directory (expand-file-name "page" root)))
          (root-shared (file-name-as-directory (expand-file-name "shared" root)))
@@ -82,6 +110,12 @@ non-existent file at a canonical-looking path still reports missing."
     (cond
      ((not exists)
       (list :kind 'missing :abs-path abs :rel-path nil))
+     (essays-page-path
+      (let ((essay-slug (a3madkour-pub--essay-slug-from-source-file source-file)))
+        (list :kind 'page :abs-path abs
+              :rel-path (format "page/%s/%s"
+                                (or essay-slug "")
+                                (file-name-nondirectory abs)))))
      ((string-prefix-p root-page abs)
       (list :kind 'page :abs-path abs
             :rel-path (substring abs (length root))))
