@@ -35,5 +35,30 @@ inline with (rc stderr-tail)."
                                   :on-done (lambda (rc _tail) (setq rc-seen rc)))))
     (should (= 2 rc-seen))))
 
+(ert-deftest a3-pub-async-test/run-process-async-spawns-make-process ()
+  "In async mode, run-process uses make-process and the sentinel
+fires on-done with the exit code."
+  (let ((done-rc nil) (done-tail nil))
+    ;; Use a tiny real subprocess: /bin/sh -c 'exit 0'.
+    (a3-pub-async/run-process "/bin/sh" '("-c" "exit 0")
+                              :name "test-sh"
+                              :on-done (lambda (rc tail)
+                                         (setq done-rc rc done-tail tail)))
+    ;; Wait up to 5s for the sentinel.
+    (with-timeout (5 (error "sentinel never fired"))
+      (while (null done-rc) (accept-process-output nil 0.05)))
+    (should (= 0 done-rc))))
+
+(ert-deftest a3-pub-async-test/run-process-async-stderr-tail-captured ()
+  "Stderr output is captured into the stderr buffer and surfaced to on-done."
+  (let ((done-tail nil))
+    (a3-pub-async/run-process "/bin/sh"
+                              '("-c" "echo OOPS 1>&2 ; exit 1")
+                              :name "test-err"
+                              :on-done (lambda (_rc tail) (setq done-tail tail)))
+    (with-timeout (5 (error "sentinel never fired"))
+      (while (null done-tail) (accept-process-output nil 0.05)))
+    (should (string-match-p "OOPS" done-tail))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

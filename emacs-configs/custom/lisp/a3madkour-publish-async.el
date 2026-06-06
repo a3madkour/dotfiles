@@ -44,15 +44,32 @@ The async path is implemented in Task 3."
          (stderr-buf (or stderr-buf
                          (get-buffer-create (format "*a3-pub-stderr %s*" name))))
          (default-directory (or cwd default-directory)))
+    ;; Start each call with a clean stderr buffer so caller-side
+    ;; :name reuse can't leak stale content into on-done's tail arg.
+    (with-current-buffer stderr-buf
+      (let ((inhibit-read-only t)) (erase-buffer)))
     (if a3-pub-async--synchronous-p
         ;; Sync test path.
         (let ((rc (apply #'call-process cmd nil stderr-buf nil args))
-              (tail (with-current-buffer stderr-buf
-                      (buffer-substring-no-properties (point-min) (point-max)))))
+              (tail (with-current-buffer stderr-buf (buffer-string))))
           (when on-done (funcall on-done rc tail))
           nil)
-      ;; Async path — implemented in Task 3.
-      (error "a3-pub-async/run-process: async path not yet implemented"))))
+      ;; Async path.
+      (make-process
+       :name (format "a3-pub-%s" name)
+       :command (cons cmd args)
+       :buffer nil
+       :stderr stderr-buf
+       :sentinel
+       (lambda (proc _event)
+         (when (memq (process-status proc) '(exit signal))
+           (let* ((rc (process-exit-status proc))
+                  (raw (with-current-buffer stderr-buf (buffer-string)))
+                  (lines (split-string raw "\n" t))
+                  (tail (mapconcat #'identity
+                                   (last lines (min 10 (length lines)))
+                                   "\n")))
+             (when on-done (funcall on-done rc tail)))))))))
 
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here
