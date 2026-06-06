@@ -411,6 +411,91 @@ must emit as a paired Hugo shortcode `{{< theorem title=\"Foo\" id=\"thm-foo\" >
             (should (equal captured-id "essay-id-99"))))
       (when (file-exists-p tmp-src) (delete-file tmp-src)))))
 
+;;; End-to-end: [[file:asset.svg]] round-trip through publish-essay-file.
+
+(ert-deftest a3madkour-pub-essays-test/figure-ref-round-trip ()
+  "Real publish: [[file:fig.svg]] lands as <img> in index.md; svg copied to bundle."
+  (let* ((tmp (file-name-as-directory
+               (make-temp-file "a3-figure-roundtrip-" t)))
+         (essays-dir (file-name-as-directory (expand-file-name "essays/" tmp)))
+         (id "deadbeef-1234-5678-9abc-def012345678")
+         (slug "test-figure-essay")
+         (org-file (expand-file-name (concat slug ".org") essays-dir))
+         (asset-dir (file-name-as-directory
+                     (expand-file-name (format "assets/%s/" id) essays-dir)))
+         (asset (expand-file-name "fig.svg" asset-dir))
+         (site-root (file-name-as-directory (expand-file-name "site/" tmp)))
+         (bundle-dir (file-name-as-directory
+                      (expand-file-name (format "content/essays/%s/" slug)
+                                        site-root))))
+    (unwind-protect
+        (progn
+          (make-directory asset-dir t)
+          (make-directory bundle-dir t)
+          (with-temp-file asset (insert "<svg/>"))
+          (with-temp-file org-file
+            (insert (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+title: Test figure essay
+#+date: 2026-06-05
+#+hugo_publish: t
+#+hugo_section: essays
+#+hugo_slug: %s
+
+Body text.
+
+[[file:fig.svg]]
+"
+                            id slug)))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_f)
+                       (list :id id :slug slug :section "essays"
+                             :state 'live :title "Test figure essay")))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_f) (format "/essays/%s/" slug)))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () site-root))
+                    ((symbol-function 'a3madkour-pub--id-to-file)
+                     (lambda (i) (if (equal i id) org-file nil)))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_f) slug))
+                    ((symbol-function 'a3madkour-pub-citations/rewrite-cite-keys-in-buffer)
+                     (lambda (_f) nil))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (tmp-src)
+                       ;; Simulate ox-hugo: read the pre-export-rewritten file
+                       ;; and convert @@html:...@@ export snippets to raw HTML.
+                       (let ((body (with-temp-buffer
+                                     (insert-file-contents tmp-src)
+                                     (buffer-string))))
+                         (list :body
+                               (replace-regexp-in-string
+                                "@@html:\\(.*?\\)@@" "\\1" body)
+                               :frontmatter nil))))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (_section raw _f) raw))
+                    ((symbol-function 'a3madkour-pub-essays--render-frontmatter)
+                     (lambda (_n) ""))
+                    ((symbol-function 'a3madkour-pub-essays--copy-asset-dir)
+                     (lambda (_id _b) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (_id _url _state) nil)))
+            (let ((a3madkour-pub/essays-dir essays-dir))
+              (a3madkour-pub-essays/publish-essay-file org-file)))
+          (let* ((index-path (expand-file-name "index.md" bundle-dir))
+                 (svg-path (expand-file-name "fig.svg" bundle-dir))
+                 (index-body
+                  (when (file-exists-p index-path)
+                    (with-temp-buffer
+                      (insert-file-contents index-path)
+                      (buffer-string)))))
+            (should (file-exists-p index-path))
+            (should (file-exists-p svg-path))
+            (should (string-match-p "<img " index-body))
+            (should (string-match-p "fig\\.svg" index-body))))
+      (delete-directory tmp t))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here
