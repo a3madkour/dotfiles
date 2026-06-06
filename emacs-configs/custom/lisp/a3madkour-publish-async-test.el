@@ -86,5 +86,40 @@ killed after on-done fires (no leak)."
     (should (buffer-live-p buf))
     (kill-buffer buf)))
 
+(ert-deftest a3-pub-async-test/barrier-fires-on-nth-call ()
+  "N=3: on-all-done fires exactly once, after the 3rd report,
+with results in registration order."
+  (let ((fired 0) (saw nil))
+    (let ((report (a3-pub-async/barrier 3
+                                        :on-all-done
+                                        (lambda (results)
+                                          (cl-incf fired)
+                                          (setq saw results)))))
+      (funcall report 'a)
+      (funcall report 'b)
+      (should (= 0 fired))
+      (funcall report 'c))
+    (should (= 1 fired))
+    (should (equal saw '(a b c)))))
+
+(ert-deftest a3-pub-async-test/barrier-n-zero-fires-immediately ()
+  "N=0: on-all-done fires immediately with nil."
+  (let ((fired nil))
+    (a3-pub-async/barrier 0 :on-all-done (lambda (results)
+                                           (setq fired (or results 'empty))))
+    (should (eq fired 'empty))))
+
+(ert-deftest a3-pub-async-test/barrier-extra-calls-after-n-are-ignored ()
+  "Calls beyond N are silently ignored (defensive against double-fire)."
+  (let ((fired 0))
+    (let ((report (a3-pub-async/barrier 2
+                                        :on-all-done
+                                        (lambda (_) (cl-incf fired)))))
+      (funcall report 'a)
+      (funcall report 'b)
+      (funcall report 'c)
+      (funcall report 'd))
+    (should (= 1 fired))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

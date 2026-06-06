@@ -74,5 +74,21 @@ inline and fires ON-DONE in the calling frame (test path)."
              (when on-done (funcall on-done rc tail))
              (when buf-auto-created (kill-buffer stderr-buf)))))))))
 
+(cl-defun a3-pub-async/barrier (n &key on-all-done)
+  "Return a 1-arg report function.  After N calls, fires ON-ALL-DONE
+with the list of reports in call order.  N=0 fires immediately.
+Calls beyond N are silently ignored (defensive against double-fire)."
+  (let ((remaining n)
+        (results nil))
+    (if (zerop n)
+        (progn (when on-all-done (funcall on-all-done nil)) (lambda (_) nil))
+      (lambda (result)
+        (when (> remaining 0)
+          (setq remaining (1- remaining))
+          (push result results)
+          (when (zerop remaining)
+            (when on-all-done
+              (funcall on-all-done (nreverse results)))))))))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here
