@@ -817,6 +817,25 @@
           (should (null captured-source-note-id)))
       (delete-directory tmp t))))
 
+;;; rewrite-asset-link: nil source-note-id suppresses cross-namespace check.
+
+(ert-deftest a3madkour-pub-assets-test/rewrite-asset-nil-source-skips-cross-namespace ()
+  "Nil source-note-id: cross-namespace check is suppressed; :html still emitted."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+             (lambda (_id) nil))
+            ((symbol-function 'a3madkour-pub/note-slug)
+             (lambda (_id)
+               (error "note-slug should not run when source-note-id is nil")))
+            ((symbol-function 'a3madkour-pub--asset-resolve-path)
+             (lambda (_path _src)
+               (list :kind 'page
+                     :abs-path "/tmp/x/page/other-slug/foo.svg"
+                     :rel-path "page/other-slug/foo.svg"))))
+    (let ((result (a3madkour-pub/rewrite-asset-link
+                   "/tmp/x/page/other-slug/foo.svg" "foo.svg" nil)))
+      (should (plist-get result :html))
+      (should (string-match-p "<img " (plist-get result :html))))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here

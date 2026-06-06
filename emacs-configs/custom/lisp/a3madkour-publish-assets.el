@@ -302,7 +302,8 @@ Returns one of:
 
 See parent spec §7 + design doc §5."
   (let* ((source-file (a3madkour-pub--id-to-file source-note-id))
-         (source-slug (a3madkour-pub/note-slug source-note-id))
+         (source-slug (and source-note-id
+                           (a3madkour-pub/note-slug source-note-id)))
          (resolved (a3madkour-pub--asset-resolve-path path source-file))
          (kind (plist-get resolved :kind))
          (abs (plist-get resolved :abs-path))
@@ -316,6 +317,7 @@ See parent spec §7 + design doc §5."
             :warnings (list (format "asset source file does not exist: %s" abs))))
      ;; Cross-namespace use → inert + WARN.
      ((and (eq kind 'page)
+           source-slug
            (a3madkour-pub--asset-cross-namespace-p resolved source-slug))
       (list :inert (a3madkour-pub--asset-emit-inert filename)
             :warnings (list
