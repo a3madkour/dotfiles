@@ -60,5 +60,31 @@ fires on-done with the exit code."
       (while (null done-tail) (accept-process-output nil 0.05)))
     (should (string-match-p "OOPS" done-tail))))
 
+(ert-deftest a3-pub-async-test/run-process-auto-stderr-buf-killed-after-done ()
+  "When run-process auto-creates its stderr buffer, the buffer is
+killed after on-done fires (no leak)."
+  (let ((done-fired nil) (buf-name "*a3-pub-stderr test-kill*"))
+    ;; Pre-clear any stale buffer.
+    (when (get-buffer buf-name) (kill-buffer buf-name))
+    (a3-pub-async/run-process "/bin/sh" '("-c" "exit 0")
+                              :name "test-kill"
+                              :on-done (lambda (_rc _tail) (setq done-fired t)))
+    (with-timeout (5 (error "sentinel never fired"))
+      (while (not done-fired) (accept-process-output nil 0.05)))
+    (should-not (get-buffer buf-name))))
+
+(ert-deftest a3-pub-async-test/run-process-caller-owned-stderr-buf-preserved ()
+  "When the caller passes :stderr-buf, run-process leaves it alone."
+  (let* ((buf (generate-new-buffer "*owned-stderr*"))
+         (done-fired nil))
+    (a3-pub-async/run-process "/bin/sh" '("-c" "echo HI 1>&2 ; exit 0")
+                              :name "test-owned"
+                              :stderr-buf buf
+                              :on-done (lambda (_rc _tail) (setq done-fired t)))
+    (with-timeout (5 (error "sentinel never fired"))
+      (while (not done-fired) (accept-process-output nil 0.05)))
+    (should (buffer-live-p buf))
+    (kill-buffer buf)))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

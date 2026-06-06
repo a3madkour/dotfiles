@@ -33,14 +33,16 @@ stubs continue to fire.")
   "Spawn CMD with ARGS; invoke ON-DONE with (rc stderr-tail) when done.
 
 NAME defaults to CMD (used for process + stderr buffer names).
-STDERR-BUF defaults to a buffer named `*a3-pub-stderr <name>*'.
+STDERR-BUF defaults to a buffer named `*a3-pub-stderr <name>*'.  When
+the function auto-creates the buffer, it is killed after ON-DONE fires
+so long sessions don't leak buffers.  When the caller passes STDERR-BUF
+explicitly, the buffer is left alone (caller owns lifecycle).
 CWD, when non-nil, sets `default-directory' for the spawn.
 
 When `a3-pub-async--synchronous-p' is non-nil, runs `call-process'
-inline and fires ON-DONE in the calling frame (test path).
-
-The async path is implemented in Task 3."
+inline and fires ON-DONE in the calling frame (test path)."
   (let* ((name (or name cmd))
+         (buf-auto-created (not stderr-buf))
          (stderr-buf (or stderr-buf
                          (get-buffer-create (format "*a3-pub-stderr %s*" name))))
          (default-directory (or cwd default-directory)))
@@ -53,6 +55,7 @@ The async path is implemented in Task 3."
         (let ((rc (apply #'call-process cmd nil stderr-buf nil args))
               (tail (with-current-buffer stderr-buf (buffer-string))))
           (when on-done (funcall on-done rc tail))
+          (when buf-auto-created (kill-buffer stderr-buf))
           nil)
       ;; Async path.
       (make-process
@@ -62,14 +65,14 @@ The async path is implemented in Task 3."
        :stderr stderr-buf
        :sentinel
        (lambda (proc _event)
+         ;; Skip transient 'run'/'open' events; only exit/signal carry the rc.
          (when (memq (process-status proc) '(exit signal))
            (let* ((rc (process-exit-status proc))
                   (raw (with-current-buffer stderr-buf (buffer-string)))
                   (lines (split-string raw "\n" t))
-                  (tail (mapconcat #'identity
-                                   (last lines (min 10 (length lines)))
-                                   "\n")))
-             (when on-done (funcall on-done rc tail)))))))))
+                  (tail (mapconcat #'identity (last lines 10) "\n")))
+             (when on-done (funcall on-done rc tail))
+             (when buf-auto-created (kill-buffer stderr-buf)))))))))
 
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here
