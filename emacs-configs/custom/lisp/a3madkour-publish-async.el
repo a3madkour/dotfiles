@@ -106,5 +106,52 @@ Calls beyond N are silently ignored (defensive against double-fire)."
 (defvar a3-pub-async--in-flight-run nil
   "The active run handle, or nil when no publish is in flight.")
 
+(defconst a3-pub-async--buffer-name "*a3-publish*")
+
+(define-derived-mode a3-pub-mode special-mode "a3-pub"
+  "Major mode for the *a3-publish* status buffer."
+  (setq buffer-read-only t
+        truncate-lines t))
+
+(defun a3-pub-async/buffer ()
+  "Return (creating if needed) the *a3-publish* status buffer."
+  (let ((buf (get-buffer-create a3-pub-async--buffer-name)))
+    (with-current-buffer buf
+      (unless (eq major-mode 'a3-pub-mode) (a3-pub-mode)))
+    buf))
+
+(defun a3-pub-async--status-glyph (status)
+  (pcase status
+    (:running   "·")
+    (:ok        "✓")
+    (:err       "✗")
+    (:cancelled "⨯")
+    (:pending   " ")
+    (_           "?")))
+
+(cl-defun a3-pub-async/log-step (run label status &key detail elapsed err-snippet)
+  "Append a step line to RUN's buffer.
+LABEL is the step name (e.g. \"xelatex\"); DETAIL is the trailing
+column (e.g. \"pass 2/4\"); ELAPSED is seconds (float).
+ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
+  (let ((buf (a3-pub-async-run-buffer run)))
+    (when (and buf (buffer-live-p buf))
+      (with-current-buffer buf
+        (let ((inhibit-read-only t))
+          (goto-char (point-max))
+          (let ((rhs (cond
+                      ((eq status :running) "[running]")
+                      ((eq status :pending) "[pending]")
+                      (elapsed (format "(%4.1fs)" elapsed))
+                      (t ""))))
+            (insert (format "  [%s] %-18s %-32s %s\n"
+                            (a3-pub-async--status-glyph status)
+                            label
+                            (or detail "")
+                            rhs)))
+          (when err-snippet
+            (dolist (line (split-string err-snippet "\n" t))
+              (insert (format "              %s\n" line)))))))))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

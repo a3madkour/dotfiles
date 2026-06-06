@@ -132,5 +132,45 @@ with results in registration order."
 (ert-deftest a3-pub-async-test/lock-defaults-nil ()
   (should-not a3-pub-async--in-flight-run))
 
+(ert-deftest a3-pub-async-test/buffer-getter-creates-once ()
+  (let ((buf (a3-pub-async/buffer)))
+    (should (bufferp buf))
+    (should (eq buf (a3-pub-async/buffer)))
+    (with-current-buffer buf
+      (should (eq major-mode 'a3-pub-mode)))
+    (kill-buffer buf)))
+
+(ert-deftest a3-pub-async-test/log-step-running-formats-line ()
+  (let* ((buf (a3-pub-async/buffer))
+         (run (make-a3-pub-async-run :buffer buf
+                                     :section-start (point-min))))
+    (a3-pub-async/log-step run "xelatex" :running :detail "pass 2/4")
+    (with-current-buffer buf
+      (should (string-match-p "\\[·\\] xelatex" (buffer-string)))
+      (should (string-match-p "pass 2/4" (buffer-string)))
+      (should (string-match-p "running" (buffer-string))))
+    (kill-buffer buf)))
+
+(ert-deftest a3-pub-async-test/log-step-ok-shows-checkmark-and-elapsed ()
+  (let* ((buf (a3-pub-async/buffer))
+         (run (make-a3-pub-async-run :buffer buf
+                                     :section-start (point-min))))
+    (a3-pub-async/log-step run "pdf" :ok :detail "place" :elapsed 1.234)
+    (with-current-buffer buf
+      (should (string-match-p "\\[✓\\] pdf" (buffer-string)))
+      (should (string-match-p "1\\.2s" (buffer-string))))
+    (kill-buffer buf)))
+
+(ert-deftest a3-pub-async-test/log-step-err-includes-snippet ()
+  (let* ((buf (a3-pub-async/buffer))
+         (run (make-a3-pub-async-run :buffer buf
+                                     :section-start (point-min))))
+    (a3-pub-async/log-step run "xelatex" :err :elapsed 8.3
+                           :err-snippet "Missing font: foo")
+    (with-current-buffer buf
+      (should (string-match-p "\\[✗\\] xelatex" (buffer-string)))
+      (should (string-match-p "Missing font: foo" (buffer-string))))
+    (kill-buffer buf)))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
