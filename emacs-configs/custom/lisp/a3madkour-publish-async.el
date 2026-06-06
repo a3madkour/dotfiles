@@ -90,5 +90,21 @@ Calls beyond N are silently ignored (defensive against double-fire)."
             (when on-all-done
               (funcall on-all-done (nreverse results)))))))))
 
+(cl-defstruct a3-pub-async-run
+  id              ; symbol or string, unique per run
+  scope           ; 'deliberate or 'living
+  source-label    ; "essays/example-multi" — surfaced in buffer header
+  buffer          ; *a3-publish* buffer
+  section-start   ; point in buffer where this run's section begins
+  live-processes  ; list of live process objects, for cancel
+  tmp-dirs        ; list of dirs to delete on cancel
+  start-time      ; (current-time)
+  planned-steps   ; integer
+  completed-steps ; integer
+  status)         ; :running / :ok / :err / :cancelled
+
+(defvar a3-pub-async--in-flight-run nil
+  "The active run handle, or nil when no publish is in flight.")
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

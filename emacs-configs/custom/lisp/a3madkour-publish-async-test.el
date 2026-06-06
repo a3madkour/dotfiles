@@ -121,5 +121,16 @@ with results in registration order."
       (funcall report 'd))
     (should (= 1 fired))))
 
+(ert-deftest a3-pub-async-test/run-struct-fields ()
+  (let ((r (make-a3-pub-async-run
+            :id 'test :scope 'deliberate
+            :source-label "essays/x" :start-time '(0 0 0 0)
+            :planned-steps 5 :completed-steps 0 :status :running)))
+    (should (eq (a3-pub-async-run-scope r) 'deliberate))
+    (should (= 5 (a3-pub-async-run-planned-steps r)))))
+
+(ert-deftest a3-pub-async-test/lock-defaults-nil ()
+  (should-not a3-pub-async--in-flight-run))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
