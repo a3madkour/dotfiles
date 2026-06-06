@@ -86,6 +86,8 @@ Returns a plist:
 
 `:kind missing' takes priority over location-based classification — a
 non-existent file at a canonical-looking path still reports missing."
+  (when source-file
+    (setq source-file (expand-file-name source-file)))
   (let* ((source-dir (or (and source-file (file-name-directory source-file))
                          default-directory))
          (essays-dir (and (boundp 'a3madkour-pub/essays-dir)
@@ -94,7 +96,9 @@ non-existent file at a canonical-looking path still reports missing."
           (and source-file essays-dir
                (string-prefix-p (expand-file-name essays-dir) source-file)
                (let* ((id (a3madkour-pub--file-top-level-id source-file))
-                      (page-dir (and id
+                      (slug (and id
+                                 (a3madkour-pub--essay-slug-from-source-file source-file)))
+                      (page-dir (and slug
                                      (expand-file-name
                                       (format "assets/%s/" id) essays-dir)))
                       (candidate (and page-dir
@@ -111,11 +115,10 @@ non-existent file at a canonical-looking path still reports missing."
      ((not exists)
       (list :kind 'missing :abs-path abs :rel-path nil))
      (essays-page-path
-      (let ((essay-slug (a3madkour-pub--essay-slug-from-source-file source-file)))
-        (list :kind 'page :abs-path abs
-              :rel-path (format "page/%s/%s"
-                                (or essay-slug "")
-                                (file-name-nondirectory abs)))))
+      (list :kind 'page :abs-path abs
+            :rel-path (format "page/%s/%s"
+                              (a3madkour-pub--essay-slug-from-source-file source-file)
+                              (file-name-nondirectory abs))))
      ((string-prefix-p root-page abs)
       (list :kind 'page :abs-path abs
             :rel-path (substring abs (length root))))

@@ -839,7 +839,7 @@
 ;;; asset-resolve-path: essays-aware branch.
 
 (ert-deftest a3madkour-pub-assets-test/resolve-path-essays-source-uses-assets-id-dir ()
-  "Source under essays-dir with :ID: → resolves to essays-dir/assets/<id>/."
+  "Source under essays-dir with :ID: + published slug → resolves to essays-dir/assets/<id>/."
   (let ((tmp (file-name-as-directory (make-temp-file "a3-resolve-essays-" t))))
     (unwind-protect
         (let* ((essays-dir (file-name-as-directory
@@ -856,9 +856,13 @@
           (let ((a3madkour-pub/essays-dir essays-dir)
                 (a3madkour-pub-canonical-asset-root
                  (expand-file-name "notes/assets/" tmp)))
-            (let ((result (a3madkour-pub--asset-resolve-path "diagram.svg" org-file)))
-              (should (eq 'page (plist-get result :kind)))
-              (should (equal asset (plist-get result :abs-path))))))
+            ;; Stub slug lookup: the file has no #+HUGO_PUBLISH: t, so we simulate
+            ;; a published essay by returning a non-nil slug directly.
+            (cl-letf (((symbol-function 'a3madkour-pub--essay-slug-from-source-file)
+                       (lambda (_) "example-essay")))
+              (let ((result (a3madkour-pub--asset-resolve-path "diagram.svg" org-file)))
+                (should (eq 'page (plist-get result :kind)))
+                (should (equal asset (plist-get result :abs-path)))))))
       (delete-directory tmp t))))
 
 (ert-deftest a3madkour-pub-assets-test/resolve-path-essays-fallback-to-canonical-root ()
@@ -902,6 +906,36 @@
                            "./assets/page/foo/diagram.svg" org-file)))
               (should (eq 'page (plist-get result :kind)))
               (should (equal asset (plist-get result :abs-path))))))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-assets-test/resolve-path-essays-unpublished-draft-falls-through ()
+  "Essay source with :ID: drawer but unpublished (no slug) → falls through, no malformed rel-path."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-resolve-draft-" t))))
+    (unwind-protect
+        (let* ((essays-dir (file-name-as-directory
+                             (expand-file-name "essays/" tmp)))
+               (id "deadbeef-0000-0000-0000-000000000000")
+               (org-file (expand-file-name "draft.org" essays-dir))
+               (asset-dir (file-name-as-directory
+                            (expand-file-name (format "assets/%s/" id) essays-dir)))
+               (asset (expand-file-name "diagram.svg" asset-dir)))
+          (make-directory asset-dir t)
+          (with-temp-file org-file
+            ;; :ID: drawer present but NO #+HUGO_PUBLISH → note-metadata returns nil → slug nil.
+            (insert (format ":PROPERTIES:\n:ID: %s\n:END:\n#+title: draft\n" id)))
+          (with-temp-file asset (insert "<svg/>"))
+          (let ((a3madkour-pub/essays-dir essays-dir)
+                (a3madkour-pub-canonical-asset-root
+                 (expand-file-name "notes/assets/" tmp)))
+            (cl-letf (((symbol-function 'a3madkour-pub--essay-slug-from-source-file)
+                       (lambda (_) nil)))
+              (let ((result (a3madkour-pub--asset-resolve-path "diagram.svg" org-file)))
+                ;; With slug nil, essays-page-path is nil → falls through to canonical-root
+                ;; classification → file isn't under canonical root → :missing or :out-of-root.
+                ;; Either is acceptable; the assertion is that we did NOT emit a "page/" rel-path
+                ;; with an empty slug component.
+                (let ((rel (plist-get result :rel-path)))
+                  (should-not (and rel (string-match-p "page//" rel))))))))
       (delete-directory tmp t))))
 
 (provide 'a3madkour-publish-assets-test)
