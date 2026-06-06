@@ -120,7 +120,7 @@ Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths."
          (normalized (a3madkour-pub-frontmatter/normalize
                       'garden (plist-get exported :frontmatter) file))
          (body       (plist-get exported :body)))
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir)
+    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
     (a3madkour-pub-garden--write-if-different
      out-path
      (concat (a3madkour-pub-garden--render-frontmatter normalized) body))

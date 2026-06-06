@@ -194,6 +194,46 @@ hyphen-slug bundles."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+(ert-deftest a3madkour-pub-garden-test/publisher-threads-id-to-asset-validate ()
+  "publish-garden-file passes the note's :id as source-note-id to asset-validate-and-copy."
+  (let ((captured-id 'unset)
+        (tmp-src (make-temp-file "garden-threads-id-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp-src (insert "#+title: T\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_f)
+                       (list :id "garden-id-77" :slug "test-note" :section "garden"
+                             :state 'live :title "T")))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_f) "/garden/test-note/"))
+                    ((symbol-function 'a3madkour-pub-garden--site-root)
+                     (lambda () "/tmp/site-stub/"))
+                    ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+                     (lambda (file _id _tag)
+                       ;; Return a distinct temp copy so the unwind-protect
+                       ;; delete-file in the exporter doesn't remove file itself.
+                       (let ((copy (make-temp-file "garden-rewrite-stub-" nil ".org")))
+                         (copy-file file copy t)
+                         copy)))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_f) (list :body "stub-body" :frontmatter nil)))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (_section raw _f) raw))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                     (lambda (_org _bundle &optional source-note-id &rest _)
+                       (setq captured-id source-note-id)
+                       (list :copied nil :removed nil :warnings nil :errors nil)))
+                    ((symbol-function 'a3madkour-pub-garden--write-if-different)
+                     (lambda (_p _c) nil))
+                    ((symbol-function 'a3madkour-pub-garden--render-frontmatter)
+                     (lambda (_n) ""))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (_id _url _state) nil)))
+            (a3madkour-pub-garden/publish-garden-file tmp-src)
+            (should (equal captured-id "garden-id-77"))))
+      (when (file-exists-p tmp-src) (delete-file tmp-src)))))
+
 (provide 'a3madkour-publish-garden-test)
 
 ;;; a3madkour-publish-garden-test.el ends here
