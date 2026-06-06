@@ -123,6 +123,22 @@ text if present, else PATH (org's default rendering)."
        (not (equal scheme "file"))
        (not (member scheme a3madkour-pub-typed-link-types))))
 
+(defun a3madkour-pub--strip-file-prefix-if-asset (path)
+  "Return PATH with a `file:' prefix stripped if the remainder is asset-shaped.
+
+Mirrors the normalization in `a3madkour-pub--extract-asset-refs' so both
+walkers classify `[[file:asset.ext]]' and `[[asset.ext]]' identically.
+
+Paths without `file:' prefix are returned unchanged.  `file:' paths whose
+target has a `.org' extension are returned unchanged (kept as note links)."
+  (cond
+   ((not (string-prefix-p "file:" path)) path)
+   ((let ((bare (substring path 5)))
+      (and (file-name-extension bare)
+           (not (member (file-name-extension bare) '("org")))))
+    (substring path 5))
+   (t path)))
+
 (defun a3madkour-pub--asset-shaped-link-p (path)
   "Return non-nil if PATH looks like an asset link (image / pdf / audio / etc.).
 

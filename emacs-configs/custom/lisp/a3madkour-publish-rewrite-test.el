@@ -809,6 +809,33 @@ written tmp file contains the @@hugo: shortcode in place of [cite:@k]."
       (when tmp (delete-file tmp))
       (delete-file src))))
 
+;;; --strip-file-prefix-if-asset --- normalize `file:' prefix on asset links.
+
+(ert-deftest a3madkour-pub-rewrite-test/strip-file-prefix-on-asset-svg ()
+  "`file:diagram.svg' strips the `file:' prefix (asset extension)."
+  (should (equal (a3madkour-pub--strip-file-prefix-if-asset "file:diagram.svg")
+                 "diagram.svg")))
+
+(ert-deftest a3madkour-pub-rewrite-test/strip-file-prefix-on-asset-png ()
+  "`file:hero.png' strips the `file:' prefix (asset extension)."
+  (should (equal (a3madkour-pub--strip-file-prefix-if-asset "file:hero.png")
+                 "hero.png")))
+
+(ert-deftest a3madkour-pub-rewrite-test/preserve-file-prefix-on-org-target ()
+  "`file:other-note.org' preserves prefix — org targets stay note-link dispatch."
+  (should (equal (a3madkour-pub--strip-file-prefix-if-asset "file:other-note.org")
+                 "file:other-note.org")))
+
+(ert-deftest a3madkour-pub-rewrite-test/strip-preserves-bare-asset-path ()
+  "Bare asset path (no `file:' prefix) returned unchanged."
+  (should (equal (a3madkour-pub--strip-file-prefix-if-asset "diagram.svg")
+                 "diagram.svg")))
+
+(ert-deftest a3madkour-pub-rewrite-test/strip-preserves-id-link ()
+  "`id:' prefix returned unchanged."
+  (should (equal (a3madkour-pub--strip-file-prefix-if-asset "id:abc-def")
+                 "id:abc-def")))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here
