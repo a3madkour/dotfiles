@@ -252,7 +252,7 @@ Pipeline:
          (raw-fm     (cons (cons :scan-plist scan-pl)
                            (or (plist-get exported :frontmatter) '())))
          (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir)
+    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
     (a3madkour-pub-essays--copy-asset-dir id bundle-dir)
     (a3madkour-pub-essays--write-if-different
      out-path

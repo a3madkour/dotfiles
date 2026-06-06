@@ -365,6 +365,52 @@ must emit as a paired Hugo shortcode `{{< theorem title=\"Foo\" id=\"thm-foo\" >
             (should (string-match-p "{{< /theorem >}}" md))))
       (delete-file tmp))))
 
+;;; B publisher threads id into asset-validate-and-copy.
+
+(ert-deftest a3madkour-pub-essays-test/publisher-threads-id-to-asset-validate ()
+  "publish-essay-file passes the note's :id as source-note-id to asset-validate-and-copy."
+  (let ((captured-id 'unset)
+        (tmp-src (make-temp-file "essays-threads-id-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp-src (insert "#+title: T\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_f)
+                       (list :id "essay-id-99" :slug "test-essay" :section "essays"
+                             :state 'live :title "T")))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_f) "/essays/test-essay/"))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () "/tmp/site-stub/"))
+                    ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+                     (lambda (file _id _tag)
+                       ;; Return a distinct temp copy so the unwind-protect
+                       ;; delete-file in the exporter doesn't remove file itself.
+                       (let ((copy (make-temp-file "essays-rewrite-stub-" nil ".org")))
+                         (copy-file file copy t)
+                         copy)))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_f) (list :body "stub-body" :frontmatter nil)))
+                    ((symbol-function 'a3madkour-pub-essays--scan-has-flags)
+                     (lambda (_b) nil))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (_section raw _f) raw))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                     (lambda (_org _bundle &optional source-note-id &rest _)
+                       (setq captured-id source-note-id)
+                       (list :copied nil :removed nil :warnings nil :errors nil)))
+                    ((symbol-function 'a3madkour-pub-essays--copy-asset-dir)
+                     (lambda (_id _b) nil))
+                    ((symbol-function 'a3madkour-pub-essays--write-if-different)
+                     (lambda (_p _c) nil))
+                    ((symbol-function 'a3madkour-pub-essays--render-frontmatter)
+                     (lambda (_n) ""))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (_id _url _state) nil)))
+            (a3madkour-pub-essays/publish-essay-file tmp-src)
+            (should (equal captured-id "essay-id-99"))))
+      (when (file-exists-p tmp-src) (delete-file tmp-src)))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here
