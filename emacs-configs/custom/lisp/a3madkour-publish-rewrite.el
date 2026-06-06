@@ -299,7 +299,8 @@ Returns one of:
 
 See parent spec §6 for the per-link-type rules."
   (let* ((parsed (a3madkour-pub--parse-org-link org-link))
-         (path (plist-get parsed :path))
+         (raw-path (plist-get parsed :path))
+         (path (a3madkour-pub--strip-file-prefix-if-asset raw-path))
          (text (plist-get parsed :text))
          (scheme (a3madkour-pub--link-scheme path)))
     (cond

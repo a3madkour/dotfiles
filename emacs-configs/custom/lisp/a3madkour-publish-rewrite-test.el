@@ -836,6 +836,42 @@ written tmp file contains the @@hugo: shortcode in place of [cite:@k]."
   (should (equal (a3madkour-pub--strip-file-prefix-if-asset "id:abc-def")
                  "id:abc-def")))
 
+;;; rewrite-link: file: prefix on asset dispatches to asset-link path.
+
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-link-asset-via-file-prefix ()
+  "[[file:diagram.svg]] dispatches to rewrite-asset-link, emits <img>."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-fileprefix-" t))))
+    (unwind-protect
+        (let ((svg (expand-file-name "diagram.svg" tmp)))
+          (with-temp-file svg (insert "<svg/>"))
+          (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                     (lambda (_id) nil))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_id) "x"))
+                    ((symbol-function 'a3madkour-pub--asset-resolve-path)
+                     (lambda (path _src)
+                       (list :kind 'page
+                             :abs-path (expand-file-name path tmp)
+                             :rel-path (concat "page/x/" path)))))
+            (let ((result (a3madkour-pub/rewrite-link
+                           "[[file:diagram.svg]]" nil)))
+              (should (plist-get result :html))
+              (should (string-match-p "<img " (plist-get result :html)))
+              (should (string-match-p "diagram.svg" (plist-get result :html))))))
+      (delete-directory tmp t))))
+
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-link-file-prefix-org-target-unchanged ()
+  "[[file:other.org]] still dispatches to --rewrite-file-link (note-link path)."
+  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+             (lambda (_id) nil))
+            ((symbol-function 'a3madkour-pub--file-top-level-id)
+             (lambda (_f) nil)))
+    (let ((result (a3madkour-pub/rewrite-link
+                   "[[file:other.org][Other]]" nil)))
+      (should (plist-get result :inert))
+      (should (cl-some (lambda (w) (string-match-p "lacks :ID:" w))
+                       (plist-get result :warnings))))))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here
