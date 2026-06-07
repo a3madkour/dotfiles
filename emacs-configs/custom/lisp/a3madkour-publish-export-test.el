@@ -99,5 +99,40 @@ that a SECOND call on a NEW source file does not add any buffers."
               (should (= before after)))))
       (delete-directory tmpdir t))))
 
+(ert-deftest a3madkour-pub-export--strip-stray-attr-quotes-basic ()
+  "Bug 1.7: `key=\"&quot;V&quot;\"' anywhere in body collapses to `key=\"V\"'.
+
+ox-hugo's special-block emit propagates surrounding quote chars from
+`#+attr_shortcode: :title \"Multi word\"' into the shortcode call as
+literal `&quot;', which Hugo HTML-escapes again at render time → the
+final page shows `&amp;quot;...&amp;quot;' inside `<span class=
+\"block-title\">'.  Authors worked around it by keeping titles to
+single unquoted words (see [[feedback-d1-attr-shortcode-unquoted-titles]])."
+  (let ((sanitized (a3madkour-pub-export--strip-stray-attr-quotes
+                    "{{< theorem title=\"&quot;Pythagorean theorem&quot;\" id=\"thm-pyth\" >}}\nbody")))
+    (should (equal sanitized
+                   "{{< theorem title=\"Pythagorean theorem\" id=\"thm-pyth\" >}}\nbody"))))
+
+(ert-deftest a3madkour-pub-export--strip-stray-attr-quotes-noop-on-clean ()
+  "Already-clean shortcodes pass through unchanged."
+  (let ((clean "{{< theorem title=\"Single\" id=\"thm-x\" >}}\nbody"))
+    (should (equal (a3madkour-pub-export--strip-stray-attr-quotes clean) clean))))
+
+(ert-deftest a3madkour-pub-export--strip-stray-attr-quotes-multiple ()
+  "Multiple shortcodes in one body all get sanitized."
+  (let ((sanitized (a3madkour-pub-export--strip-stray-attr-quotes
+                    (concat "{{< theorem title=\"&quot;Two words&quot;\" >}}A{{< /theorem >}}\n"
+                            "{{< lemma title=\"&quot;Three small words&quot;\" id=\"lem\" >}}B"))))
+    (should (string-match-p "title=\"Two words\"" sanitized))
+    (should (string-match-p "title=\"Three small words\"" sanitized))
+    (should-not (string-match-p "&quot;" sanitized))))
+
+(ert-deftest a3madkour-pub-export--strip-stray-attr-quotes-leaves-prose-quot ()
+  "Body prose containing the literal entity `&quot;' (outside a shortcode attr)
+must NOT be touched — only the `key=\"&quot;V&quot;\"' pattern is sanitized."
+  (let* ((input "Prose `&quot;` mentioned here {{< note >}}A{{< /note >}}.\n")
+         (sanitized (a3madkour-pub-export--strip-stray-attr-quotes input)))
+    (should (equal sanitized input))))
+
 (provide 'a3madkour-publish-export-test)
 ;;; a3madkour-publish-export-test.el ends here

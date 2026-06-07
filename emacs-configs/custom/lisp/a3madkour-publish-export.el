@@ -66,6 +66,32 @@ FILE is the source org path, used only to provide context in parse-error message
              (list (format "a3madkour-pub-export: parsing frontmatter for %s: %s"
                            file (cadr err)))))))
 
+(defun a3madkour-pub-export--strip-stray-attr-quotes (body)
+  "Return BODY with `key=\"&quot;V&quot;\"' patterns collapsed to `key=\"V\"'.
+
+Bug 1.7 (polish-and-bugfix-roadmap.md).  ox-hugo's special-block emit
+path reads `#+attr_shortcode: :title \"Multi word\"' via the org attr
+parser and preserves the surrounding quote characters verbatim in the
+value string.  ox-hugo then emits the shortcode call as
+`{{< theorem title=\"&quot;Multi word&quot;\" >}}' — the
+`&quot;' entities survive into Hugo's render pass, which HTML-escapes
+them AGAIN, so the page lands with `&amp;quot;Multi word&amp;quot;'
+inside the rendered block title.
+
+This sanitizer fixes the emit at the markdown layer: any attribute
+value that is itself wrapped in `&quot;...&quot;' has those wrappers
+stripped.  Scope is narrow on purpose — the bug pattern only appears
+inside shortcode calls (`&quot;' is not a legal escape in YAML
+frontmatter and prose-level mentions don't sit inside `key=\"...\"'
+attribute syntax), so the regex won't touch unrelated content.
+
+Prior workaround was author-side discipline (unquoted single-word
+titles only); see [[feedback-d1-attr-shortcode-unquoted-titles]]."
+  (replace-regexp-in-string
+   "\\([a-zA-Z_-]+\\)=\"&quot;\\(.*?\\)&quot;\""
+   "\\1=\"\\2\""
+   body t))
+
 (defun a3madkour-pub-export--split-frontmatter (text)
   "Split TEXT (raw ox-hugo output) into (FM-STRING . BODY-STRING).
 FM-STRING is the YAML between the two `---' delimiters (without the delimiter
@@ -132,7 +158,12 @@ window-flash during publish."
           (kill-buffer src-buf))))
     (let* ((parts (a3madkour-pub-export--split-frontmatter raw-output))
            (fm-string (car parts))
-           (body (cdr parts))
+           ;; Bug 1.7: sanitize stray `&quot;'-wrapped shortcode attr
+           ;; values that leak from ox-hugo's special-block emit when
+           ;; an author uses `#+attr_shortcode: :title "Multi word"'.
+           ;; Scoped to the body — frontmatter is YAML and doesn't
+           ;; exhibit the pattern.
+           (body (a3madkour-pub-export--strip-stray-attr-quotes (cdr parts)))
            (frontmatter (if (string-empty-p fm-string)
                             nil
                           (a3madkour-pub-export--frontmatter-string-to-alist fm-string file))))
