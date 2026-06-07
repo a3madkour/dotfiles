@@ -190,5 +190,84 @@ ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
     (setq a3-pub-async--spinner-timer nil))
   (force-mode-line-update t))
 
+(cl-defun a3-pub-async/begin-publish (&key scope source-label planned-steps)
+  "Acquire the single-in-flight lock and start a run.
+
+Signals user-error if a run is already in flight.  Delegates to the
+existing `a3madkour-pub/begin-publish' for accumulator setup.  Returns
+the new run handle."
+  (when a3-pub-async--in-flight-run
+    (when (fboundp 'pop-to-buffer)
+      (pop-to-buffer (a3-pub-async/buffer)))
+    (user-error "a3-pub: a publish is already running (see *a3-publish*)"))
+  (a3madkour-pub/begin-publish)
+  (let* ((buf (a3-pub-async/buffer))
+         (run (make-a3-pub-async-run
+               :id (gensym "a3-pub-run-")
+               :scope scope
+               :source-label (or source-label "")
+               :buffer buf
+               :section-start nil
+               :live-processes nil
+               :tmp-dirs nil
+               :start-time (current-time)
+               :planned-steps (or planned-steps 0)
+               :completed-steps 0
+               :status :running)))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (goto-char (point-max))
+        (insert "\n───────────────────────────────────────────────\n")
+        (insert (format-time-string "%Y-%m-%d %H:%M:%S  ")
+                (format "publish-%s  %s\n" scope (or source-label "")))
+        (insert "───────────────────────────────────────────────\n")
+        (setf (a3-pub-async-run-section-start run) (point))))
+    (setq a3-pub-async--in-flight-run run)
+    (a3-pub-async--modeline-start)
+    (display-buffer buf '((display-buffer-in-side-window)
+                          (side . bottom) (window-height . 0.25)))
+    run))
+
+(cl-defun a3-pub-async/finish-publish (run &key scope status)
+  "End the publish run.
+
+Calls the existing `a3madkour-pub/finish-publish'.  When STATUS=ok and
+SCOPE=deliberate, flushes citations YAML.  Always releases the lock and
+clears the mode-line indicator."
+  (let* ((elapsed (float-time
+                   (time-subtract (current-time)
+                                  (a3-pub-async-run-start-time run))))
+         ;; Normalize STATUS arg ('ok, 'err, 'cancelled) into the run
+         ;; struct's keyword form (:ok, :err, :cancelled), matching the
+         ;; struct's :running / :pending vocabulary.
+         (status-kw (pcase status
+                      ('ok :ok)
+                      ('err :err)
+                      ('cancelled :cancelled)
+                      (_ status))))
+    (setf (a3-pub-async-run-status run) status-kw)
+    (unwind-protect
+        (progn
+          (a3madkour-pub/finish-publish :scope scope)
+          (when (and (eq status 'ok) (eq scope 'deliberate))
+            (when (require 'a3madkour-publish-citations nil 'noerror)
+              (a3madkour-pub-citations/emit-yaml :mode 'merge))))
+      (setq a3-pub-async--in-flight-run nil)
+      (a3-pub-async--modeline-stop))
+    ;; Append summary.
+    (let ((buf (a3-pub-async-run-buffer run)))
+      (when (and buf (buffer-live-p buf))
+        (with-current-buffer buf
+          (let ((inhibit-read-only t))
+            (goto-char (point-max))
+            (insert (format "  ── publish %s  (%.1fs)\n"
+                            (pcase status
+                              ('ok "✓ ok")
+                              ('err "✗ err")
+                              ('cancelled "⨯ cancelled")
+                              (_ "?"))
+                            elapsed))))))
+    (message "a3-pub: %s (%.1fs)" status elapsed)))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

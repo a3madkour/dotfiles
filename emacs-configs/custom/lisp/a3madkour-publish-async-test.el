@@ -188,5 +188,57 @@ with results in registration order."
     (should (string-match-p "cancelled"
                             (a3-pub-async--modeline-string run)))))
 
+(ert-deftest a3-pub-async-test/begin-acquires-lock ()
+  (let ((a3-pub-async--in-flight-run nil))
+    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil)))
+      (let ((run (a3-pub-async/begin-publish :scope 'deliberate
+                                             :source-label "essays/x"
+                                             :planned-steps 5)))
+        (should (eq a3-pub-async--in-flight-run run))
+        (should (eq (a3-pub-async-run-status run) :running))
+        (should (= 5 (a3-pub-async-run-planned-steps run)))))))
+
+(ert-deftest a3-pub-async-test/begin-second-call-errors ()
+  (let ((a3-pub-async--in-flight-run
+         (make-a3-pub-async-run :id 'existing :status :running)))
+    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+              ((symbol-function 'pop-to-buffer) (lambda (_) nil)))
+      (should-error (a3-pub-async/begin-publish :scope 'deliberate
+                                                :source-label "essays/y"
+                                                :planned-steps 5)
+                    :type 'user-error))))
+
+(ert-deftest a3-pub-async-test/finish-releases-lock-on-ok ()
+  (let* ((run (make-a3-pub-async-run :id 'r :status :running
+                                     :buffer (a3-pub-async/buffer)
+                                     :start-time (current-time))))
+    (let ((a3-pub-async--in-flight-run run))
+      (cl-letf (((symbol-function 'a3madkour-pub/finish-publish) (lambda (&rest _) nil)))
+        (a3-pub-async/finish-publish run :scope 'deliberate :status 'ok)
+        (should-not a3-pub-async--in-flight-run)
+        (should (eq (a3-pub-async-run-status run) :ok))))))
+
+(ert-deftest a3-pub-async-test/finish-releases-lock-on-err ()
+  (let* ((run (make-a3-pub-async-run :id 'r :status :running
+                                     :buffer (a3-pub-async/buffer)
+                                     :start-time (current-time))))
+    (let ((a3-pub-async--in-flight-run run))
+      (cl-letf (((symbol-function 'a3madkour-pub/finish-publish) (lambda (&rest _) nil)))
+        (a3-pub-async/finish-publish run :scope 'deliberate :status 'err)
+        (should-not a3-pub-async--in-flight-run)))))
+
+(ert-deftest a3-pub-async-test/finish-cancelled-skips-citation-emit ()
+  "On cancelled, the citations emit-yaml tail does NOT fire."
+  (let* ((run (make-a3-pub-async-run :id 'r :status :running
+                                     :buffer (a3-pub-async/buffer)
+                                     :start-time (current-time)))
+         (emit-fired nil))
+    (let ((a3-pub-async--in-flight-run run))
+      (cl-letf (((symbol-function 'a3madkour-pub/finish-publish) (lambda (&rest _) nil))
+                ((symbol-function 'a3madkour-pub-citations/emit-yaml)
+                 (lambda (&rest _) (setq emit-fired t))))
+        (a3-pub-async/finish-publish run :scope 'deliberate :status 'cancelled)
+        (should-not emit-fired)))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
