@@ -1,6 +1,7 @@
 ;;; a3madkour-publish-multi-word-test.el --- Tests for Word backend -*- lexical-binding: t; -*-
 (require 'ert)
 (require 'a3madkour-publish-multi-word)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-multi-word/defcustoms-defined ()
   (should (boundp 'a3madkour-pub-multi-pandoc-command)))
@@ -37,6 +38,24 @@
         (should (member "--lua-filter=/site/tools/templates/d2-blocks.lua" args))
         (should (member "--citeproc" args))
         (should (member "--bibliography=/bib/library.bib" args))))))
+
+(ert-deftest a3madkour-pub-multi-word/run-async-fires-on-done ()
+  (let (status)
+    (cl-letf (((symbol-function 'call-process) (lambda (&rest _) 0))
+              ((symbol-function 'file-exists-p) (lambda (_) t))
+              ((symbol-function 'rename-file) (lambda (&rest _) nil))
+              ((symbol-function 'make-directory) (lambda (&rest _) nil))
+              ((symbol-function 'a3madkour-pub-multi-word--serialize-filtered)
+               (lambda (&rest _) nil))
+              ((symbol-function 'a3madkour-pub-assets/list-referenced-files)
+               (lambda (_) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-multi-word/run
+        "/tmp/x.org" "x" "/tmp/bundle/" "/tmp/templates/" "/tmp/lib.bib"
+        :run (make-a3-pub-async-run :buffer (a3-pub-async/buffer))
+        :on-done (lambda (s) (setq status s)))))
+    (should (or (eq (plist-get status :status) 'ok)
+                (eq status 'ok)))))
 
 (provide 'a3madkour-publish-multi-word-test)
 ;;; a3madkour-publish-multi-word-test.el ends here
