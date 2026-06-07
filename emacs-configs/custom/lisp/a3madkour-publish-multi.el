@@ -140,25 +140,6 @@ log-step instrumentation."
                                     (lambda (r)
                                       (funcall report (append (list :backend 'word) r)))))))
 
-(defun a3madkour-pub-multi/orchestrate (source-file slug bundle-dir)
-  "Sync wrapper around `a3madkour-pub-multi/export-bundle'.
-Kept for callers that need the old return shape (e.g. B.4's
-after-essay-publish hook, which is fire-and-forget with no continuation
-slot).  Returns:
-  (:pdf <abs-path-or-nil> :word <abs-path-or-nil>)
-
-Wraps the call in `with-a3-pub-async-sync' so backend `make-process'
-calls degrade to synchronous `call-process' and the on-done callback
-fires before this function returns."
-  (let (result)
-    (with-a3-pub-async-sync
-     (a3madkour-pub-multi/export-bundle
-      source-file slug bundle-dir
-      :run nil
-      :on-done (lambda (r) (setq result r))))
-    (list :pdf (plist-get result :pdf)
-          :word (plist-get result :word))))
-
 (defun a3madkour-pub-multi--render-downloads-line (pdf word)
   "Return a YAML inline-flow `downloads: {…}' line, or nil if both missing."
   (let ((parts nil))
@@ -199,26 +180,6 @@ Idempotent — writes only when content differs."
       (setq updated (buffer-string)))
     (unless (string= original updated)
       (with-temp-file index-path (insert updated)))))
-
-(defun a3madkour-pub-multi--after-essay-publish-handler (source-file slug bundle-dir)
-  "Hook target for B.4's after-essay-publish hook.
-Checks SOURCE-FILE for `#+multi_export: t' and runs `orchestrate' if opted-in."
-  (when (with-temp-buffer
-          (insert-file-contents source-file)
-          (org-mode)
-          (a3madkour-pub-multi-filter--doc-p))
-    (a3madkour-pub-multi/orchestrate source-file slug bundle-dir)))
-
-(defun a3madkour-pub-multi-install ()
-  "DEPRECATED.  The essays handler now dispatches `export-bundle' directly,
-so the after-essay-publish hook auto-trigger is no longer needed.  Kept as
-a no-op for backward compatibility with any external code that calls it."
-  nil)
-
-;; Disabled: hook-based auto-trigger is replaced by the direct async dispatch
-;; in `a3madkour-pub-essays/publish-essay-file' (see commit history for the
-;; async-pub slice).
-;; (a3madkour-pub-multi-install)
 
 (provide 'a3madkour-publish-multi)
 ;;; a3madkour-publish-multi.el ends here

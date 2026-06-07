@@ -202,13 +202,6 @@ Key-aware special cases applied before the generic --render-yaml-value dispatch:
              sorted "\n")
             "\n---\n")))
 
-;; Task 14: after-publish hook surface (consumed by D.2's auto-trigger).
-
-(defvar a3madkour-pub-essays-after-publish-hook nil
-  "Hook run after a successful essay publish.
-Args: SOURCE-FILE (org), SLUG (string), BUNDLE-DIR (path).
-D.2's multi-target export orchestrator installs here.")
-
 ;; Task 8: pipeline entry.
 
 (defun a3madkour-pub-essays--multi-export-marker-p (file)
@@ -279,11 +272,9 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
            (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
           (a3madkour-pub-history/record-publish id new-url 'live))
         ;; --- multi-export dispatch (async when marker present) ---
-        ;; Calls `export-bundle' DIRECTLY (not via after-publish hook +
-        ;; sync `orchestrate' wrapper).  The hook-based path froze Emacs
-        ;; for the duration of the xelatex + pandoc work; routing the run
-        ;; handle through to backends + threading on-done restores the
-        ;; spinner + step-line wiring.
+        ;; Calls `export-bundle' DIRECTLY (async with run handle + on-done
+        ;; threaded through to backends so the spinner + step-line wiring
+        ;; reflect the full xelatex + pandoc wall time).
         (if (and (fboundp 'a3madkour-pub-multi/export-bundle)
                  (a3madkour-pub-essays--multi-export-marker-p file))
             (a3madkour-pub-multi/export-bundle

@@ -194,6 +194,84 @@ with results in registration order."
     (should (string-match-p "cancelled"
                             (a3-pub-async--modeline-string run)))))
 
+(ert-deftest a3-pub-async-test/modeline-stop-ok-clears-entry-immediately ()
+  "After a successful publish, the mode-line `:eval' entry is removed
+and `terminal-run' is nil — no flash."
+  (let ((mode-line-misc-info nil)
+        (a3-pub-async--terminal-run nil)
+        (a3-pub-async--flash-timer nil)
+        (a3-pub-async--in-flight-run nil)
+        (a3-pub-async--spinner-timer nil)
+        (run (make-a3-pub-async-run :status :ok)))
+    (add-to-list 'mode-line-misc-info a3-pub-async--modeline-misc-entry t)
+    (a3-pub-async--modeline-stop run)
+    (should-not a3-pub-async--terminal-run)
+    (should-not a3-pub-async--flash-timer)
+    (should-not (member a3-pub-async--modeline-misc-entry mode-line-misc-info))))
+
+(ert-deftest a3-pub-async-test/modeline-stop-cancelled-stashes-and-keeps-entry ()
+  "After a cancelled publish, the entry remains, terminal-run holds the
+run, the mode-line shows the cancelled indicator, and a flash timer is
+scheduled to clear after 3s."
+  (let ((mode-line-misc-info nil)
+        (a3-pub-async--terminal-run nil)
+        (a3-pub-async--flash-timer nil)
+        (a3-pub-async--in-flight-run nil)
+        (a3-pub-async--spinner-timer nil)
+        (run (make-a3-pub-async-run :status :cancelled)))
+    (add-to-list 'mode-line-misc-info a3-pub-async--modeline-misc-entry t)
+    (a3-pub-async--modeline-stop run)
+    (unwind-protect
+        (progn
+          (should (eq a3-pub-async--terminal-run run))
+          (should (timerp a3-pub-async--flash-timer))
+          (should (member a3-pub-async--modeline-misc-entry mode-line-misc-info))
+          (should (string-match-p "cancelled"
+                                  (a3-pub-async--modeline-string-current))))
+      (when a3-pub-async--flash-timer
+        (cancel-timer a3-pub-async--flash-timer)
+        (setq a3-pub-async--flash-timer nil)))))
+
+(ert-deftest a3-pub-async-test/modeline-stop-err-flashes-then-clears ()
+  "Same as cancelled but for :err — verifies invoking the flash timer's
+function actually drops the entry + terminal-run (simulates 3s elapse
+without waiting)."
+  (let ((mode-line-misc-info nil)
+        (a3-pub-async--terminal-run nil)
+        (a3-pub-async--flash-timer nil)
+        (a3-pub-async--in-flight-run nil)
+        (a3-pub-async--spinner-timer nil)
+        (run (make-a3-pub-async-run :status :err)))
+    (add-to-list 'mode-line-misc-info a3-pub-async--modeline-misc-entry t)
+    (a3-pub-async--modeline-stop run)
+    (should (eq a3-pub-async--terminal-run run))
+    (should (member a3-pub-async--modeline-misc-entry mode-line-misc-info))
+    ;; Simulate the timer firing — call clear directly.
+    (a3-pub-async--modeline-clear)
+    (should-not a3-pub-async--terminal-run)
+    (should-not a3-pub-async--flash-timer)
+    (should-not (member a3-pub-async--modeline-misc-entry mode-line-misc-info))))
+
+(ert-deftest a3-pub-async-test/modeline-start-cancels-stale-flash-timer ()
+  "A fresh publish kicked off mid-flash cancels the prior flash timer
+and resets terminal-run so the new run's spinner displays cleanly."
+  (let ((mode-line-misc-info nil)
+        (a3-pub-async--terminal-run
+         (make-a3-pub-async-run :status :cancelled))
+        (a3-pub-async--flash-timer (run-with-timer 100 nil #'ignore))
+        (a3-pub-async--in-flight-run nil)
+        (a3-pub-async--spinner-timer nil))
+    (unwind-protect
+        (progn
+          (a3-pub-async--modeline-start)
+          (should-not a3-pub-async--terminal-run)
+          (should-not a3-pub-async--flash-timer)
+          (should (member a3-pub-async--modeline-misc-entry mode-line-misc-info))
+          (should (timerp a3-pub-async--spinner-timer)))
+      (when a3-pub-async--spinner-timer
+        (cancel-timer a3-pub-async--spinner-timer)
+        (setq a3-pub-async--spinner-timer nil)))))
+
 (ert-deftest a3-pub-async-test/begin-acquires-lock ()
   (let ((a3-pub-async--in-flight-run nil))
     (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil)))

@@ -30,59 +30,6 @@
         (setq tail (cdr tail))))
     on-done))
 
-(defun a3madkour-pub-multi--test--pdf-ok-stub (&rest args)
-  (let ((on-done (a3madkour-pub-multi--test--find-on-done args)))
-    (when on-done (funcall on-done '(:status ok :path "/bundle/x.pdf")))))
-
-(defun a3madkour-pub-multi--test--pdf-err-stub (&rest args)
-  (let ((on-done (a3madkour-pub-multi--test--find-on-done args)))
-    (when on-done (funcall on-done '(:status err :err-snippet "boom-pdf")))))
-
-(defun a3madkour-pub-multi--test--word-err-stub (&rest args)
-  (let ((on-done (a3madkour-pub-multi--test--find-on-done args)))
-    (when on-done (funcall on-done '(:status err :err-snippet "boom-word")))))
-
-(ert-deftest a3madkour-pub-multi/orchestrate-partial-success-pdf-only ()
-  "When PDF succeeds and Word fails, returns plist with :pdf set, :word nil.
-Sync wrapper around `export-bundle' must preserve old (:pdf … :word …) shape."
-  (cl-letf (((symbol-function 'a3madkour-pub-multi--templates-dir)
-             (lambda () "/tpl/"))
-            ((symbol-function 'a3madkour-pub-multi--bib-path)
-             (lambda () nil))
-            ((symbol-function 'a3madkour-pub-multi--has-citations-p)
-             (lambda (&rest _) nil))
-            ((symbol-function 'a3madkour-pub-multi--prepare-source-for-pdf)
-             (lambda (&rest _) "/tmp/x.org"))
-            ((symbol-function 'a3madkour-pub-multi-pdf/run)
-             #'a3madkour-pub-multi--test--pdf-ok-stub)
-            ((symbol-function 'a3madkour-pub-multi-word/run)
-             #'a3madkour-pub-multi--test--word-err-stub)
-            ((symbol-function 'a3madkour-pub-multi--patch-downloads-frontmatter)
-             (lambda (&rest _) t)))
-    (let ((result (a3madkour-pub-multi/orchestrate "/src.org" "x" "/bundle/")))
-      (should (string= "/bundle/x.pdf" (plist-get result :pdf)))
-      (should-not (plist-get result :word)))))
-
-(ert-deftest a3madkour-pub-multi/orchestrate-both-fail ()
-  "When both backends fail, plist :pdf and :word are nil."
-  (cl-letf (((symbol-function 'a3madkour-pub-multi--templates-dir)
-             (lambda () "/tpl/"))
-            ((symbol-function 'a3madkour-pub-multi--bib-path)
-             (lambda () nil))
-            ((symbol-function 'a3madkour-pub-multi--has-citations-p)
-             (lambda (&rest _) nil))
-            ((symbol-function 'a3madkour-pub-multi--prepare-source-for-pdf)
-             (lambda (&rest _) "/tmp/x.org"))
-            ((symbol-function 'a3madkour-pub-multi-pdf/run)
-             #'a3madkour-pub-multi--test--pdf-err-stub)
-            ((symbol-function 'a3madkour-pub-multi-word/run)
-             #'a3madkour-pub-multi--test--word-err-stub)
-            ((symbol-function 'a3madkour-pub-multi--patch-downloads-frontmatter)
-             (lambda (&rest _) t)))
-    (let ((result (a3madkour-pub-multi/orchestrate "/src.org" "x" "/bundle/")))
-      (should-not (plist-get result :pdf))
-      (should-not (plist-get result :word)))))
-
 (ert-deftest a3madkour-pub-multi/export-bundle-runs-pdf-and-word-in-parallel ()
   "export-bundle dispatches both backends; barrier rolls up to single :status."
   (let (pdf-ran word-ran done-status)
@@ -175,36 +122,6 @@ Sync wrapper around `export-bundle' must preserve old (:pdf … :word …) shape
        (let* ((after-second (file-attributes idx))
               (mtime-2 (file-attribute-modification-time after-second)))
          (should (equal mtime-1 mtime-2)))))))
-
-(ert-deftest a3madkour-pub-multi/auto-trigger-fires-on-opt-in ()
-  "When source has #+multi_export: t, the after-publish hook dispatches orchestrate."
-  (let* ((called nil)
-         (tmp (make-temp-file "multi-trigger-" nil ".org")))
-    (unwind-protect
-        (progn
-          (with-temp-file tmp
-            (insert "#+title: T\n#+multi_export: t\n"))
-          (cl-letf (((symbol-function 'a3madkour-pub-multi/orchestrate)
-                     (lambda (&rest args) (setq called args))))
-            (a3madkour-pub-multi--after-essay-publish-handler
-             tmp "demo-slug" "/bundle/demo-slug/")
-            (should called)))
-      (delete-file tmp))))
-
-(ert-deftest a3madkour-pub-multi/auto-trigger-skips-without-opt-in ()
-  "When source lacks the opt-in keyword, orchestrate is not called."
-  (let* ((called nil)
-         (tmp (make-temp-file "multi-trigger-" nil ".org")))
-    (unwind-protect
-        (progn
-          (with-temp-file tmp
-            (insert "#+title: T\n"))
-          (cl-letf (((symbol-function 'a3madkour-pub-multi/orchestrate)
-                     (lambda (&rest args) (setq called args))))
-            (a3madkour-pub-multi--after-essay-publish-handler
-             tmp "demo-slug" "/bundle/demo-slug/")
-            (should-not called)))
-      (delete-file tmp))))
 
 (provide 'a3madkour-publish-multi-test)
 ;;; a3madkour-publish-multi-test.el ends here

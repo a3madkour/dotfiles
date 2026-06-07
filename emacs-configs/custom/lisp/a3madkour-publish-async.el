@@ -235,6 +235,16 @@ ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
 (defvar a3-pub-async--spinner-idx 0)
 (defvar a3-pub-async--spinner-timer nil)
 
+(defvar a3-pub-async--terminal-run nil
+  "Snapshot of the most recent finished run.  Kept ~3s on cancelled/err
+status so the mode-line indicator flashes the terminal state before
+clearing (per design spec §4.4).  Nil otherwise.")
+
+(defvar a3-pub-async--flash-timer nil
+  "Timer that fires `a3-pub-async--modeline-clear' after the 3s flash.
+Tracked so a fresh `begin-publish' (or a duplicate stop) can cancel it
+rather than racing with a stale clear.")
+
 (defun a3-pub-async--modeline-string (run)
   (cond
    ((null run) "")
@@ -249,24 +259,64 @@ ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
             (a3-pub-async-run-planned-steps run)))
    (t "")))
 
+(defun a3-pub-async--modeline-string-current ()
+  "Mode-line text — running run wins; otherwise flash the terminal run."
+  (a3-pub-async--modeline-string
+   (or a3-pub-async--in-flight-run a3-pub-async--terminal-run)))
+
+(defconst a3-pub-async--modeline-misc-entry
+  '(:eval (a3-pub-async--modeline-string-current))
+  "The exact list installed into `mode-line-misc-info'.  Holding a
+canonical reference here ensures `delete' removes the same form that
+`add-to-list' installed (an inline literal would `equal' but `delete'
+walks structure once — kept stable for clarity).")
+
 (defun a3-pub-async--modeline-tick ()
   (setq a3-pub-async--spinner-idx
         (mod (1+ a3-pub-async--spinner-idx)
              (length a3-pub-async--spinner-glyphs)))
   (force-mode-line-update t))
 
+(defun a3-pub-async--modeline-clear ()
+  "Drop the `(:eval …)` entry from `mode-line-misc-info' and clear the
+terminal-run snapshot.  Idempotent — safe to call from a stale timer."
+  (when a3-pub-async--flash-timer
+    (cancel-timer a3-pub-async--flash-timer)
+    (setq a3-pub-async--flash-timer nil))
+  (setq a3-pub-async--terminal-run nil)
+  (setq mode-line-misc-info
+        (delete a3-pub-async--modeline-misc-entry mode-line-misc-info))
+  (force-mode-line-update t))
+
 (defun a3-pub-async--modeline-start ()
-  (add-to-list 'mode-line-misc-info
-               '(:eval (a3-pub-async--modeline-string a3-pub-async--in-flight-run))
-               t)
+  ;; Cancel any in-flight flash from a prior run before re-installing —
+  ;; without this, a fresh publish kicked off mid-flash would race the
+  ;; stale clear timer and visibly blink.
+  (when a3-pub-async--flash-timer
+    (cancel-timer a3-pub-async--flash-timer)
+    (setq a3-pub-async--flash-timer nil))
+  (setq a3-pub-async--terminal-run nil)
+  (add-to-list 'mode-line-misc-info a3-pub-async--modeline-misc-entry t)
   (setq a3-pub-async--spinner-timer
         (run-with-timer 0 0.25 #'a3-pub-async--modeline-tick)))
 
-(defun a3-pub-async--modeline-stop ()
+(defun a3-pub-async--modeline-stop (&optional run)
+  "Cancel the spinner timer.  When RUN's status is :cancelled or :err,
+stash it as `a3-pub-async--terminal-run' so the mode-line displays the
+terminal indicator for 3s before clearing (design spec §4.4).  When RUN
+is omitted or its status is :ok, drop the entry immediately."
   (when a3-pub-async--spinner-timer
     (cancel-timer a3-pub-async--spinner-timer)
     (setq a3-pub-async--spinner-timer nil))
-  (force-mode-line-update t))
+  (let ((st (and run (a3-pub-async-run-status run))))
+    (cond
+     ((memq st '(:cancelled :err))
+      (setq a3-pub-async--terminal-run run)
+      (force-mode-line-update t)
+      (setq a3-pub-async--flash-timer
+            (run-with-timer 3 nil #'a3-pub-async--modeline-clear)))
+     (t
+      (a3-pub-async--modeline-clear)))))
 
 (cl-defun a3-pub-async/begin-publish (&key scope source-label planned-steps)
   "Acquire the single-in-flight lock and start a run.
@@ -339,7 +389,7 @@ clears the mode-line indicator."
             (when (require 'a3madkour-publish-citations nil 'noerror)
               (a3madkour-pub-citations/emit-yaml :mode 'merge))))
       (setq a3-pub-async--in-flight-run nil)
-      (a3-pub-async--modeline-stop))
+      (a3-pub-async--modeline-stop run))
     ;; Append summary.
     (let ((buf (a3-pub-async-run-buffer run)))
       (when (and buf (buffer-live-p buf))
