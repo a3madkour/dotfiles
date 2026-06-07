@@ -273,5 +273,11 @@ with results in registration order."
    (should a3-pub-async--synchronous-p))
   (should-not a3-pub-async--synchronous-p))
 
+(ert-deftest a3-pub-async-test/mode-binds-cancel ()
+  "C-c C-c in *a3-publish* is bound to cancel-current-run."
+  (with-current-buffer (a3-pub-async/buffer)
+    (should (eq (lookup-key a3-pub-mode-map (kbd "C-c C-c"))
+                'a3-pub-async/cancel-current-run))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

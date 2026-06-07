@@ -108,6 +108,16 @@ Calls beyond N are silently ignored (defensive against double-fire)."
 
 (defconst a3-pub-async--buffer-name "*a3-publish*")
 
+(defvar a3-pub-mode-map
+  (let ((m (make-sparse-keymap)))
+    (define-key m (kbd "C-c C-c") #'a3-pub-async/cancel-current-run)
+    (define-key m (kbd "n") (lambda () (interactive)
+                              (re-search-forward "^─\\{20,\\}$" nil t)))
+    (define-key m (kbd "p") (lambda () (interactive)
+                              (re-search-backward "^─\\{20,\\}$" nil t)))
+    m)
+  "Keymap for `a3-pub-mode'.")
+
 (define-derived-mode a3-pub-mode special-mode "a3-pub"
   "Major mode for the *a3-publish* status buffer."
   (setq buffer-read-only t
