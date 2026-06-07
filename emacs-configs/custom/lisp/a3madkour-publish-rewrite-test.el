@@ -382,6 +382,47 @@ then asserts that a relative target path resolves via that directory."
                               "<a href=\"/garden/target/\">text</a>"))))))
       (delete-directory tmp-dir t))))
 
+(ert-deftest a3madkour-pub-rewrite-test/file-link-relative-path-uses-supplied-source-file ()
+  "Bug 1.2: relative `[[file:foo.org]]` must resolve correctly when the
+source note is NOT in `org-roam-directory' (so `--id-to-file source-id'
+returns nil) provided the caller threads `source-file' explicitly through
+`rewrite-link's' &optional arg.
+
+Same architectural shape as the figref fix (commit `1edd900'): essays
+under `~/org/essays/' aren't indexed by org-roam, so the asset rewriter
+needed to accept an explicit source-file; the file-link rewriter has the
+identical relative-path-against-source-dir dependency and needs the same
+parity treatment."
+  (let* ((tmp-dir (make-temp-file "a3pub-file-supplied-" t))
+         (source-file (expand-file-name "src.org" tmp-dir))
+         (target-file (expand-file-name "tgt.org" tmp-dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file target-file
+            (insert "#+title: Target\n#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n"
+                    ":PROPERTIES:\n:ID: deadbeef-dead-beef-dead-beefdeadbeef\n:END:\n"))
+          (with-temp-file source-file (insert ""))
+          (a3madkour-pub-rewrite-test--with-stubbed
+           (("deadbeef-dead-beef-dead-beefdeadbeef"
+             :state live :section "garden" :slug "target")
+            ("source-id" :state live :section "garden" :slug "src"))
+           (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                      ;; Source-id NOT in org-roam DB (the failure case).
+                      ;; Target-id IS resolvable — `--rewrite-id-link' uses it
+                      ;; downstream to look up state + URL, but does NOT need
+                      ;; a file path for that lookup, so leaving it nil here
+                      ;; is also fine for this assertion.
+                      (lambda (_id) nil)))
+             ;; Without the fix, --rewrite-file-link's source-dir comes from
+             ;; the (nil) --id-to-file lookup → falls back to default-directory
+             ;; → relative path resolves wrong → :inert + WARN.
+             ;; With the fix, the supplied source-file is honored → :html result.
+             (let ((result (a3madkour-pub/rewrite-link
+                            "[[file:tgt.org][text]]" "source-id" source-file)))
+               (should (equal (plist-get result :html)
+                              "<a href=\"/garden/target/\">text</a>"))))))
+      (delete-directory tmp-dir t))))
+
 ;; -- rewrite-link: custom typed links --
 
 (ert-deftest a3madkour-pub-rewrite-test/typed-link-supports-live-target ()

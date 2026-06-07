@@ -242,19 +242,34 @@ exist or has no top-level :ID:."
         (when (re-search-forward "^:ID: +\\([0-9a-f-]+\\)" first-heading t)
           (match-string 1))))))
 
-(defun a3madkour-pub--rewrite-file-link (raw-path text source-note-id)
+(defun a3madkour-pub--rewrite-file-link (raw-path text source-note-id &optional source-file)
   "Rewrite a `[[file:...]]' link by resolving target's `:ID:` and
 recursing into id-link semantics, OR emit :inert + WARN if no :ID:.
 
 RAW-PATH is the full path with `file:` prefix; stripped internally.
-Relative paths in RAW-PATH are resolved against the SOURCE-NOTE-ID's
-file directory (matches org-mode semantics — `[[file:foo.org]]` is
-relative to the buffer containing the link)."
+Relative paths in RAW-PATH are resolved against the source note's
+directory (matches org-mode semantics — `[[file:foo.org]]` is relative
+to the buffer containing the link).
+
+SOURCE-FILE, when supplied, is the source note's absolute file path —
+used directly as the resolution root.  When not supplied, derives via
+`(--id-to-file source-note-id)' (legacy callers).
+
+Bug 1.2 (polish-and-bugfix-roadmap.md) — parity with the figref fix in
+commit `1edd900' (`rewrite-asset-link').  Source notes outside
+`org-roam-directory' (e.g. essays under `~/org/essays/' when org-roam
+points at `~/org/notes/') aren't in the DB, so `--id-to-file' returns
+nil and the resolver silently fell back to `default-directory'.  For
+interactive Emacs use that's usually the source dir; for batch / CLI
+publishes it isn't, and the relative path lookup silently broke.
+Caller-supplied SOURCE-FILE bypasses the DB lookup entirely."
   (let* ((file-path (substring raw-path 5))                ; drop "file:"
-         (source-file (and source-note-id
-                           (a3madkour-pub--id-to-file source-note-id)))
-         (source-dir (and source-file
-                          (file-name-directory source-file)))
+         (effective-source-file
+          (or source-file
+              (and source-note-id
+                   (a3madkour-pub--id-to-file source-note-id))))
+         (source-dir (and effective-source-file
+                          (file-name-directory effective-source-file)))
          ;; If we have a source dir, resolve relative to it; otherwise
          ;; fall back to default-directory (degrades gracefully for tests
          ;; or shell invocations without a known source).
@@ -312,7 +327,7 @@ See parent spec §6 for the per-link-type rules."
       (a3madkour-pub--rewrite-id-link path text source-note-id))
      ;; file-link — auto-convert to id-link via target's :ID:
      ((equal scheme "file")
-      (a3madkour-pub--rewrite-file-link path text source-note-id))
+      (a3madkour-pub--rewrite-file-link path text source-note-id source-file))
      ;; Custom typed link (`[[supports:UUID][text]]` etc.) — id-link with
      ;; class=\"link-<type>\" injected on the rendered anchor.
      ((member scheme a3madkour-pub-typed-link-types)
