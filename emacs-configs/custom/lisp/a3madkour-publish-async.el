@@ -29,14 +29,20 @@ bind this to t via `with-a3-pub-async-sync' so their `cl-letf'
 stubs continue to fire.")
 
 (cl-defun a3-pub-async/run-process (cmd args
-                                    &key name on-done stderr-buf cwd)
-  "Spawn CMD with ARGS; invoke ON-DONE with (rc stderr-tail) when done.
+                                    &key name on-done stderr-buf stdout-buf cwd)
+  "Spawn CMD with ARGS; invoke ON-DONE with (rc captured-tail) when done.
 
 NAME defaults to CMD (used for process + stderr buffer names).
 STDERR-BUF defaults to a buffer named `*a3-pub-stderr <name>*'.  When
 the function auto-creates the buffer, it is killed after ON-DONE fires
 so long sessions don't leak buffers.  When the caller passes STDERR-BUF
 explicitly, the buffer is left alone (caller owns lifecycle).
+
+STDOUT-BUF, when non-nil, is used as the stdout sink and (for callers
+that pass it) becomes the source for the tail string passed to ON-DONE.
+When STDOUT-BUF is nil, the tail is the stderr tail (last 10 lines) —
+existing behavior.  Caller-owned STDOUT-BUF is left alone on exit.
+
 CWD, when non-nil, sets `default-directory' for the spawn.
 
 When `a3-pub-async--synchronous-p' is non-nil, runs `call-process'
@@ -50,10 +56,16 @@ inline and fires ON-DONE in the calling frame (test path)."
     ;; :name reuse can't leak stale content into on-done's tail arg.
     (with-current-buffer stderr-buf
       (let ((inhibit-read-only t)) (erase-buffer)))
+    (when stdout-buf
+      (with-current-buffer stdout-buf
+        (let ((inhibit-read-only t)) (erase-buffer))))
     (if a3-pub-async--synchronous-p
         ;; Sync test path.
-        (let ((rc (apply #'call-process cmd nil stderr-buf nil args))
-              (tail (with-current-buffer stderr-buf (buffer-string))))
+        (let* ((rc (apply #'call-process cmd nil
+                          (or stdout-buf stderr-buf) nil args))
+               (tail (if stdout-buf
+                         (with-current-buffer stdout-buf (buffer-string))
+                       (with-current-buffer stderr-buf (buffer-string)))))
           (when on-done (funcall on-done rc tail))
           (when buf-auto-created (kill-buffer stderr-buf))
           nil)
@@ -61,16 +73,22 @@ inline and fires ON-DONE in the calling frame (test path)."
       (make-process
        :name (format "a3-pub-%s" name)
        :command (cons cmd args)
-       :buffer nil
+       :buffer stdout-buf
        :stderr stderr-buf
        :sentinel
        (lambda (proc _event)
          ;; Skip transient 'run'/'open' events; only exit/signal carry the rc.
          (when (memq (process-status proc) '(exit signal))
            (let* ((rc (process-exit-status proc))
-                  (raw (with-current-buffer stderr-buf (buffer-string)))
+                  (raw (if stdout-buf
+                           (with-current-buffer stdout-buf (buffer-string))
+                         (with-current-buffer stderr-buf (buffer-string))))
                   (lines (split-string raw "\n" t))
-                  (tail (mapconcat #'identity (last lines 10) "\n")))
+                  (tail (if stdout-buf
+                            ;; stdout: full content (typically short, no truncation).
+                            raw
+                          ;; stderr: last 10 lines.
+                          (mapconcat #'identity (last lines 10) "\n"))))
              (when on-done (funcall on-done rc tail))
              (when buf-auto-created (kill-buffer stderr-buf)))))))))
 

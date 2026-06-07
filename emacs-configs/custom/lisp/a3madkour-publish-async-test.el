@@ -298,5 +298,22 @@ a3-publish-living tail-called emit-yaml."
         (a3-pub-async/finish-publish run :scope 'living :status 'ok)
         (should emit-fired)))))
 
+(ert-deftest a3-pub-async-test/run-process-stdout-buf-captures-output ()
+  "When :stdout-buf is passed, on-done's 2nd arg is the stdout content."
+  (let ((seen-tail nil))
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (_cmd _ buf _ &rest _args)
+                 (when (bufferp buf) (with-current-buffer buf (insert "HELLO\n"))) 0)))
+      (with-a3-pub-async-sync
+       (let ((stdout-buf (generate-new-buffer "*stdout-test*")))
+         (unwind-protect
+             (a3-pub-async/run-process
+              "/bin/true" nil
+              :name "stdout-test"
+              :stdout-buf stdout-buf
+              :on-done (lambda (_rc tail) (setq seen-tail tail)))
+           (kill-buffer stdout-buf)))))
+    (should (string-match-p "HELLO" seen-tail))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
