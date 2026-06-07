@@ -269,5 +269,35 @@ clears the mode-line indicator."
                             elapsed))))))
     (message "a3-pub: %s (%.1fs)" status elapsed)))
 
+(defun a3-pub-async/cancel-current-run ()
+  "Cancel the in-flight run, if any.
+Sends SIGINT to every live process; status flag set first so sentinels
+firing in the next ms short-circuit.  Tmp dirs cleaned, accumulator
+discarded by finish-publish."
+  (interactive)
+  (let ((run a3-pub-async--in-flight-run))
+    (when run
+      (setf (a3-pub-async-run-status run) :cancelled)
+      (dolist (p (a3-pub-async-run-live-processes run))
+        (when (and (processp p) (process-live-p p))
+          (ignore-errors (interrupt-process p))))
+      ;; SIGKILL fallback after 2s.
+      (run-with-timer
+       2 nil
+       (lambda ()
+         (dolist (p (a3-pub-async-run-live-processes run))
+           (when (and (processp p) (process-live-p p))
+             (ignore-errors (kill-process p))))))
+      (dolist (d (a3-pub-async-run-tmp-dirs run))
+        (when (and d (file-directory-p d))
+          (ignore-errors (delete-directory d t))))
+      (message "a3-pub: cancel requested")
+      t)))
+
+(defmacro with-a3-pub-async-sync (&rest body)
+  "Run BODY with the async helpers in sync mode."
+  (declare (indent 0))
+  `(let ((a3-pub-async--synchronous-p t)) ,@body))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

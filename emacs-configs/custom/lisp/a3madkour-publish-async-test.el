@@ -240,5 +240,38 @@ with results in registration order."
         (a3-pub-async/finish-publish run :scope 'deliberate :status 'cancelled)
         (should-not emit-fired)))))
 
+(ert-deftest a3-pub-async-test/cancel-noop-when-idle ()
+  (let ((a3-pub-async--in-flight-run nil))
+    (should-not (a3-pub-async/cancel-current-run))))
+
+(ert-deftest a3-pub-async-test/cancel-interrupts-live-processes ()
+  (let* ((run (make-a3-pub-async-run :status :running)))
+    (cl-letf* ((interrupted nil)
+               ((symbol-function 'interrupt-process)
+                (lambda (p) (push p interrupted)))
+               ((symbol-function 'process-live-p) (lambda (_) t))
+               ((symbol-function 'processp) (lambda (_) t)))
+      (setf (a3-pub-async-run-live-processes run) '(p1 p2))
+      (let ((a3-pub-async--in-flight-run run))
+        (a3-pub-async/cancel-current-run))
+      (should (memq 'p1 interrupted))
+      (should (memq 'p2 interrupted))
+      (should (eq (a3-pub-async-run-status run) :cancelled)))))
+
+(ert-deftest a3-pub-async-test/cancel-deletes-tmp-dirs ()
+  (let* ((tmp1 (make-temp-file "a3-pub-cancel-" t))
+         (tmp2 (make-temp-file "a3-pub-cancel-" t))
+         (run (make-a3-pub-async-run :status :running
+                                     :tmp-dirs (list tmp1 tmp2))))
+    (let ((a3-pub-async--in-flight-run run))
+      (a3-pub-async/cancel-current-run))
+    (should-not (file-directory-p tmp1))
+    (should-not (file-directory-p tmp2))))
+
+(ert-deftest a3-pub-async-test/with-sync-helper-binds-var ()
+  (with-a3-pub-async-sync
+   (should a3-pub-async--synchronous-p))
+  (should-not a3-pub-async--synchronous-p))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
