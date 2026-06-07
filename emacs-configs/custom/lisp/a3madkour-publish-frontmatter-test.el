@@ -264,6 +264,25 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
          (out (a3madkour-pub-frontmatter/normalize 'garden raw "/tmp/x.org")))
     (should (equal (alist-get 'tags out) '("Bayesian" "stats")))))
 
+(ert-deftest a3madkour-pub-frontmatter--garden-strips-slug ()
+  "Bug 1.6: garden normalizer drops `slug' before emitting frontmatter.
+ox-hugo emits `slug:' from `:CUSTOM_ID:' / `#+HUGO_SLUG:' / title-derivation,
+but `tools/check_garden_fixtures.py' CONCEPT_FIELDS allowlist forbids it
+on every garden flavor (concept / media / reference) — the URL comes
+from the bundle directory name in B's `publish-garden-file' path, so
+emitting `slug:' is both redundant and a CI-fail trigger on every
+ref-note→garden promotion (see `project_b_slug_on_concept_followup.md').
+
+Mirror the existing `flavor' / `author' strip pattern in --normalize-garden."
+  (let* ((raw '((title . "Note")
+                (slug  . "incoming-from-ox-hugo")
+                (tags  . ("clean"))))
+         (out (a3madkour-pub-frontmatter/normalize 'garden raw "/tmp/x.org")))
+    (should (null (assq 'slug out)))
+    ;; Companion keys still pass through.
+    (should (equal (alist-get 'title out) "Note"))
+    (should (equal (alist-get 'tags out) '("clean")))))
+
 (ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-drawer-wins ()
   ":LAST_MODIFIED: drawer beats keyword + git-mtime + fs-mtime."
   (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)

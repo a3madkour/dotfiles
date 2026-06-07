@@ -326,9 +326,13 @@ Hygiene rules (check_garden_fixtures.py compliance):
     `creator' carries the equivalent semantic on media/reference notes per
     spec §7.  If the raw alist has both `author' and `creator', `creator'
     wins; if only `author', it is dropped without renaming.
-  - `last_modified' is set when absent.  Derived from the source file's
-    mtime in YYYY-MM-DD form (git-mtime is the design-spec target per
-    §7 open-Q-5; that is a future follow-up)."
+  - `slug' is stripped.  ox-hugo emits it from `:CUSTOM_ID:` /
+    `#+HUGO_SLUG:' / title derivation, but the linter forbids it on
+    every garden flavor and the bundle dir name (not frontmatter)
+    drives the URL (bug 1.6).
+  - `last_modified' resolves via `last-modified-cascade':
+    drawer → `#+HUGO_LASTMOD:' keyword → git-mtime → fs-mtime → today
+    (closes B.1 follow-up #2 / roadmap 1.4)."
   (let ((out (copy-alist raw-alist)))
     ;; Task 5: growth_stage derivation.
     (setf (alist-get 'growth_stage out)
@@ -340,6 +344,15 @@ Hygiene rules (check_garden_fixtures.py compliance):
     ;; Hygiene: strip `author' — not in any linter-allowed field set.
     ;; `creator' (already present if set in source) carries that semantic.
     (setq out (assq-delete-all 'author out))
+    ;; Bug 1.6 (polish-and-bugfix-roadmap.md): strip `slug' — ox-hugo
+    ;; emits it from `:CUSTOM_ID:' / `#+HUGO_SLUG:' / title derivation,
+    ;; but `tools/check_garden_fixtures.py' CONCEPT_FIELDS forbids it on
+    ;; every flavor (concept / media / reference).  The URL comes from
+    ;; the bundle dir name in `publish-garden-file', so emitting `slug:'
+    ;; is both redundant and a CI-fail trigger on every ref-note→garden
+    ;; promotion.  Until this strip landed, every promotion required a
+    ;; hand-edit workaround (see `project_b_slug_on_concept_followup.md').
+    (setq out (assq-delete-all 'slug out))
     ;; Hygiene: ox-hugo emits #+HUGO_LASTMOD: as `lastmod:' (its own field
     ;; name), but the garden linter rejects `lastmod:' on concept notes and
     ;; requires `last_modified:'.  Resolve via the 5-step cascade:
