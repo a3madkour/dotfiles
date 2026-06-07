@@ -254,6 +254,34 @@ Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
             (should (equal (plist-get row :last_modified) "2026-01-15"))))
       (delete-directory tmpdir t))))
 
+(ert-deftest a3madkour-pub-library--normalize-last-modified-cascade-fallthrough ()
+  "Bug 1.5: when drawer + git-mtime both absent, cascade falls through to
+filesystem mtime / today instead of returning nil.  Pre-fix the library
+handler used a 2-step `or' that returned nil → :last_modified omitted →
+site linter rejected the row.  Post-fix the cascade always returns a
+YYYY-MM-DD string."
+  (let* ((tmpdir (make-temp-file "a3-pub-libcascade-" t))
+         (file (expand-file-name "x.org" tmpdir)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                   ;; Simulate a file NOT tracked by git (no commits touch it).
+                   (lambda (_) nil))
+                  ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+                   (lambda (_) "2026-06-07")))
+          (let* ((src (a3madkour-pub-library-test--parse-headline
+                       "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:STATUS: queued
+:END:
+"))
+                 (cfg (a3madkour-pub-library--config-for "library/reading"))
+                 (row (a3madkour-pub-library--normalize-item src "library/reading" cfg file)))
+            ;; Must be non-nil + the fs-mtime stub return.
+            (should (equal (plist-get row :last_modified) "2026-06-07"))))
+      (delete-directory tmpdir t))))
+
 (ert-deftest a3madkour-pub-library--normalize-extras-book ()
   "Book extras: ISBN + progress_pct/progress_label + universal covers."
   (let* ((src (a3madkour-pub-library-test--parse-headline

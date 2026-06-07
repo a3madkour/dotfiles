@@ -205,12 +205,20 @@ Returns nil when the item should be skipped (e.g. empty slug)."
              (filtered (a3madkour-pub-frontmatter/filter-editorial-tags raw-tags)))
         ;; Always emit :tags (linter requires the field even when empty).
         (setq row-plist (plist-put row-plist :tags filtered)))
-      ;; last_modified: :LAST_MODIFIED: drawer → git-mtime fallback.
-      (let* ((drawer-lm (a3madkour-pub-library--headline-property headline "LAST_MODIFIED"))
-             (lm (or drawer-lm
-                     (a3madkour-pub-history/git-mtime-of-file file))))
-        (when lm
-          (setq row-plist (plist-put row-plist :last_modified lm))))
+      ;; last_modified: full 5-step cascade per B.3's shared helper
+      ;; (drawer → keyword → git-mtime → fs-mtime → today).  Library rows
+      ;; have no per-heading keyword equivalent of `#+HUGO_LASTMOD:', so
+      ;; :keyword is left unset.  Bug 1.5 (polish-and-bugfix-roadmap.md):
+      ;; before this change the library handler used a 2-step `or' that
+      ;; could return nil → the per-row :last_modified key was omitted →
+      ;; site linter rejected the row (last_modified is required).  The
+      ;; cascade always returns a YYYY-MM-DD string, so `:last_modified'
+      ;; is now unconditionally emitted.
+      (let ((lm (a3madkour-pub-frontmatter/last-modified-cascade
+                 file
+                 :drawer (a3madkour-pub-library--headline-property
+                          headline "LAST_MODIFIED"))))
+        (setq row-plist (plist-put row-plist :last_modified lm)))
       ;; Extras: per-medium drawer mapping + cover-file existence check.
       (let ((extras (a3madkour-pub-library--collect-extras headline media-type file slug)))
         (when extras
