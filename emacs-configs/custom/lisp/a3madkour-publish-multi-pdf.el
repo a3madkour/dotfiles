@@ -106,6 +106,37 @@ ON-DONE fires (with the list of exit codes) when all complete."
              :name (format "rsvg-%s" (file-name-base src))
              :on-done (lambda (rc _tail) (funcall report rc)))))))))
 
+(cl-defun a3madkour-pub-multi-pdf--compile-tex-async (tex-path &key on-done step-cb)
+  "Async version of compile-tex.  Chains xelatex→biber→xelatex→xelatex.
+STEP-CB, when non-nil, is called with (pass-label pass-rc) per pass.
+ON-DONE is called with t/nil based on PDF existence after the run."
+  (let* ((dir (file-name-directory tex-path))
+         (base (file-name-base tex-path))
+         (pdf-path (expand-file-name (concat base ".pdf") dir))
+         (seq (list (cons a3madkour-pub-multi-xelatex-command "pass 1/4")
+                    (cons a3madkour-pub-multi-biber-command   "biber")
+                    (cons a3madkour-pub-multi-xelatex-command "pass 3/4")
+                    (cons a3madkour-pub-multi-xelatex-command "pass 4/4"))))
+    (cl-labels
+        ((run-next (remaining)
+           (if (null remaining)
+               (when on-done (funcall on-done (file-exists-p pdf-path)))
+             (let* ((cmd-and-label (car remaining))
+                    (cmd (car cmd-and-label))
+                    (label (cdr cmd-and-label))
+                    (arg (if (string= cmd a3madkour-pub-multi-biber-command)
+                             base
+                           (concat base ".tex"))))
+               (a3-pub-async/run-process
+                cmd (list "-interaction=nonstopmode" arg)
+                :name (format "pdf-%s" label)
+                :cwd dir
+                :on-done
+                (lambda (rc _tail)
+                  (when step-cb (funcall step-cb label rc))
+                  (run-next (cdr remaining))))))))
+      (run-next seq))))
+
 (defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir)
   "Run the PDF backend for SOURCE-FILE / SLUG → BUNDLE-DIR/SLUG.pdf.
 TEMPLATES-DIR is the path to `tools/templates/' (contains `madkour-paper.cls').

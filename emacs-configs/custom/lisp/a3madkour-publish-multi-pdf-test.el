@@ -105,5 +105,29 @@ Sync shim makes this deterministic."
       nil :on-done (lambda (_) (setq done t))))
     (should done)))
 
+(ert-deftest a3madkour-pub-multi-pdf/compile-chain-runs-four-passes ()
+  "compile-tex-async invokes the 4-pass sequence and fires on-done."
+  (let (cmds done)
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (cmd &rest _) (push cmd cmds) 0))
+              ((symbol-function 'file-exists-p) (lambda (_) t)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-multi-pdf--compile-tex-async
+        "/tmp/x/foo.tex"
+        :on-done (lambda (ok) (setq done ok)))))
+    (should (= 4 (length cmds)))
+    (should done)))
+
+(ert-deftest a3madkour-pub-multi-pdf/compile-chain-no-pdf-returns-nil ()
+  "When no PDF exists after the 4 passes, on-done fires with nil."
+  (let (done)
+    (cl-letf (((symbol-function 'call-process) (lambda (&rest _) 0))
+              ((symbol-function 'file-exists-p) (lambda (_) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-multi-pdf--compile-tex-async
+        "/tmp/x/foo.tex"
+        :on-done (lambda (ok) (setq done ok)))))
+    (should-not done)))
+
 (provide 'a3madkour-publish-multi-pdf-test)
 ;;; a3madkour-publish-multi-pdf-test.el ends here
