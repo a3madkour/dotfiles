@@ -44,12 +44,17 @@ control reaches the dispatch."
 
 (ert-deftest a3madkour-pub-deliberate-test/citations-emit-fires-after-finish ()
   "F Task 13: a3-publish-deliberate calls emit-yaml after finish-publish.
-Stub begin-publish, finish-publish, resolve-file-or-id, note-section, and
-emit-yaml; bind handlers to a no-op essays entry.  Assert call order:
-finish-publish first, then emit-yaml."
+Under the async lifecycle, the handler's :on-done callback flows into
+`a3-pub-async/finish-publish', which calls the legacy
+`a3madkour-pub/finish-publish' and then emit-yaml on (ok deliberate).
+Stub begin-publish, finish-publish, resolve-file-or-id, note-section,
+and emit-yaml; bind handlers to an essays entry that fires :on-done with
+'ok.  Assert call order: finish first, then emit."
   (let ((calls nil)
         (a3madkour-pub-deliberate--handlers
-         (list (cons 'essays (lambda (_file) nil)))))
+         (list (cons 'essays
+                     (lambda (_file _run &rest rest)
+                       (funcall (plist-get rest :on-done) 'ok))))))
     (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
               ((symbol-function 'a3madkour-pub/finish-publish)
                (lambda (&rest _) (push 'finish calls)))
@@ -61,8 +66,36 @@ finish-publish first, then emit-yaml."
                (lambda (&rest _) (push 'emit calls)))
               ((symbol-function 'require)
                (lambda (feat &rest _) (or (memq feat features) t))))
-      (a3-publish-deliberate "/fake/file.org")
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-deliberate "/fake/file.org")))
       (should (equal (reverse calls) '(finish emit))))))
+
+(require 'a3madkour-publish-async)
+
+(ert-deftest a3madkour-pub-delib-test/async-handler-receives-run-and-on-done ()
+  "After conversion, the handler is called with (file run :on-done …).
+The handler invokes on-done synchronously under with-a3-pub-async-sync,
+which flows through to finish-publish."
+  (let ((calls nil) (run-seen nil))
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub/finish-publish)
+          (lambda (&rest args) (push (cons 'finish args) calls)))
+         ((symbol-function 'a3madkour-pub--resolve-file-or-id)
+          (lambda (x) x))
+         ((symbol-function 'a3madkour-pub/note-section)
+          (lambda (_) "essays"))
+         ((symbol-function 'a3madkour-pub-essays/publish-essay-file)
+          (lambda (_file run &rest rest)
+            (setq run-seen run)
+            (let ((on-done (plist-get rest :on-done)))
+              (funcall on-done 'ok)))))
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-deliberate "/tmp/fake.org"))))
+    (should (a3-pub-async-run-p run-seen))
+    (should (cl-find 'finish calls :key #'car))))
 
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here
