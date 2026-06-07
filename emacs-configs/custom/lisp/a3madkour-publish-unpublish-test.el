@@ -7,6 +7,7 @@
 
 (require 'ert)
 (require 'a3madkour-publish-unpublish)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-unpublish-test/skeleton-loaded ()
   "The unpublish module loads and its provide marker is registered."
@@ -362,25 +363,29 @@ B.1.1: prior contract was to propagate; updated to catch + WARN."
       (delete-directory root t))))
 
 (ert-deftest a3madkour-pub-unpublish-test/rename-asset-dir-tracked-uses-git-mv ()
-  "Git-tracked source dir → shell-command \"git mv\", returns :renamed-git."
+  "Git-tracked source dir → call-process \"git\" \"mv\", returns :renamed-git."
   (let* ((root (make-temp-file "a3-pub-assets-" t))
          (old-dir (expand-file-name "page/foo" root))
-         (git-cmd-captured nil))
+         (git-cmd-captured nil)
+         (git-args-captured nil))
     (unwind-protect
         (progn
           (make-directory old-dir t)
           (cl-letf (((symbol-function 'vc-backend) (lambda (_) 'Git))
-                    ((symbol-function 'shell-command)
-                     (lambda (cmd &rest _)
-                       (setq git-cmd-captured cmd)
+                    ((symbol-function 'call-process)
+                     (lambda (cmd _infile _dest _display &rest args)
+                       (setq git-cmd-captured cmd
+                             git-args-captured args)
                        ;; Simulate successful git mv by doing rename-file.
                        (rename-file old-dir
                                     (expand-file-name "page/foo-v2" root))
                        0)))
-            (should (eq :renamed-git
-                        (a3madkour-pub--unpublish-rename-asset-dir
-                         "foo" "foo-v2" root))))
-          (should (string-match-p "git mv" git-cmd-captured)))
+            (with-a3-pub-async-sync
+             (should (eq :renamed-git
+                         (a3madkour-pub--unpublish-rename-asset-dir
+                          "foo" "foo-v2" root)))))
+          (should (string= "git" git-cmd-captured))
+          (should (equal "mv" (car git-args-captured))))
       (when (file-directory-p (expand-file-name "page/foo-v2" root))
         (delete-directory (expand-file-name "page/foo-v2" root) t))
       (delete-directory root t))))
@@ -958,6 +963,37 @@ addition didn't regress the default path."
           ;; Living scope: id-b is "removed" (not in accumulator), bundle deleted.
           (should (member '("garden" . "b") deleted-bundles)))
       (delete-directory tmp-data-dir t))))
+
+;; -- Task 24: rename-asset-dir async git mv --
+
+(ert-deftest a3madkour-pub-unpublish-test/rename-asset-dir-uses-run-process ()
+  "Rename-asset-dir uses `call-process' for `git mv', not `shell-command'."
+  (let (called-cp called-sh)
+    (cl-letf (((symbol-function 'file-directory-p)
+               (lambda (d) (string-match-p "old" d)))
+              ((symbol-function 'vc-backend) (lambda (_) 'Git))
+              ((symbol-function 'call-process)
+               (lambda (cmd &rest _) (setq called-cp cmd) 0))
+              ((symbol-function 'shell-command)
+               (lambda (&rest _) (setq called-sh t) 0)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub--unpublish-rename-asset-dir "old" "new" "/tmp/root/")))
+    (should (string= called-cp "git"))
+    (should-not called-sh)))
+
+(ert-deftest a3madkour-pub-unpublish-test/rename-asset-dir-falls-back-on-rc-nonzero ()
+  "When git mv returns non-zero, fall back to rename-file."
+  (let (rename-called)
+    (cl-letf (((symbol-function 'file-directory-p)
+               (lambda (d) (string-match-p "old" d)))
+              ((symbol-function 'vc-backend) (lambda (_) 'Git))
+              ((symbol-function 'call-process) (lambda (&rest _) 1))
+              ((symbol-function 'rename-file)
+               (lambda (&rest _) (setq rename-called t))))
+      (with-a3-pub-async-sync
+       (let ((result (a3madkour-pub--unpublish-rename-asset-dir "old" "new" "/tmp/root/")))
+         (should (eq result :renamed-mv))))
+      (should rename-called))))
 
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

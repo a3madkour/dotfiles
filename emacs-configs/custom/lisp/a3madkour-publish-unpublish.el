@@ -25,6 +25,7 @@
 (require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-async)
 
 (defcustom a3madkour-pub-site-content-dir nil
   "Root of the Hugo `content/' tree for the site repo, or nil to derive.
@@ -316,12 +317,16 @@ If `git mv' fails (git not installed, not a git repo), falls through to
       (message "[a3-pub] rename-asset-dir: target exists: %s — skipping" new-dir)
       :skipped-target-exists)
      ((eq (vc-backend old-dir) 'Git)
-      (let* ((cmd (format "git mv %s %s"
-                          (shell-quote-argument (directory-file-name old-dir))
-                          (shell-quote-argument (directory-file-name new-dir))))
-             (rc (let ((default-directory root))
-                   (shell-command cmd))))
-        (if (zerop rc)
+      (let ((default-directory root)
+            got-rc)
+        (with-a3-pub-async-sync
+         (a3-pub-async/run-process
+          "git" (list "mv"
+                      (directory-file-name old-dir)
+                      (directory-file-name new-dir))
+          :name "unpublish-git-mv"
+          :on-done (lambda (rc _tail) (setq got-rc rc))))
+        (if (zerop got-rc)
             :renamed-git
           ;; Fallback to mv on git failure.
           (rename-file (directory-file-name old-dir) (directory-file-name new-dir))
