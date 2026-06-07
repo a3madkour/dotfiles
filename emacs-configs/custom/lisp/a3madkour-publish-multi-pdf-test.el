@@ -129,5 +129,25 @@ Sync shim makes this deterministic."
         :on-done (lambda (ok) (setq done ok)))))
     (should-not done)))
 
+(ert-deftest a3madkour-pub-multi-pdf/run-async-fires-on-done-with-status ()
+  (let (status)
+    (cl-letf (((symbol-function 'call-process) (lambda (&rest _) 0))
+              ((symbol-function 'file-exists-p) (lambda (_) t))
+              ((symbol-function 'rename-file) (lambda (&rest _) nil))
+              ((symbol-function 'copy-file) (lambda (&rest _) nil))
+              ((symbol-function 'make-directory) (lambda (&rest _) nil))
+              ((symbol-function 'find-file-noselect)
+               (lambda (_) (get-buffer-create "*pdf-test*")))
+              ((symbol-function 'org-latex-export-to-latex) (lambda (&rest _) nil))
+              ((symbol-function 'a3madkour-pub-multi-pdf--list-svg-figures)
+               (lambda (_) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-multi-pdf/run
+        "/tmp/x.org" "x" "/tmp/bundle/" "/tmp/templates/"
+        :run (make-a3-pub-async-run :buffer (a3-pub-async/buffer))
+        :on-done (lambda (s) (setq status s)))))
+    (should (or (eq (plist-get status :status) 'ok)
+                (eq status 'ok)))))
+
 (provide 'a3madkour-publish-multi-pdf-test)
 ;;; a3madkour-publish-multi-pdf-test.el ends here

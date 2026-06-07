@@ -137,42 +137,71 @@ ON-DONE is called with t/nil based on PDF existence after the run."
                   (run-next (cdr remaining))))))))
       (run-next seq))))
 
-(defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir)
-  "Run the PDF backend for SOURCE-FILE / SLUG → BUNDLE-DIR/SLUG.pdf.
-TEMPLATES-DIR is the path to `tools/templates/' (contains `madkour-paper.cls').
-Returns the absolute path of the placed PDF on success, nil on failure."
+(cl-defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir
+                                       &key run on-done)
+  "Async PDF backend.  RUN is the a3-pub-async-run handle (for log-step).
+ON-DONE is called with (:status 'ok :path target) or (:status 'err :err-snippet …)."
   (let* ((work-dir (expand-file-name (format "multi-export-%s/" slug)
                                      temporary-file-directory))
          (fig-dir (expand-file-name "figures/" work-dir))
-         (tex-path (expand-file-name (concat slug ".tex") work-dir)))
+         (tex-path (expand-file-name (concat slug ".tex") work-dir))
+         (svgs (a3madkour-pub-multi-pdf--list-svg-figures source-file))
+         (svg-pairs (mapcar (lambda (svg)
+                              (list svg (expand-file-name
+                                         (concat (file-name-base svg) ".pdf")
+                                         fig-dir)))
+                            svgs)))
     (make-directory fig-dir t)
-    ;; Make madkour-paper.cls discoverable to xelatex (place a symlink/copy in work-dir).
     (copy-file (expand-file-name "madkour-paper.cls" templates-dir)
                (expand-file-name "madkour-paper.cls" work-dir) t)
-    ;; Convert referenced SVGs to PDF for LaTeX.
-    (dolist (svg (a3madkour-pub-multi-pdf--list-svg-figures source-file))
-      (a3madkour-pub-multi-pdf--convert-svg
-       svg (expand-file-name (concat (file-name-base svg) ".pdf") fig-dir)))
-    ;; Export org → LaTeX (hooks fire automatically).
-    ;; `org-export-show-temporary-export-buffer' defaults to t; with it on,
-    ;; ox-latex pops the intermediate buffer into a new window during a
-    ;; publish run.  Let-bind nil so the publish completes silently.
-    (with-current-buffer (find-file-noselect source-file)
-      (let ((org-latex-with-hyperref t)
-            (org-latex-default-class "madkour-paper")
-            (org-export-show-temporary-export-buffer nil))
-        (org-latex-export-to-latex)))
-    ;; Move the produced .tex into the work dir, then compile.
+    (when run (push work-dir (a3-pub-async-run-tmp-dirs run)))
+    ;; Phase 1: ox-latex export (sync, instrumented).
+    (let ((start (current-time)))
+      (with-current-buffer (find-file-noselect source-file)
+        (let ((org-latex-with-hyperref t)
+              (org-latex-default-class "madkour-paper")
+              (org-export-show-temporary-export-buffer nil))
+          (org-latex-export-to-latex)))
+      (when run
+        (a3-pub-async/log-step run "export" :ok :detail "org → latex"
+                               :elapsed (float-time
+                                         (time-subtract (current-time) start)))))
+    ;; Move produced .tex into work dir.
     (let ((source-tex (expand-file-name (concat slug ".tex")
                                         (file-name-directory source-file))))
       (when (file-exists-p source-tex)
         (rename-file source-tex tex-path t)))
-    (when (a3madkour-pub-multi-pdf--compile-tex tex-path)
-      (let ((built-pdf (expand-file-name (concat slug ".pdf") work-dir))
-            (target (expand-file-name (concat slug ".pdf") bundle-dir)))
-        (when (file-exists-p built-pdf)
-          (rename-file built-pdf target t)
-          target)))))
+    ;; Phase 2: SVG fan → xelatex chain → place.
+    (a3madkour-pub-multi-pdf--convert-svgs-fan
+     svg-pairs
+     :on-done
+     (lambda (_svg-rcs)
+       (when run
+         (a3-pub-async/log-step run "svgs" :ok
+                                :detail (format "%d files" (length svg-pairs))))
+       (a3madkour-pub-multi-pdf--compile-tex-async
+        tex-path
+        :step-cb
+        (lambda (label rc)
+          (when run
+            (a3-pub-async/log-step run "xelatex" (if (zerop rc) :ok :err)
+                                   :detail label)))
+        :on-done
+        (lambda (ok)
+          (if (not ok)
+              (when on-done
+                (funcall on-done '(:status err :err-snippet "PDF not produced")))
+            (let ((built (expand-file-name (concat slug ".pdf") work-dir))
+                  (target (expand-file-name (concat slug ".pdf") bundle-dir)))
+              (if (file-exists-p built)
+                  (progn
+                    (rename-file built target t)
+                    (when run
+                      (a3-pub-async/log-step run "pdf" :ok :detail target))
+                    (when on-done
+                      (funcall on-done (list :status 'ok :path target))))
+                (when on-done
+                  (funcall on-done '(:status err :err-snippet "built PDF missing"))))))))))))
 
 (defun a3madkour-pub-multi-pdf--log-line (buf successp path elapsed err-snippet)
   "Append a single log line to BUF for the PDF backend.
