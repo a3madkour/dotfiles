@@ -153,5 +153,42 @@ ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
             (dolist (line (split-string err-snippet "\n" t))
               (insert (format "              %s\n" line)))))))))
 
+(defvar a3-pub-async--spinner-glyphs '("⧗" "◐" "◑" "◒" "◓"))
+(defvar a3-pub-async--spinner-idx 0)
+(defvar a3-pub-async--spinner-timer nil)
+
+(defun a3-pub-async--modeline-string (run)
+  (cond
+   ((null run) "")
+   ((eq (a3-pub-async-run-status run) :cancelled)
+    "[a3-pub ⨯ cancelled]")
+   ((eq (a3-pub-async-run-status run) :err)
+    "[a3-pub ✗ err]")
+   ((eq (a3-pub-async-run-status run) :running)
+    (format "[a3-pub %s %d/%d]"
+            (nth a3-pub-async--spinner-idx a3-pub-async--spinner-glyphs)
+            (a3-pub-async-run-completed-steps run)
+            (a3-pub-async-run-planned-steps run)))
+   (t "")))
+
+(defun a3-pub-async--modeline-tick ()
+  (setq a3-pub-async--spinner-idx
+        (mod (1+ a3-pub-async--spinner-idx)
+             (length a3-pub-async--spinner-glyphs)))
+  (force-mode-line-update t))
+
+(defun a3-pub-async--modeline-start ()
+  (add-to-list 'mode-line-misc-info
+               '(:eval (a3-pub-async--modeline-string a3-pub-async--in-flight-run))
+               t)
+  (setq a3-pub-async--spinner-timer
+        (run-with-timer 0 0.25 #'a3-pub-async--modeline-tick)))
+
+(defun a3-pub-async--modeline-stop ()
+  (when a3-pub-async--spinner-timer
+    (cancel-timer a3-pub-async--spinner-timer)
+    (setq a3-pub-async--spinner-timer nil))
+  (force-mode-line-update t))
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

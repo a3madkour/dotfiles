@@ -172,5 +172,21 @@ with results in registration order."
       (should (string-match-p "Missing font: foo" (buffer-string))))
     (kill-buffer buf)))
 
+(ert-deftest a3-pub-async-test/modeline-format-running ()
+  (let ((run (make-a3-pub-async-run :status :running
+                                    :planned-steps 9 :completed-steps 5)))
+    (should (string-match-p "5/9"
+                            (a3-pub-async--modeline-string run)))))
+
+(ert-deftest a3-pub-async-test/modeline-empty-when-idle ()
+  (let ((a3-pub-async--in-flight-run nil))
+    (should (string-empty-p (a3-pub-async--modeline-string nil)))))
+
+(ert-deftest a3-pub-async-test/modeline-format-cancelled ()
+  (let ((run (make-a3-pub-async-run :status :cancelled
+                                    :planned-steps 9 :completed-steps 3)))
+    (should (string-match-p "cancelled"
+                            (a3-pub-async--modeline-string run)))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
