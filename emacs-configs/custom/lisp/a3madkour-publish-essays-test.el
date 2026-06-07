@@ -549,6 +549,77 @@ Body text.
         :on-done (lambda (s) (setq done-status s)))))
     (should (eq done-status 'err))))
 
+;; --- async multi-export dispatch (replaces hook-based sync trigger) ---
+
+(ert-deftest a3madkour-pub-essays-test/multi-export-dispatched-async-when-marker-present ()
+  "When #+multi_export: t, the essays handler dispatches export-bundle
+with the run handle, NOT via the sync hook."
+  (let ((export-bundle-args nil) (on-done-status nil))
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub/note-metadata)
+          (lambda (_) '(:id "fake-id" :slug "fake-slug")))
+         ((symbol-function 'a3madkour-pub/note-url) (lambda (_) "/fake/url/"))
+         ((symbol-function 'a3madkour-pub-essays--site-root) (lambda () "/tmp/"))
+         ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+          (lambda (&rest _) "/tmp/tmp.org"))
+         ((symbol-function 'file-exists-p) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-export/export-file)
+          (lambda (_) '(:body "" :frontmatter ())))
+         ((symbol-function 'a3madkour-pub-essays--scan-has-flags) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+          (lambda (&rest _) '((:title . "x"))))
+         ((symbol-function 'a3madkour-pub/asset-validate-and-copy) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--copy-asset-dir) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--write-if-different) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
+         ((symbol-function 'insert-file-contents) (lambda (_) nil))
+         ;; Stub the multi-export marker probe to return t.
+         ((symbol-function 'a3madkour-pub-essays--multi-export-marker-p) (lambda (_) t))
+         ;; Stub export-bundle: capture args + fire on-done.
+         ((symbol-function 'a3madkour-pub-multi/export-bundle)
+          (cl-function
+           (lambda (source-file slug bundle-dir &key run on-done)
+             (setq export-bundle-args (list source-file slug bundle-dir run))
+             (funcall on-done '(:status ok :pdf "/x.pdf" :word "/x.docx"))))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-essays/publish-essay-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq on-done-status s)))))
+    (should export-bundle-args)
+    (should (eq on-done-status 'ok))))
+
+(ert-deftest a3madkour-pub-essays-test/no-multi-export-when-marker-absent ()
+  "When #+multi_export marker is absent, export-bundle is NOT called;
+on-done fires 'ok immediately after sync pipeline."
+  (let ((export-bundle-called nil) (on-done-status nil))
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub/note-metadata)
+          (lambda (_) '(:id "fake-id" :slug "fake-slug")))
+         ((symbol-function 'a3madkour-pub/note-url) (lambda (_) "/fake/url/"))
+         ((symbol-function 'a3madkour-pub-essays--site-root) (lambda () "/tmp/"))
+         ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+          (lambda (&rest _) "/tmp/tmp.org"))
+         ((symbol-function 'file-exists-p) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-export/export-file)
+          (lambda (_) '(:body "" :frontmatter ())))
+         ((symbol-function 'a3madkour-pub-essays--scan-has-flags) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+          (lambda (&rest _) '((:title . "x"))))
+         ((symbol-function 'a3madkour-pub/asset-validate-and-copy) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--copy-asset-dir) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--write-if-different) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
+         ((symbol-function 'insert-file-contents) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-essays--multi-export-marker-p) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-multi/export-bundle)
+          (lambda (&rest _) (setq export-bundle-called t))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-essays/publish-essay-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq on-done-status s)))))
+    (should-not export-bundle-called)
+    (should (eq on-done-status 'ok))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

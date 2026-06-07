@@ -210,12 +210,15 @@ Checks SOURCE-FILE for `#+multi_export: t' and runs `orchestrate' if opted-in."
     (a3madkour-pub-multi/orchestrate source-file slug bundle-dir)))
 
 (defun a3madkour-pub-multi-install ()
-  "Install the auto-trigger on B.4's after-essay-publish hook (idempotent)."
-  (when (boundp 'a3madkour-pub-essays-after-publish-hook)
-    (add-hook 'a3madkour-pub-essays-after-publish-hook
-              #'a3madkour-pub-multi--after-essay-publish-handler)))
+  "DEPRECATED.  The essays handler now dispatches `export-bundle' directly,
+so the after-essay-publish hook auto-trigger is no longer needed.  Kept as
+a no-op for backward compatibility with any external code that calls it."
+  nil)
 
-(a3madkour-pub-multi-install)
+;; Disabled: hook-based auto-trigger is replaced by the direct async dispatch
+;; in `a3madkour-pub-essays/publish-essay-file' (see commit history for the
+;; async-pub slice).
+;; (a3madkour-pub-multi-install)
 
 (provide 'a3madkour-publish-multi)
 ;;; a3madkour-publish-multi.el ends here

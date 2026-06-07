@@ -211,6 +211,15 @@ D.2's multi-target export orchestrator installs here.")
 
 ;; Task 8: pipeline entry.
 
+(defun a3madkour-pub-essays--multi-export-marker-p (file)
+  "Return t when FILE opts into D.2 multi-export via #+multi_export: t."
+  (condition-case _
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (and (re-search-forward "^#\\+multi_export:[ \t]*t$" nil t) t))
+    (error nil)))
+
 (cl-defun a3madkour-pub-essays/publish-essay-file (file run &key on-done)
   "Publish a single essay FILE to content/essays/<slug>/index.md.
 
@@ -223,23 +232,26 @@ Pipeline:
   6. asset-validate-and-copy (hero.svg etc.)
   7. render frontmatter + body; write if different
   8. record-publish
-  9. run after-publish hook (D.2 multi-export attaches here; currently sync)
+  9. dispatch async D.2 multi-export when #+multi_export: t marker present;
+     on-done is threaded through so run lifecycle reflects the full wall
+     time, including xelatex + pandoc.  Absent marker → on-done fires
+     immediately.
 
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
   (condition-case _err
-      (progn
+      (let* ((md         (a3madkour-pub/note-metadata file))
+             (id         (plist-get md :id))
+             (slug       (plist-get md :slug))
+             (new-url    (a3madkour-pub/note-url file))
+             (site-root  (a3madkour-pub-essays--site-root))
+             (bundle-dir (expand-file-name
+                          (format "content/%s/%s/"
+                                  a3madkour-pub-essays/section-dir-name slug)
+                          site-root)))
         (ignore run)
-        (let* ((md         (a3madkour-pub/note-metadata file))
-               (id         (plist-get md :id))
-               (slug       (plist-get md :slug))
-               (new-url    (a3madkour-pub/note-url file))
-               (site-root  (a3madkour-pub-essays--site-root))
-               (bundle-dir (expand-file-name
-                            (format "content/%s/%s/"
-                                    a3madkour-pub-essays/section-dir-name slug)
-                            site-root))
-               (out-path   (expand-file-name "index.md" bundle-dir))
+        ;; --- sync work ---
+        (let* ((out-path   (expand-file-name "index.md" bundle-dir))
                (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
                             file id "a3-pub-essays"))
                (exported   (unwind-protect
@@ -265,22 +277,31 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
           (a3madkour-pub-essays--write-if-different
            out-path
            (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
-          (a3madkour-pub-history/record-publish id new-url 'live)
-          (run-hook-with-args 'a3madkour-pub-essays-after-publish-hook
-                              file slug bundle-dir))
-        (when on-done (funcall on-done 'ok)))
+          (a3madkour-pub-history/record-publish id new-url 'live))
+        ;; --- multi-export dispatch (async when marker present) ---
+        ;; Calls `export-bundle' DIRECTLY (not via after-publish hook +
+        ;; sync `orchestrate' wrapper).  The hook-based path froze Emacs
+        ;; for the duration of the xelatex + pandoc work; routing the run
+        ;; handle through to backends + threading on-done restores the
+        ;; spinner + step-line wiring.
+        (if (and (fboundp 'a3madkour-pub-multi/export-bundle)
+                 (a3madkour-pub-essays--multi-export-marker-p file))
+            (a3madkour-pub-multi/export-bundle
+             file slug bundle-dir
+             :run run
+             :on-done
+             (lambda (result)
+               (when on-done
+                 (funcall on-done
+                          (if (eq (plist-get result :status) 'ok) 'ok 'err)))))
+          (when on-done (funcall on-done 'ok))))
     (error
      (when on-done (funcall on-done 'err)))))
 
 (defun a3madkour-pub-essays/planned-steps (file)
   "Return rough step count for B.4 essays handler.
 Returns 9 when FILE opts into D.2 multi-export, else 5."
-  (condition-case _
-      (with-temp-buffer
-        (insert-file-contents file)
-        (goto-char (point-min))
-        (if (re-search-forward "^#\\+multi_export:[ \t]*t$" nil t) 9 5))
-    (error 5)))
+  (if (a3madkour-pub-essays--multi-export-marker-p file) 9 5))
 
 (provide 'a3madkour-publish-essays)
 
