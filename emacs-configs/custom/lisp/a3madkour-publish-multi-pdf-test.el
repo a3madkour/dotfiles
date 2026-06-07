@@ -1,6 +1,7 @@
 ;;; a3madkour-publish-multi-pdf-test.el --- Tests for PDF backend -*- lexical-binding: t; -*-
 (require 'ert)
 (require 'a3madkour-publish-multi-pdf)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-multi-pdf/defcustoms-defined ()
   (should (boundp 'a3madkour-pub-multi-xelatex-command))
@@ -81,6 +82,28 @@ some passes exited non-zero (the common LaTeX-warning case)."
               (should (string-match-p "\\[✗\\] pdf" s))
               (should (string-match-p "Undefined control sequence" s)))))
       (kill-buffer buf))))
+
+(ert-deftest a3madkour-pub-multi-pdf/svg-fan-uses-barrier ()
+  "N SVGs convert via run-process; barrier fires once with all results.
+Sync shim makes this deterministic."
+  (let ((calls nil) (done nil))
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (cmd &rest _) (push cmd calls) 0))
+              ((symbol-function 'make-directory) (lambda (&rest _) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-multi-pdf--convert-svgs-fan
+        '(("/a.svg" "/a.pdf") ("/b.svg" "/b.pdf"))
+        :on-done (lambda (_results) (setq done t)))))
+    (should (= 2 (length calls)))
+    (should done)))
+
+(ert-deftest a3madkour-pub-multi-pdf/svg-fan-empty-list-fires-immediately ()
+  "Empty pair list still fires on-done."
+  (let ((done nil))
+    (with-a3-pub-async-sync
+     (a3madkour-pub-multi-pdf--convert-svgs-fan
+      nil :on-done (lambda (_) (setq done t))))
+    (should done)))
 
 (provide 'a3madkour-publish-multi-pdf-test)
 ;;; a3madkour-publish-multi-pdf-test.el ends here

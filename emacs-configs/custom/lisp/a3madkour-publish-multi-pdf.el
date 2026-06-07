@@ -9,6 +9,7 @@
 
 (require 'cl-lib)
 (require 'a3madkour-publish-multi-filter)
+(require 'a3madkour-publish-async)
 
 (defgroup a3madkour-pub-multi nil
   "D.2 multi-target export pipeline." :group 'org)
@@ -88,6 +89,22 @@ Delegates to B.4's existing asset walker if available; falls back to nil."
     (cl-remove-if-not
      (lambda (p) (string= "svg" (file-name-extension p)))
      (a3madkour-pub-assets/list-referenced-files source-file))))
+
+(cl-defun a3madkour-pub-multi-pdf--convert-svgs-fan (pairs &key on-done)
+  "PAIRS is a list of (SRC DST).  Fan out one run-process per pair.
+ON-DONE fires (with the list of exit codes) when all complete."
+  (let ((n (length pairs)))
+    (if (zerop n)
+        (when on-done (funcall on-done nil))
+      (let ((report (a3-pub-async/barrier n :on-all-done on-done)))
+        (dolist (pair pairs)
+          (let ((src (car pair)) (dst (cadr pair)))
+            (make-directory (file-name-directory dst) t)
+            (a3-pub-async/run-process
+             a3madkour-pub-multi-rsvg-convert-command
+             (list "-f" "pdf" src "-o" dst)
+             :name (format "rsvg-%s" (file-name-base src))
+             :on-done (lambda (rc _tail) (funcall report rc)))))))))
 
 (defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir)
   "Run the PDF backend for SOURCE-FILE / SLUG → BUNDLE-DIR/SLUG.pdf.
