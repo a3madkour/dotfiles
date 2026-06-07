@@ -56,17 +56,13 @@ keys + `symbol-name' bridge which silently no-op'd on slash-form
 sections (`library/reading' would intern to `library/reading' which
 is not what `note-section' returns).
 
-Post Task 12: the living lifecycle invokes handlers with the new
-`(file run &key on-done)' signature.  Until Task 14 updates the garden
-handler to accept that signature, we shim it here: capture the legacy
-one-arg fn, then rebind it to call the legacy fn synchronously and fire
-on-done with `ok'."
+Post Task 14: the garden handler natively accepts the
+`(file run &key on-done)' signature, so no shim is needed."
   (require 'a3madkour-publish-garden)
   (require 'a3madkour-publish-async)
   (let* ((notes-dir (make-temp-file "living-dispatch-" t))
          (site-dir  (make-temp-file "living-dispatch-site-" t))
-         (src       (expand-file-name "dispatch-note.org" notes-dir))
-         (legacy-fn (symbol-function 'a3madkour-pub-garden/publish-garden-file)))
+         (src       (expand-file-name "dispatch-note.org" notes-dir)))
     (unwind-protect
         (progn
           (make-directory (expand-file-name "data" site-dir))
@@ -85,11 +81,7 @@ on-done with `ok'."
           (let ((a3madkour-pub/site-data-dir (file-name-as-directory
                                               (expand-file-name "data" site-dir)))
                 (a3madkour-pub/org-notes-dir notes-dir))
-            (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil))
-                      ((symbol-function 'a3madkour-pub-garden/publish-garden-file)
-                       (lambda (file _run &rest rest)
-                         (funcall legacy-fn file)
-                         (funcall (plist-get rest :on-done) 'ok))))
+            (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
               (let ((a3-pub-async--in-flight-run nil))
                 (with-a3-pub-async-sync
                  (a3-publish-living)))))

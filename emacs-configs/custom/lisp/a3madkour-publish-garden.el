@@ -12,6 +12,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
@@ -87,7 +88,7 @@ Returns a string with leading/trailing `---' delimiters."
              sorted "\n")
             "\n---\n")))
 
-(defun a3madkour-pub-garden/publish-garden-file (file)
+(cl-defun a3madkour-pub-garden/publish-garden-file (file run &key on-done)
   "Publish a single garden-section FILE to content/garden/<slug>/index.md.
 
 Pipeline per spec §10:
@@ -100,31 +101,44 @@ bracket-link forms `[[id:UUID]]', `[[file:...]]', and `[[<type>:UUID]]'
 are resolved to inline HTML anchors (or inert plain text for unpublished
 targets) before ox-hugo sees them.  Without this step ox-hugo emits
 `{{< relref \"<underscore_filename>.md\" >}}' shortcodes that fail
-Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths."
-  (let* ((id        (plist-get (a3madkour-pub/note-metadata file) :id))
-         (slug      (a3madkour-pub/note-slug file))
-         (new-url   (a3madkour-pub/note-url file))
-         (site-root (a3madkour-pub-garden--site-root))
-         (bundle-dir (expand-file-name
-                      (format "content/%s/%s/"
-                              a3madkour-pub-garden/section-dir-name slug)
-                      site-root))
-         (out-path   (expand-file-name "index.md" bundle-dir))
-         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
-                      file id "a3-pub-garden"))
-         ;; unwind-protect deletes tmp-src whether export-file succeeds or signals.
-         (exported   (unwind-protect
-                         (a3madkour-pub-export/export-file tmp-src)
-                       (when (file-exists-p tmp-src)
-                         (delete-file tmp-src))))
-         (normalized (a3madkour-pub-frontmatter/normalize
-                      'garden (plist-get exported :frontmatter) file))
-         (body       (plist-get exported :body)))
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
-    (a3madkour-pub-garden--write-if-different
-     out-path
-     (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
-    (a3madkour-pub-history/record-publish id new-url 'live)))
+Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths.
+
+RUN is the a3-pub-async-run handle (used for log-step in later tasks).
+ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
+  (condition-case _err
+      (progn
+        (ignore run)
+        (let* ((id        (plist-get (a3madkour-pub/note-metadata file) :id))
+               (slug      (a3madkour-pub/note-slug file))
+               (new-url   (a3madkour-pub/note-url file))
+               (site-root (a3madkour-pub-garden--site-root))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/"
+                                    a3madkour-pub-garden/section-dir-name slug)
+                            site-root))
+               (out-path   (expand-file-name "index.md" bundle-dir))
+               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                            file id "a3-pub-garden"))
+               ;; unwind-protect deletes tmp-src whether export-file succeeds or signals.
+               (exported   (unwind-protect
+                               (a3madkour-pub-export/export-file tmp-src)
+                             (when (file-exists-p tmp-src)
+                               (delete-file tmp-src))))
+               (normalized (a3madkour-pub-frontmatter/normalize
+                            'garden (plist-get exported :frontmatter) file))
+               (body       (plist-get exported :body)))
+          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          (a3madkour-pub-garden--write-if-different
+           out-path
+           (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
+          (a3madkour-pub-history/record-publish id new-url 'live))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (when on-done (funcall on-done 'err)))))
+
+(defun a3madkour-pub-garden/planned-steps (_file)
+  "Return rough step count for B.1 garden handler."
+  3)
 
 (provide 'a3madkour-publish-garden)
 

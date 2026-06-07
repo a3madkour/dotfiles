@@ -3,6 +3,7 @@
 (require 'ert)
 (require 'a3madkour-publish-garden)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-garden--module-loads ()
   "Smoke: module is loadable and exposes publish-garden-file."
@@ -102,7 +103,8 @@ normalized frontmatter + body + record-publish call."
             ;; Stub org-roam-db-sync so we don't touch the real DB.
             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
               (a3madkour-pub/begin-publish)
-              (a3madkour-pub-garden/publish-garden-file src)
+              (a3madkour-pub-garden/publish-garden-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))
               (a3madkour-pub/finish-publish)))
           (let ((out (expand-file-name
                       "content/garden/example-note/index.md" site-dir)))
@@ -171,8 +173,10 @@ hyphen-slug bundles."
                                ((equal id source-id) source-src)
                                (t nil)))))
               (a3madkour-pub/begin-publish)
-              (a3madkour-pub-garden/publish-garden-file target-src)
-              (a3madkour-pub-garden/publish-garden-file source-src)
+              (a3madkour-pub-garden/publish-garden-file
+               target-src (make-a3-pub-async-run) :on-done (lambda (_) nil))
+              (a3madkour-pub-garden/publish-garden-file
+               source-src (make-a3-pub-async-run) :on-done (lambda (_) nil))
               (a3madkour-pub/finish-publish)))
           (let* ((out  (expand-file-name
                         "content/garden/source-note/index.md" site-dir))
@@ -230,9 +234,64 @@ hyphen-slug bundles."
                      (lambda (_n) ""))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
-            (a3madkour-pub-garden/publish-garden-file tmp-src)
+            (a3madkour-pub-garden/publish-garden-file
+             tmp-src (make-a3-pub-async-run) :on-done (lambda (_) nil))
             (should (equal captured-id "garden-id-77"))))
       (when (file-exists-p tmp-src) (delete-file tmp-src)))))
+
+;;; -- Task 14: handler async signature --
+
+(ert-deftest a3madkour-pub-garden-test/handler-async-signature ()
+  "publish-garden-file accepts (file run &key on-done) and calls on-done."
+  (let (done-status
+        (tmp-src (make-temp-file "garden-async-sig-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp-src (insert "#+title: T\n"))
+          (cl-letf*
+              (;; Stub every step so the handler runs without I/O.
+               ((symbol-function 'a3madkour-pub/note-metadata)
+                (lambda (_) '(:id "fake-id" :slug "fake-slug")))
+               ((symbol-function 'a3madkour-pub/note-slug)
+                (lambda (_) "fake-slug"))
+               ((symbol-function 'a3madkour-pub/note-url)
+                (lambda (_) "/fake/url/"))
+               ((symbol-function 'a3madkour-pub-garden--site-root)
+                (lambda () "/tmp/"))
+               ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+                (lambda (file _id _tag)
+                  (let ((copy (make-temp-file "garden-async-stub-" nil ".org")))
+                    (copy-file file copy t)
+                    copy)))
+               ((symbol-function 'a3madkour-pub-export/export-file)
+                (lambda (_) '(:body "" :frontmatter ())))
+               ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                (lambda (&rest _) '((:title . "x"))))
+               ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                (lambda (&rest _) nil))
+               ((symbol-function 'a3madkour-pub-garden--write-if-different)
+                (lambda (&rest _) nil))
+               ((symbol-function 'a3madkour-pub-garden--render-frontmatter)
+                (lambda (_n) ""))
+               ((symbol-function 'a3madkour-pub-history/record-publish)
+                (lambda (&rest _) nil)))
+            (with-a3-pub-async-sync
+             (a3madkour-pub-garden/publish-garden-file
+              tmp-src (make-a3-pub-async-run)
+              :on-done (lambda (s) (setq done-status s))))))
+      (when (file-exists-p tmp-src) (delete-file tmp-src)))
+    (should (eq done-status 'ok))))
+
+(ert-deftest a3madkour-pub-garden-test/handler-async-error-routes-on-done-err ()
+  "When the sync pipeline throws, on-done fires with 'err."
+  (let (done-status)
+    (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+               (lambda (_) (error "boom"))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-garden/publish-garden-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq done-status s)))))
+    (should (eq done-status 'err))))
 
 (provide 'a3madkour-publish-garden-test)
 
