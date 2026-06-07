@@ -12,6 +12,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
@@ -210,56 +211,76 @@ D.2's multi-target export orchestrator installs here.")
 
 ;; Task 8: pipeline entry.
 
-(defun a3madkour-pub-essays/publish-essay-file (file)
+(cl-defun a3madkour-pub-essays/publish-essay-file (file run &key on-done)
   "Publish a single essay FILE to content/essays/<slug>/index.md.
 
 Pipeline:
   1. resolve metadata (id / slug)
-  2. pre-export rewrite via shared rewrite-to-tmp-file (B.4 cleanup commit)
+  2. pre-export rewrite via shared rewrite-to-tmp-file
   3. ox-hugo export
   4. scan post-export body for has_* shortcodes
   5. inject :scan-plist into raw fm; normalize via \\='essays dispatch arm
   6. asset-validate-and-copy (hero.svg etc.)
   7. render frontmatter + body; write if different
-  8. record-publish"
-  (let* ((md         (a3madkour-pub/note-metadata file))
-         (id         (plist-get md :id))
-         (slug       (plist-get md :slug))
-         (new-url    (a3madkour-pub/note-url file))
-         (site-root  (a3madkour-pub-essays--site-root))
-         (bundle-dir (expand-file-name
-                      (format "content/%s/%s/"
-                              a3madkour-pub-essays/section-dir-name slug)
-                      site-root))
-         (out-path   (expand-file-name "index.md" bundle-dir))
-         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
-                      file id "a3-pub-essays"))
-         (exported   (unwind-protect
-                         (a3madkour-pub-export/export-file tmp-src)
-                       (when (file-exists-p tmp-src)
-                         (delete-file tmp-src))))
-         (body       (plist-get exported :body))
-         ;; Scan the org source content for shortcode patterns.  ox-hugo
-         ;; HTML-encodes `{{<' to `{{&lt;' in the exported body, so shortcodes
-         ;; are only reliably detected in the unescaped org source.  Append
-         ;; the post-export markdown body so that markdown-native patterns
-         ;; (e.g. footnote references `[^N]') are also found.
-         (src-content (with-temp-buffer
-                        (insert-file-contents file)
-                        (buffer-string)))
-         (scan-pl    (a3madkour-pub-essays--scan-has-flags
-                      (concat src-content "\n" (or body ""))))
-         (raw-fm     (cons (cons :scan-plist scan-pl)
-                           (or (plist-get exported :frontmatter) '())))
-         (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
-    (a3madkour-pub-essays--copy-asset-dir id bundle-dir)
-    (a3madkour-pub-essays--write-if-different
-     out-path
-     (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
-    (a3madkour-pub-history/record-publish id new-url 'live)
-    (run-hook-with-args 'a3madkour-pub-essays-after-publish-hook
-                        file slug bundle-dir)))
+  8. record-publish
+  9. run after-publish hook (D.2 multi-export attaches here; currently sync)
+
+RUN is the a3-pub-async-run handle (used for log-step in later tasks).
+ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
+  (condition-case _err
+      (progn
+        (ignore run)
+        (let* ((md         (a3madkour-pub/note-metadata file))
+               (id         (plist-get md :id))
+               (slug       (plist-get md :slug))
+               (new-url    (a3madkour-pub/note-url file))
+               (site-root  (a3madkour-pub-essays--site-root))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/"
+                                    a3madkour-pub-essays/section-dir-name slug)
+                            site-root))
+               (out-path   (expand-file-name "index.md" bundle-dir))
+               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                            file id "a3-pub-essays"))
+               (exported   (unwind-protect
+                               (a3madkour-pub-export/export-file tmp-src)
+                             (when (file-exists-p tmp-src)
+                               (delete-file tmp-src))))
+               (body       (plist-get exported :body))
+               ;; Scan the org source content for shortcode patterns.  ox-hugo
+               ;; HTML-encodes `{{<' to `{{&lt;' in the exported body, so shortcodes
+               ;; are only reliably detected in the unescaped org source.  Append
+               ;; the post-export markdown body so that markdown-native patterns
+               ;; (e.g. footnote references `[^N]') are also found.
+               (src-content (with-temp-buffer
+                              (insert-file-contents file)
+                              (buffer-string)))
+               (scan-pl    (a3madkour-pub-essays--scan-has-flags
+                            (concat src-content "\n" (or body ""))))
+               (raw-fm     (cons (cons :scan-plist scan-pl)
+                                 (or (plist-get exported :frontmatter) '())))
+               (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
+          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          (a3madkour-pub-essays--copy-asset-dir id bundle-dir)
+          (a3madkour-pub-essays--write-if-different
+           out-path
+           (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
+          (a3madkour-pub-history/record-publish id new-url 'live)
+          (run-hook-with-args 'a3madkour-pub-essays-after-publish-hook
+                              file slug bundle-dir))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (when on-done (funcall on-done 'err)))))
+
+(defun a3madkour-pub-essays/planned-steps (file)
+  "Return rough step count for B.4 essays handler.
+Returns 9 when FILE opts into D.2 multi-export, else 5."
+  (condition-case _
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (if (re-search-forward "^#\\+multi_export:[ \t]*t$" nil t) 9 5))
+    (error 5)))
 
 (provide 'a3madkour-publish-essays)
 

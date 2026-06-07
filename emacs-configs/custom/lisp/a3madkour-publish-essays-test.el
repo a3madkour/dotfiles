@@ -5,6 +5,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-essays)
+(require 'a3madkour-publish-async)
 
 ;; -- B.4 Task 4: has_* body scanner --
 
@@ -185,7 +186,8 @@ calls record-publish with the correct URL."
                        (setq recorded (list id url state))))
                     ((symbol-function 'a3madkour-pub-essays--site-root)
                      (lambda () site-root)))
-            (a3madkour-pub-essays/publish-essay-file src))
+            (a3madkour-pub-essays/publish-essay-file
+             src (make-a3-pub-async-run) :on-done (lambda (_) nil)))
           ;; Bundle exists.
           (should (file-exists-p (expand-file-name
                                   "content/essays/example-one/index.md" site-root)))
@@ -235,7 +237,8 @@ calls record-publish with the correct URL."
                        (or raw '())))
                     ((symbol-function 'a3madkour-pub-essays--site-root)
                      (lambda () site-root)))
-            (a3madkour-pub-essays/publish-essay-file src))
+            (a3madkour-pub-essays/publish-essay-file
+             src (make-a3-pub-async-run) :on-done (lambda (_) nil)))
           (should (assq :scan-plist injected-raw))
           (should (eq (plist-get (alist-get :scan-plist injected-raw) :has_sidenotes) t)))
       (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
@@ -267,7 +270,8 @@ generally); absence of #+HUGO_HERO does not skip it."
                     ((symbol-function 'a3madkour-pub-history/record-publish) (lambda (&rest _) nil))
                     ((symbol-function 'a3madkour-pub-essays--site-root)
                      (lambda () site-root)))
-            (a3madkour-pub-essays/publish-essay-file src))
+            (a3madkour-pub-essays/publish-essay-file
+             src (make-a3-pub-async-run) :on-done (lambda (_) nil)))
           (should (= asset-call-count 1)))
       (when (file-exists-p tmp-essays-dir) (delete-directory tmp-essays-dir t))
       (when (file-exists-p tmp-site-data) (delete-directory tmp-site-data t)))))
@@ -407,7 +411,8 @@ must emit as a paired Hugo shortcode `{{< theorem title=\"Foo\" id=\"thm-foo\" >
                      (lambda (_n) ""))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
-            (a3madkour-pub-essays/publish-essay-file tmp-src)
+            (a3madkour-pub-essays/publish-essay-file
+             tmp-src (make-a3-pub-async-run) :on-done (lambda (_) nil))
             (should (equal captured-id "essay-id-99"))))
       (when (file-exists-p tmp-src) (delete-file tmp-src)))))
 
@@ -482,7 +487,8 @@ Body text.
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
             (let ((a3madkour-pub/essays-dir essays-dir))
-              (a3madkour-pub-essays/publish-essay-file org-file)))
+              (a3madkour-pub-essays/publish-essay-file
+               org-file (make-a3-pub-async-run) :on-done (lambda (_) nil))))
           (let* ((index-path (expand-file-name "index.md" bundle-dir))
                  (svg-path (expand-file-name "fig.svg" bundle-dir))
                  (index-body
@@ -495,6 +501,53 @@ Body text.
             (should (string-match-p "<img " index-body))
             (should (string-match-p "fig\\.svg" index-body))))
       (delete-directory tmp t))))
+
+;;; -- Task 13: handler async signature --
+
+(ert-deftest a3madkour-pub-essays-test/handler-async-signature ()
+  "publish-essay-file accepts (file run &key on-done) and calls on-done."
+  (let (done-status)
+    (cl-letf*
+        (;; Stub every step so the handler runs without I/O.
+         ((symbol-function 'a3madkour-pub/note-metadata)
+          (lambda (_) '(:id "fake-id" :slug "fake-slug")))
+         ((symbol-function 'a3madkour-pub/note-url) (lambda (_) "/fake/url/"))
+         ((symbol-function 'a3madkour-pub-essays--site-root) (lambda () "/tmp/"))
+         ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+          (lambda (&rest _) "/tmp/tmp.org"))
+         ((symbol-function 'file-exists-p) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-export/export-file)
+          (lambda (_) '(:body "" :frontmatter ())))
+         ((symbol-function 'a3madkour-pub-essays--scan-has-flags)
+          (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+          (lambda (&rest _) '((:title . "x"))))
+         ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+          (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--copy-asset-dir)
+          (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-essays--write-if-different)
+          (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub-history/record-publish)
+          (lambda (&rest _) nil))
+         ((symbol-function 'insert-file-contents)
+          (lambda (_) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-essays/publish-essay-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq done-status s)))))
+    (should (eq done-status 'ok))))
+
+(ert-deftest a3madkour-pub-essays-test/handler-async-error-routes-on-done-err ()
+  "When the sync pipeline throws, on-done fires with 'err."
+  (let (done-status)
+    (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+               (lambda (_) (error "boom"))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-essays/publish-essay-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq done-status s)))))
+    (should (eq done-status 'err))))
 
 (provide 'a3madkour-publish-essays-test)
 
