@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'yaml)
+(require 'a3madkour-publish-async)
 
 ;; The user-facing defcustoms below live under the parent `a3madkour-pub'
 ;; group (defined in a3madkour-publish.el) so `M-x customize-group RET
@@ -297,25 +298,53 @@ Drops `nil' entries (notes that have only ever had a single URL or are removed).
                    for url = (alist-get 'url entry)
                    when url collect url))))))
 
+(defun a3madkour-pub-history/git-mtime-of-file-async (file on-done)
+  "Async: invoke ON-DONE with the YYYY-MM-DD date of the most recent
+commit touching FILE, or nil when FILE is not under git or has never
+been committed.
+
+Routes through `a3-pub-async/run-process' with a caller-owned stdout
+buffer so callers can opt into the async path during the publish
+pipeline.  When `a3-pub-async--synchronous-p' is non-nil (test path
+and the `git-mtime-of-file' sync wrapper below), ON-DONE fires
+inline in the calling frame."
+  (if (not (file-exists-p file))
+      (funcall on-done nil)
+    (let* ((default-directory (file-name-directory (expand-file-name file)))
+           (basename (file-name-nondirectory file))
+           (stdout-buf (generate-new-buffer (format " *git-mtime %s*" basename))))
+      (a3-pub-async/run-process
+       "git" (list "log" "-1" "--format=%cs" "--" basename)
+       :name (format "git-mtime-%s" basename)
+       :stdout-buf stdout-buf
+       :on-done
+       (lambda (_rc out)
+         (unwind-protect
+             (let ((trimmed (string-trim (or out ""))))
+               (funcall on-done
+                        (if (and trimmed
+                                 (not (string-empty-p trimmed))
+                                 (string-match-p
+                                  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
+                                  trimmed))
+                            trimmed nil)))
+           (when (buffer-live-p stdout-buf)
+             (kill-buffer stdout-buf))))))))
+
 (defun a3madkour-pub-history/git-mtime-of-file (file)
   "Return the YYYY-MM-DD date of the most recent commit touching FILE.
 Returns nil when FILE is not under git or has never been committed.
 
 Used as the per-file fallback for `last_modified' when no explicit
 property is set on the source (garden + library per spec §8 + §5
-respectively)."
-  (when (file-exists-p file)
-    (let* ((default-directory (file-name-directory (expand-file-name file)))
-           (basename (file-name-nondirectory file))
-           (raw (with-output-to-string
-                  (with-current-buffer standard-output
-                    (call-process "git" nil t nil
-                                  "log" "-1" "--format=%cs" "--" basename))))
-           (trimmed (string-trim raw)))
-      (when (and trimmed
-                 (not (string-empty-p trimmed))
-                 (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" trimmed))
-        trimmed))))
+respectively).  Sync wrapper around
+`a3madkour-pub-history/git-mtime-of-file-async' — runs the underlying
+process via `call-process' under `with-a3-pub-async-sync'."
+  (let (result)
+    (with-a3-pub-async-sync
+     (a3madkour-pub-history/git-mtime-of-file-async
+      file (lambda (d) (setq result d))))
+    result))
 
 (defun a3madkour-pub-history/filesystem-mtime-of-file (file)
   "Return the YYYY-MM-DD filesystem mtime of FILE.

@@ -3,10 +3,14 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'a3madkour-publish-history)
 ;; A.1.d: bring in the publish-run-accumulator defvar so the new
 ;; record-publish tests below can clear/inspect it explicitly.
 (require 'a3madkour-publish)
+;; Task 22: async runtime for the new git-mtime-of-file-async sibling
+;; and the with-a3-pub-async-sync test macro.
+(require 'a3madkour-publish-async)
 
 (defun a3madkour-pub-history-test--with-tmp-data-dir (thunk)
   "Create a tmp dir; let-bind `a3madkour-pub/site-data-dir' to it; call THUNK."
@@ -416,6 +420,28 @@ byte-identical YAML output."
         (a3madkour-pub-history/write-manifest m2)
         (let ((bytes2 (with-temp-buffer (insert-file-contents path) (buffer-string))))
           (should (string= bytes1 bytes2)))))))
+
+(ert-deftest a3madkour-pub-history/git-mtime-async-returns-date ()
+  (let (date)
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (_cmd _ buf _ &rest _)
+                 (when (bufferp buf)
+                   (with-current-buffer buf (insert "2026-06-06"))) 0))
+              ((symbol-function 'file-exists-p) (lambda (_) t)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-history/git-mtime-of-file-async
+        "/tmp/x.org" (lambda (d) (setq date d)))))
+    (should (string= "2026-06-06" date))))
+
+(ert-deftest a3madkour-pub-history/git-mtime-sync-wrapper-still-works ()
+  "The existing sync entry-point is preserved via the wrapper."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (_cmd _ buf _ &rest _)
+               (when (bufferp buf)
+                 (with-current-buffer buf (insert "2026-01-15"))) 0))
+            ((symbol-function 'file-exists-p) (lambda (_) t)))
+    (should (string= "2026-01-15"
+                     (a3madkour-pub-history/git-mtime-of-file "/tmp/x.org")))))
 
 (provide 'a3madkour-publish-history-test)
 
