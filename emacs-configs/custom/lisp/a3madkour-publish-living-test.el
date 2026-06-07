@@ -54,11 +54,19 @@ at `a3madkour-pub-library/publish-library-file'."
 directly to `note-section''s STRING value.  Pre-Task-11 used symbol
 keys + `symbol-name' bridge which silently no-op'd on slash-form
 sections (`library/reading' would intern to `library/reading' which
-is not what `note-section' returns)."
+is not what `note-section' returns).
+
+Post Task 12: the living lifecycle invokes handlers with the new
+`(file run &key on-done)' signature.  Until Task 14 updates the garden
+handler to accept that signature, we shim it here: capture the legacy
+one-arg fn, then rebind it to call the legacy fn synchronously and fire
+on-done with `ok'."
   (require 'a3madkour-publish-garden)
+  (require 'a3madkour-publish-async)
   (let* ((notes-dir (make-temp-file "living-dispatch-" t))
          (site-dir  (make-temp-file "living-dispatch-site-" t))
-         (src       (expand-file-name "dispatch-note.org" notes-dir)))
+         (src       (expand-file-name "dispatch-note.org" notes-dir))
+         (legacy-fn (symbol-function 'a3madkour-pub-garden/publish-garden-file)))
     (unwind-protect
         (progn
           (make-directory (expand-file-name "data" site-dir))
@@ -77,8 +85,14 @@ is not what `note-section' returns)."
           (let ((a3madkour-pub/site-data-dir (file-name-as-directory
                                               (expand-file-name "data" site-dir)))
                 (a3madkour-pub/org-notes-dir notes-dir))
-            (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil)))
-              (a3-publish-living)))
+            (cl-letf (((symbol-function 'org-roam-db-sync) (lambda () nil))
+                      ((symbol-function 'a3madkour-pub-garden/publish-garden-file)
+                       (lambda (file _run &rest rest)
+                         (funcall legacy-fn file)
+                         (funcall (plist-get rest :on-done) 'ok))))
+              (let ((a3-pub-async--in-flight-run nil))
+                (with-a3-pub-async-sync
+                 (a3-publish-living)))))
           (should (file-exists-p
                    (expand-file-name "content/garden/dispatch-note/index.md"
                                      site-dir))))
@@ -94,6 +108,45 @@ sections (`research/themes', `research/questions') in
   (dolist (section '("research/themes" "research/questions"))
     (should (eq (cdr (assoc section a3madkour-pub-living--handlers))
                 'a3madkour-pub-research/publish-research-file))))
+
+(require 'a3madkour-publish-async)
+
+(ert-deftest a3madkour-pub-living-test/async-barrier-finishes-once ()
+  "Living walks N notes, barrier waits for all on-done before finish-publish."
+  (let ((finish-count 0))
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub/finish-publish)
+          (lambda (&rest _) (cl-incf finish-count)))
+         ;; Stub the collector to return 3 fake triples.
+         ((symbol-function 'a3madkour-pub-living--collect-triples)
+          (lambda ()
+            (list (list "garden" "/a.org" 'fake-garden-h)
+                  (list "garden" "/b.org" 'fake-garden-h)
+                  (list "library/reading" "/c.org" 'fake-library-h))))
+         ((symbol-function 'fake-garden-h)
+          (lambda (_file _run &rest rest)
+            (funcall (plist-get rest :on-done) 'ok)))
+         ((symbol-function 'fake-library-h)
+          (lambda (_file _run &rest rest)
+            (funcall (plist-get rest :on-done) 'ok))))
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-living))))
+    (should (= 1 finish-count))))
+
+(ert-deftest a3madkour-pub-living-test/async-empty-set-finishes-clean ()
+  "When no notes match any section, finish-publish still fires once."
+  (let ((finish-count 0))
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+         ((symbol-function 'a3madkour-pub/finish-publish)
+          (lambda (&rest _) (cl-incf finish-count)))
+         ((symbol-function 'a3madkour-pub-living--collect-triples) (lambda () nil)))
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-living))))
+    (should (= 1 finish-count))))
 
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here
