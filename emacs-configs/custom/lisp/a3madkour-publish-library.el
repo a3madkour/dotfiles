@@ -333,38 +333,51 @@ Resolves under `a3madkour-pub/site-data-dir'; errors if unset."
       (error "a3madkour-pub-library: a3madkour-pub/site-data-dir is nil"))
     (expand-file-name (nth 0 cfg) data-dir)))
 
-(defun a3madkour-pub-library/publish-library-file (file)
+(cl-defun a3madkour-pub-library/publish-library-file (file run &key on-done)
   "Publish a single library FILE to data/<medium>.yaml.
 
 Walks top-level headings via `org-element-parse-buffer', normalizes each
 via `--normalize-item', deduplicates slugs (WARN on collision; skip
 second), renders the YAML, writes if different.  Library items do NOT
-call `record-publish' (URL-less; per spec §6 step 8)."
-  (let* ((section (a3madkour-pub/note-section file))
-         (cfg (a3madkour-pub-library--config-for section))
-         (out-path (a3madkour-pub-library--yaml-path file cfg))
-         (ast (with-temp-buffer
-                (insert-file-contents file)
-                (org-mode)
-                (org-element-parse-buffer)))
-         (seen-slugs (make-hash-table :test 'equal))
-         (rows '()))
-    (org-element-map ast 'headline
-      (lambda (hl)
-        (when (= 1 (org-element-property :level hl))
-          (let ((row (a3madkour-pub-library--normalize-item hl section cfg file)))
-            (when row
-              (let ((slug (plist-get row :slug)))
-                (cond
-                 ((gethash slug seen-slugs)
-                  (a3madkour-pub-library--warn
-                   file slug "slug collision; skipping second occurrence"))
-                 (t
-                  (puthash slug t seen-slugs)
-                  (push row rows)))))))))
-    (let ((yaml (a3madkour-pub-library--render-library-yaml
-                 (nreverse rows) file)))
-      (a3madkour-pub-library--write-if-different out-path yaml))))
+call `record-publish' (URL-less; per spec §6 step 8).
+
+RUN is the a3-pub-async-run handle (used for log-step in later tasks).
+ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
+  (condition-case _err
+      (progn
+        (ignore run)
+        (let* ((section (a3madkour-pub/note-section file))
+               (cfg (a3madkour-pub-library--config-for section))
+               (out-path (a3madkour-pub-library--yaml-path file cfg))
+               (ast (with-temp-buffer
+                      (insert-file-contents file)
+                      (org-mode)
+                      (org-element-parse-buffer)))
+               (seen-slugs (make-hash-table :test 'equal))
+               (rows '()))
+          (org-element-map ast 'headline
+            (lambda (hl)
+              (when (= 1 (org-element-property :level hl))
+                (let ((row (a3madkour-pub-library--normalize-item hl section cfg file)))
+                  (when row
+                    (let ((slug (plist-get row :slug)))
+                      (cond
+                       ((gethash slug seen-slugs)
+                        (a3madkour-pub-library--warn
+                         file slug "slug collision; skipping second occurrence"))
+                       (t
+                        (puthash slug t seen-slugs)
+                        (push row rows)))))))))
+          (let ((yaml (a3madkour-pub-library--render-library-yaml
+                       (nreverse rows) file)))
+            (a3madkour-pub-library--write-if-different out-path yaml)))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (when on-done (funcall on-done 'err)))))
+
+(defun a3madkour-pub-library/planned-steps (_file)
+  "Return rough step count for B.2 library handler."
+  4)
 
 (provide 'a3madkour-publish-library)
 

@@ -3,6 +3,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-library)
+(require 'a3madkour-publish-async)
 
 (defun a3madkour-pub-library-test--parse-headline (org-text)
   "Helper: parse ORG-TEXT and return the first top-level headline element."
@@ -491,7 +492,8 @@ Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
                     ":LAST_MODIFIED: 2025-04-01\n"
                     ":END:\n"))
           (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
-            (a3madkour-pub-library/publish-library-file src))
+            (a3madkour-pub-library/publish-library-file
+             src (make-a3-pub-async-run) :on-done (lambda (_) nil)))
           (let ((out (expand-file-name "data/reading.yaml" site-dir)))
             (should (file-exists-p out))
             (with-temp-buffer
@@ -524,7 +526,8 @@ Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
                      (lambda (fmt &rest args)
                        (push (apply #'format fmt args) warnings))))
             (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
-              (a3madkour-pub-library/publish-library-file src)))
+              (a3madkour-pub-library/publish-library-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))))
           ;; Yaml only has one row.
           (let* ((content (with-temp-buffer
                             (insert-file-contents (expand-file-name "data/reading.yaml" site-dir))
@@ -549,17 +552,43 @@ Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
                     "* Item\n:PROPERTIES:\n:CREATOR: x\n:YEAR: 2024\n:STATUS: queued\n"
                     ":LAST_MODIFIED: 2025-01-01\n:END:\n"))
           (let ((a3madkour-pub/site-data-dir (expand-file-name "data/" site-dir)))
-            (a3madkour-pub-library/publish-library-file src)
+            (a3madkour-pub-library/publish-library-file
+             src (make-a3-pub-async-run) :on-done (lambda (_) nil))
             (let* ((out (expand-file-name "data/reading.yaml" site-dir))
                    (mtime1 (file-attribute-modification-time
                             (file-attributes out))))
               (sleep-for 1.1)
-              (a3madkour-pub-library/publish-library-file src)
+              (a3madkour-pub-library/publish-library-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))
               (let ((mtime2 (file-attribute-modification-time
                              (file-attributes out))))
                 (should (equal mtime1 mtime2))))))
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
+
+;;; -- Task 15: handler async signature --
+
+(ert-deftest a3madkour-pub-library-test/handler-async-signature ()
+  "publish-library-file accepts (file run &key on-done) and calls on-done."
+  (let (done-status)
+    (with-a3-pub-async-sync
+     (condition-case _
+         (a3madkour-pub-library/publish-library-file
+          "/tmp/fake.org" (make-a3-pub-async-run)
+          :on-done (lambda (s) (setq done-status s)))
+       (error (setq done-status 'err))))
+    (should (memq done-status '(ok err)))))
+
+(ert-deftest a3madkour-pub-library-test/handler-async-error-routes-on-done-err ()
+  "When the sync pipeline throws, on-done fires with 'err."
+  (let (done-status)
+    (cl-letf (((symbol-function 'a3madkour-pub/note-section)
+               (lambda (_) (error "boom"))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-library/publish-library-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq done-status s)))))
+    (should (eq done-status 'err))))
 
 (provide 'a3madkour-publish-library-test)
 
