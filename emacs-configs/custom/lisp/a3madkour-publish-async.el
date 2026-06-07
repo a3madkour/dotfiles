@@ -28,6 +28,24 @@
 bind this to t via `with-a3-pub-async-sync' so their `cl-letf'
 stubs continue to fire.")
 
+(defun a3-pub-async--ensure-batch-sync-mode ()
+  "When Emacs is noninteractive (batch mode), force `synchronous-p' on.
+
+`emacs --batch' does not wait for `make-process' children before
+calling `kill-emacs' — it tears down as soon as the top-level form
+returns, dropping pending sentinels on the floor.  The async
+publish pipeline's PDF/Word tail would be silently dropped under
+`a3-pub.sh' (the CLI invokes Emacs in batch mode).  Forcing sync
+mode in batch matches the pre-async-slice behavior: the publish
+pipeline runs inline and the CLI invocation blocks until
+completion."
+  (when noninteractive
+    (setq a3-pub-async--synchronous-p t)))
+
+;; Activate the toggle at load time so a3-pub.sh's `emacs --batch -l
+;; a3madkour-publish' picks it up before any `--eval' runs.
+(a3-pub-async--ensure-batch-sync-mode)
+
 (cl-defun a3-pub-async/run-process (cmd args
                                     &key name on-done stderr-buf stdout-buf cwd)
   "Spawn CMD with ARGS; invoke ON-DONE with (rc captured-tail) when done.
@@ -70,27 +88,41 @@ inline and fires ON-DONE in the calling frame (test path)."
           (when buf-auto-created (kill-buffer stderr-buf))
           nil)
       ;; Async path.
-      (make-process
-       :name (format "a3-pub-%s" name)
-       :command (cons cmd args)
-       :buffer stdout-buf
-       :stderr stderr-buf
-       :sentinel
-       (lambda (proc _event)
-         ;; Skip transient 'run'/'open' events; only exit/signal carry the rc.
-         (when (memq (process-status proc) '(exit signal))
-           (let* ((rc (process-exit-status proc))
-                  (raw (if stdout-buf
-                           (with-current-buffer stdout-buf (buffer-string))
-                         (with-current-buffer stderr-buf (buffer-string))))
-                  (lines (split-string raw "\n" t))
-                  (tail (if stdout-buf
-                            ;; stdout: full content (typically short, no truncation).
-                            raw
-                          ;; stderr: last 10 lines.
-                          (mapconcat #'identity (last lines 10) "\n"))))
-             (when on-done (funcall on-done rc tail))
-             (when buf-auto-created (kill-buffer stderr-buf)))))))))
+      (let ((proc
+             (make-process
+              :name (format "a3-pub-%s" name)
+              :command (cons cmd args)
+              :buffer stdout-buf
+              :stderr stderr-buf
+              :sentinel
+              (lambda (proc _event)
+                ;; Skip transient 'run'/'open' events; only exit/signal carry the rc.
+                (when (memq (process-status proc) '(exit signal))
+                  (let* ((rc (process-exit-status proc))
+                         (raw (if stdout-buf
+                                  (with-current-buffer stdout-buf (buffer-string))
+                                (with-current-buffer stderr-buf (buffer-string))))
+                         (lines (split-string raw "\n" t))
+                         (tail (if stdout-buf
+                                   ;; stdout: full content (typically short, no truncation).
+                                   raw
+                                 ;; stderr: last 10 lines.
+                                 (mapconcat #'identity (last lines 10) "\n"))))
+                    ;; Remove from live-processes when done so cancel
+                    ;; doesn't try to SIGINT a dead pid.  Go via the
+                    ;; defun wrapper (see comment on push wrapper).
+                    (when a3-pub-async--in-flight-run
+                      (a3-pub-async--remove-live-process
+                       a3-pub-async--in-flight-run proc))
+                    (when on-done (funcall on-done rc tail))
+                    (when buf-auto-created (kill-buffer stderr-buf))))))))
+        ;; Track the live process so cancel-current-run can SIGINT it.
+        ;; Push happens before the sentinel can fire (Emacs runs sentinels
+        ;; from the main loop, not synchronously from make-process).
+        (when a3-pub-async--in-flight-run
+          (a3-pub-async--push-live-process
+           a3-pub-async--in-flight-run proc))
+        proc))))
 
 (cl-defun a3-pub-async/barrier (n &key on-all-done)
   "Return a 1-arg report function.  After N calls, fires ON-ALL-DONE
@@ -120,6 +152,24 @@ Calls beyond N are silently ignored (defensive against double-fire)."
   planned-steps   ; integer
   completed-steps ; integer
   status)         ; :running / :ok / :err / :cancelled
+
+(defun a3-pub-async--push-live-process (run proc)
+  "Push PROC onto RUN's live-processes list.
+Helper around `setf' on the struct slot — defined as a plain
+`defun' AFTER `cl-defstruct' so the gv-expander for the slot is
+already registered when this function's body is interpreted.
+Calling `setf' on the slot accessor from inside a `cl-defun' body
+trips a void-function `\\(setf a3-pub-async-run-live-processes\\)'
+error under interpreted load (the cl-defstruct-generated setter is
+a gv-setter, not a named-function setter)."
+  (setf (a3-pub-async-run-live-processes run)
+        (cons proc (a3-pub-async-run-live-processes run))))
+
+(defun a3-pub-async--remove-live-process (run proc)
+  "Remove PROC from RUN's live-processes list.
+See `a3-pub-async--push-live-process'."
+  (setf (a3-pub-async-run-live-processes run)
+        (delq proc (a3-pub-async-run-live-processes run))))
 
 (defvar a3-pub-async--in-flight-run nil
   "The active run handle, or nil when no publish is in flight.")
@@ -224,6 +274,10 @@ ERR-SNIPPET, when non-nil, is inlined on the next line indented 14 cols."
 Signals user-error if a run is already in flight.  Delegates to the
 existing `a3madkour-pub/begin-publish' for accumulator setup.  Returns
 the new run handle."
+  ;; Defensive: re-run the batch-mode toggle in case `noninteractive' was
+  ;; rebound dynamically (test scenarios; some load-order edge cases where
+  ;; the load-time activation fires before `noninteractive' is set).
+  (a3-pub-async--ensure-batch-sync-mode)
   (when a3-pub-async--in-flight-run
     (when (fboundp 'pop-to-buffer)
       (pop-to-buffer (a3-pub-async/buffer)))
@@ -304,8 +358,9 @@ clears the mode-line indicator."
 (defun a3-pub-async/cancel-current-run ()
   "Cancel the in-flight run, if any.
 Sends SIGINT to every live process; status flag set first so sentinels
-firing in the next ms short-circuit.  Tmp dirs cleaned, accumulator
-discarded by finish-publish."
+firing in the next ms short-circuit.  Releases the lock via
+`a3-pub-async/finish-publish' so a subsequent publish can start in the
+same Emacs session.  Tmp dirs cleaned, accumulator discarded."
   (interactive)
   (let ((run a3-pub-async--in-flight-run))
     (when run
@@ -323,7 +378,14 @@ discarded by finish-publish."
       (dolist (d (a3-pub-async-run-tmp-dirs run))
         (when (and d (file-directory-p d))
           (ignore-errors (delete-directory d t))))
-      (message "a3-pub: cancel requested")
+      ;; Release the lock + clear the mode-line indicator by completing the
+      ;; lifecycle.  Without this, `a3-pub-async--in-flight-run' stays held
+      ;; and every subsequent publish hits `user-error' forever in this
+      ;; Emacs session.
+      (a3-pub-async/finish-publish run
+                                   :scope (a3-pub-async-run-scope run)
+                                   :status 'cancelled)
+      (message "a3-pub: cancel complete")
       t)))
 
 (defmacro with-a3-pub-async-sync (&rest body)
