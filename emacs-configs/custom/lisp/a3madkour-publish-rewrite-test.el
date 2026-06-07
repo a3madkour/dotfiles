@@ -913,6 +913,38 @@ written tmp file contains the @@hugo: shortcode in place of [cite:@k]."
       (should (cl-some (lambda (w) (string-match-p "lacks :ID:" w))
                        (plist-get result :warnings))))))
 
+(ert-deftest a3madkour-pub-rewrite-test/rewrite-link-file-prefix-no-display-strips-from-alt ()
+  "Bug 1.9: `[[file:diagram.svg]]` (no display text) must produce
+`alt=\"diagram.svg\"` — NOT `alt=\"file:diagram.svg\"`.
+
+`--parse-org-link' synthesizes text from path for the `[[path]]` form,
+so text comes back with the `file:` prefix intact even though
+`--strip-file-prefix-if-asset' strips it from path.  Without the fix,
+`rewrite-asset-link's' `(equal text path)` check fails (text has the
+prefix, path doesn't) → display defaults to the prefixed text →
+alt=\"file:diagram.svg\" lands in the bundle's <img>.
+
+Observable on `content/essays/example-multi/index.md' after the
+2026-06-07 figref fix."
+  (let ((tmp (file-name-as-directory (make-temp-file "a3-bug19-" t))))
+    (unwind-protect
+        (let ((svg (expand-file-name "diagram.svg" tmp)))
+          (with-temp-file svg (insert "<svg/>"))
+          (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                     (lambda (_id) nil))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_id) "x"))
+                    ((symbol-function 'a3madkour-pub--asset-resolve-path)
+                     (lambda (path _src)
+                       (list :kind 'page
+                             :abs-path (expand-file-name path tmp)
+                             :rel-path (concat "page/x/" path)))))
+            (let ((result (a3madkour-pub/rewrite-link
+                           "[[file:diagram.svg]]" nil)))
+              (should (string-match-p "alt=\"diagram\\.svg\"" (plist-get result :html)))
+              (should-not (string-match-p "alt=\"file:" (plist-get result :html))))))
+      (delete-directory tmp t))))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here

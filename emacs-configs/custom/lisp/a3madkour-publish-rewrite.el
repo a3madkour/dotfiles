@@ -319,7 +319,16 @@ See parent spec §6 for the per-link-type rules."
   (let* ((parsed (a3madkour-pub--parse-org-link org-link))
          (raw-path (plist-get parsed :path))
          (path (a3madkour-pub--strip-file-prefix-if-asset raw-path))
-         (text (plist-get parsed :text))
+         ;; Bug 1.9: when `--parse-org-link' synthesized text from path
+         ;; (the `[[path]]` no-display form returns text = path), and we
+         ;; stripped `file:' from path above, strip it from text too —
+         ;; otherwise downstream's `(equal text path)` "no display text"
+         ;; check fails and the asset rewriter emits `alt="file:NAME"'.
+         ;; Stripping unconditionally would clobber an author-given
+         ;; literal display string of `file:foo`, hence the equality
+         ;; guard.
+         (parsed-text (plist-get parsed :text))
+         (text (if (equal parsed-text raw-path) path parsed-text))
          (scheme (a3madkour-pub--link-scheme path)))
     (cond
      ;; id-link
