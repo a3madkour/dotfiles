@@ -195,7 +195,11 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
   # C: source-side math validation on the file's parent dir.
   a3_pub_check_math "$(dirname "$target_path")" || exit $?
-  exec emacs --batch \
+  # Task 26: propagate SIGTERM/SIGINT to the emacs child so its
+  # `kill-emacs-hook' runs (a3-pub-async--on-kill cleans tmp-dirs).
+  emacs_pid=
+  trap 'if [ -n "$emacs_pid" ]; then kill -TERM "$emacs_pid" 2>/dev/null; fi' TERM INT
+  emacs --batch \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
@@ -228,7 +232,10 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
                      (kill-emacs 1)))" \
     --eval "(kill-emacs 0)" \
-    "$@"
+    "$@" &
+  emacs_pid=$!
+  wait "$emacs_pid"
+  exit $?
 fi
 
 # F Task 15: --sync-citations flag intercept.  Refreshes library.bib via BBT
