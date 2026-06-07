@@ -18,6 +18,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'a3madkour-publish-async)
 (require 'a3madkour-publish-multi-filter)
 (require 'a3madkour-publish-multi-pdf)
 (require 'a3madkour-publish-multi-word)
@@ -78,38 +79,85 @@ Returns the path of the prepared source."
       (write-region (point-min) (point-max) prepared nil 'silent))
     prepared))
 
-(defun a3madkour-pub-multi/orchestrate (source-file slug bundle-dir)
-  "Dispatch PDF + Word backends for SOURCE-FILE / SLUG → BUNDLE-DIR.
-Each backend runs in `condition-case'.  Returns a plist:
-  (:pdf <abs-path-or-nil> :word <abs-path-or-nil>)"
+(cl-defun a3madkour-pub-multi/export-bundle (source-file slug bundle-dir
+                                                         &key run on-done)
+  "Async D.2 multi-export.  Dispatches PDF + Word backends in parallel
+via barrier; ON-DONE fires once with a plist:
+  (:status 'ok|'err :pdf <path-or-nil> :word <path-or-nil> :results <list>)
+
+When complete, patches downloads frontmatter on BUNDLE-DIR/index.md from
+the per-backend result paths.  When citations are present but no bib is
+available, the Word backend is skipped (barrier sized to 1).
+
+RUN is the optional `a3-pub-async-run' handle threaded to backends for
+log-step instrumentation."
   (let* ((tpl-dir (a3madkour-pub-multi--templates-dir))
          (bib-path (a3madkour-pub-multi--bib-path))
          (has-citations (a3madkour-pub-multi--has-citations-p source-file))
          (work-dir (expand-file-name (format "multi-export-%s/" slug)
                                      temporary-file-directory))
-         pdf-out word-out)
-    ;; PDF backend — use a prepared copy that pins #+EXPORT_FILE_NAME to slug.
-    (setq pdf-out
+         (skip-word (and has-citations (null bib-path)))
+         ;; PDF uses a prepared copy that pins #+EXPORT_FILE_NAME to slug.
+         (prepared
           (condition-case err
-              (let ((prepared (a3madkour-pub-multi--prepare-source-for-pdf
-                               source-file slug work-dir)))
-                (a3madkour-pub-multi-pdf/run prepared slug bundle-dir tpl-dir))
+              (a3madkour-pub-multi--prepare-source-for-pdf source-file slug work-dir)
             (error
-             (message "multi-export pdf backend error: %s" err)
-             nil)))
-    ;; Word backend — skip if citations present but no bib available.
-    ;; When skipped, word-out remains nil (not an error, just absent).
-    (when (or (not has-citations) bib-path)
-      (setq word-out
-            (condition-case err
-                (a3madkour-pub-multi-word/run source-file slug bundle-dir tpl-dir bib-path)
-              (error
-               (message "multi-export word backend error: %s" err)
-               nil))))
-    ;; Patch downloads frontmatter (idempotent).
-    (a3madkour-pub-multi--patch-downloads-frontmatter
-     (expand-file-name "index.md" bundle-dir) slug pdf-out word-out)
-    (list :pdf pdf-out :word word-out)))
+             (message "multi-export prepare-source error: %s" err)
+             source-file)))
+         (n (if skip-word 1 2))
+         (report
+          (a3-pub-async/barrier
+           n :on-all-done
+           (lambda (results)
+             (let* ((pdf-result (cl-find-if (lambda (r) (eq (plist-get r :backend) 'pdf))
+                                            results))
+                    (word-result (cl-find-if (lambda (r) (eq (plist-get r :backend) 'word))
+                                             results))
+                    (pdf-path (plist-get pdf-result :path))
+                    (word-path (plist-get word-result :path))
+                    (any-err (cl-some (lambda (r) (eq (plist-get r :status) 'err))
+                                      results))
+                    (status (if any-err 'err 'ok)))
+               (condition-case err
+                   (a3madkour-pub-multi--patch-downloads-frontmatter
+                    (expand-file-name "index.md" bundle-dir) slug pdf-path word-path)
+                 (error
+                  (message "multi-export frontmatter patch error: %s" err)))
+               (when on-done
+                 (funcall on-done (list :status status
+                                        :pdf pdf-path
+                                        :word word-path
+                                        :results results))))))))
+    (a3madkour-pub-multi-pdf/run prepared slug bundle-dir tpl-dir
+                                 :run run
+                                 :on-done
+                                 (lambda (r)
+                                   (funcall report (append (list :backend 'pdf) r))))
+    (unless skip-word
+      (a3madkour-pub-multi-word/run source-file slug bundle-dir tpl-dir bib-path
+                                    :run run
+                                    :on-done
+                                    (lambda (r)
+                                      (funcall report (append (list :backend 'word) r)))))))
+
+(defun a3madkour-pub-multi/orchestrate (source-file slug bundle-dir)
+  "Sync wrapper around `a3madkour-pub-multi/export-bundle'.
+Kept for callers that need the old return shape (e.g. B.4's
+after-essay-publish hook, which is fire-and-forget with no continuation
+slot).  Returns:
+  (:pdf <abs-path-or-nil> :word <abs-path-or-nil>)
+
+Wraps the call in `with-a3-pub-async-sync' so backend `make-process'
+calls degrade to synchronous `call-process' and the on-done callback
+fires before this function returns."
+  (let (result)
+    (with-a3-pub-async-sync
+     (a3madkour-pub-multi/export-bundle
+      source-file slug bundle-dir
+      :run nil
+      :on-done (lambda (r) (setq result r))))
+    (list :pdf (plist-get result :pdf)
+          :word (plist-get result :word))))
 
 (defun a3madkour-pub-multi--render-downloads-line (pdf word)
   "Return a YAML inline-flow `downloads: {…}' line, or nil if both missing."
