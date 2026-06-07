@@ -640,6 +640,67 @@ Asserts:
       (delete-directory notes-dir t)
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-b-failed-delete-surfaces-warning ()
+  "Bug 1.10: Step B's slug-shift orphan-bundle delete is fire-and-forget.
+When `--unpublish-delete-bundle' returns `'failed' (caught error inside
+the helper), the old bundle silently leaks: the manifest already points
+at the new URL by this point in the run, so the next publish's diff
+sees no `:slug-shifted' for the same id and never re-attempts.
+
+Self-healing across runs isn't reachable here (no manifest entry tracks
+the old URL anymore), so the minimum-viable fix surfaces the failure to
+the author via the result plist's `:orphan-warnings' (consumed by
+publish UI + check-orphans printer)."
+  (let* ((content-root (make-temp-file "a3-pub-content-b10-" t))
+         (asset-root   (make-temp-file "a3-pub-assets-b10-" t))
+         (notes-dir    (make-temp-file "a3-pub-notes-b10-" t))
+         (manifest-path (make-temp-file "a3-pub-history-b10-" nil ".yaml"))
+         (old-bundle (expand-file-name "garden/slug-a" content-root))
+         (new-bundle (expand-file-name "garden/slug-b" content-root)))
+    (unwind-protect
+        (progn
+          (make-directory old-bundle t)
+          (with-temp-file (expand-file-name "index.md" old-bundle) (insert "old"))
+          (make-directory new-bundle t)
+          (with-temp-file (expand-file-name "index.md" new-bundle) (insert "new"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-canonical-asset-root asset-root)
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'vc-backend) (lambda (_) nil))
+                      ;; Force delete-directory to signal an error so the
+                      ;; orphan-bundle delete returns 'failed.  The asset-dir
+                      ;; rename + bulk source-link rewrite paths don't call
+                      ;; delete-directory, so this only intercepts the orphan
+                      ;; bundle delete inside Step B.
+                      ((symbol-function 'delete-directory)
+                       (lambda (&rest _) (error "permission denied"))))
+              (a3madkour-pub-history/write-manifest
+               '((notes . [((id . "id-shift") (current_url . "/garden/slug-a/")
+                            (history . []) (state . "live"))])))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (puthash "id-shift" '("/garden/slug-b/" . live)
+                       a3madkour-pub--publish-run-accumulator)
+              (let* ((result (a3madkour-pub/finish-publish))
+                     (warns (plist-get result :orphan-warnings)))
+                ;; Slug-shift bookkeeping still completed (independent of the
+                ;; failed delete).
+                (should (equal (plist-get result :slug-shifted)
+                               '(("slug-a" . "slug-b"))))
+                ;; Bundle survives (stubbed delete failed).
+                (should (file-directory-p old-bundle))
+                ;; Author-visible WARN surfaces in :orphan-warnings.
+                (should warns)
+                (should (cl-some (lambda (w)
+                                   (and (string-match-p "slug-a" w)
+                                        (string-match-p "manual" w)))
+                                 warns))))))
+      (delete-directory content-root t)
+      (delete-directory asset-root t)
+      (delete-directory notes-dir t)
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
 ;; -- unpublish--recheck-live-note-links helper --
 
 (defmacro a3-pub-unpublish-test--with-tmp-source (file-var body-content &rest setup-body)

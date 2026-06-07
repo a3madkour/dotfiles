@@ -266,6 +266,20 @@ Returns:
               (unless (eq delete-result 'failed)
                 (a3madkour-pub-history/record-publish id nil 'removed)))))))
     ;; Step B: slug-shift sync.  Under 'deliberate, narrow to touched ids.
+    ;;
+    ;; Bug 1.10 (polish-and-bugfix-roadmap.md): the orphan-bundle delete
+    ;; below was previously fire-and-forget — `--unpublish-delete-bundle's'
+    ;; documented `'failed' return was discarded.  Unlike Step A (bug 1.1),
+    ;; we can't self-heal across runs here: by the time Step B runs, the
+    ;; per-section handler has already written the new bundle and called
+    ;; `record-publish' for the new URL, so the next run's diff sees
+    ;; `:stayed' (no URL change relative to the just-written manifest) and
+    ;; never re-attempts the old-slug delete.  Net result was a stray
+    ;; `content/<section>/<old-slug>/' bundle Hugo would build as a
+    ;; duplicate page, invisible to the manifest.  Minimum-viable fix:
+    ;; capture the `'failed' return, append an author-visible WARN to
+    ;; `:orphan-warnings' (consumed by the publish-UI buffer + the
+    ;; check-orphans printer) so the orphan surfaces for manual cleanup.
     (let ((deliberate-ids
            (when (eq scope 'deliberate)
              (let ((ids nil))
@@ -290,14 +304,23 @@ Returns:
                   ;; new slug; without this call the old bundle stays as dead
                   ;; content.  Runs regardless of asset-rename outcome — the
                   ;; bundle and the asset dir are independent artifacts.
-                  (a3madkour-pub--unpublish-delete-bundle
-                   (car old-parts) (cdr old-parts)))
+                  (let ((delete-result
+                         (a3madkour-pub--unpublish-delete-bundle
+                          (car old-parts) (cdr old-parts))))
+                    (when (eq delete-result 'failed)
+                      (push (format
+                             "WARN: slug-shift %s → %s left orphan bundle at %s; manual cleanup recommended"
+                             old-slug new-slug old-url)
+                            orphan-warnings))))
                 (push (cons old-slug new-slug) slug-shifted-result)))))))
     ;; Step C: re-link-check (read-only; runs in dry-run too).  Skipped under 'deliberate.
+    ;; Accumulate onto `orphan-warnings' via push (mirrors Step B's bug-1.10
+    ;; contributions); the final return below nreverses once for insertion
+    ;; order.
     (when (and (not (eq scope 'deliberate))
                (> (hash-table-count removed-set) 0))
-      (setq orphan-warnings
-            (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))
+      (dolist (w (a3madkour-pub--unpublish-recheck-live-note-links removed-set))
+        (push w orphan-warnings)))
     ;; B.0: clear manifest snapshot now that the publish run is over.
     ;; Next publish run's begin-publish will populate it fresh.
     (setq a3madkour-pub--manifest-snapshot nil)
@@ -305,7 +328,7 @@ Returns:
           :stayed (plist-get diff :stayed)
           :removed (if (eq scope 'deliberate) nil removed)
           :slug-shifted (nreverse slug-shifted-result)
-          :orphan-warnings orphan-warnings)))
+          :orphan-warnings (nreverse orphan-warnings))))
 
 (defun a3madkour-pub--unpublish-rename-asset-dir (old-slug new-slug &optional canonical-root)
   "Rename `<CANONICAL-ROOT>/page/<OLD-SLUG>/' → `<NEW-SLUG>/'.
