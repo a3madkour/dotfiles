@@ -331,5 +331,19 @@ discarded by finish-publish."
   (declare (indent 0))
   `(let ((a3-pub-async--synchronous-p t)) ,@body))
 
+(defun a3-pub-async--on-kill ()
+  "Hook on `kill-emacs-hook'.  When a run is in flight, delete its
+tmp-dirs.  This is the cleanup path for `SIGTERM' delivered to the
+publish-driver Emacs process (a3-pub.sh's signal trap → SIGTERM →
+this hook runs as Emacs exits)."
+  (let ((run a3-pub-async--in-flight-run))
+    (when run
+      (dolist (d (a3-pub-async-run-tmp-dirs run))
+        (when (and d (file-directory-p d))
+          (ignore-errors (delete-directory d t))))
+      t)))
+
+(add-hook 'kill-emacs-hook #'a3-pub-async--on-kill)
+
 (provide 'a3madkour-publish-async)
 ;;; a3madkour-publish-async.el ends here

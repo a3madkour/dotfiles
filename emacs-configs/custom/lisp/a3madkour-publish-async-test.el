@@ -315,5 +315,21 @@ a3-publish-living tail-called emit-yaml."
            (kill-buffer stdout-buf)))))
     (should (string-match-p "HELLO" seen-tail))))
 
+(ert-deftest a3-pub-async-test/on-kill-cleans-tmp-dirs ()
+  "When kill-emacs-hook runs with an in-flight run, tmp-dirs are deleted."
+  (let* ((tmp1 (make-temp-file "a3-pub-onkill-" t))
+         (tmp2 (make-temp-file "a3-pub-onkill-" t))
+         (run (make-a3-pub-async-run :status :running
+                                     :tmp-dirs (list tmp1 tmp2))))
+    (let ((a3-pub-async--in-flight-run run))
+      (a3-pub-async--on-kill))
+    (should-not (file-directory-p tmp1))
+    (should-not (file-directory-p tmp2))))
+
+(ert-deftest a3-pub-async-test/on-kill-noop-when-idle ()
+  "When no run is in flight, on-kill does nothing."
+  (let ((a3-pub-async--in-flight-run nil))
+    (should-not (a3-pub-async--on-kill))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
