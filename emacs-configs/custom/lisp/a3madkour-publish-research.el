@@ -279,7 +279,7 @@ Reads FILE into a temp buffer, activates `org-mode', parses AST."
 
 ;;; Entry point
 
-(defun a3madkour-pub-research/publish-research-file (file)
+(cl-defun a3madkour-pub-research/publish-research-file (file run &key on-done)
   "Publish a single research FILE to content/research/<type>/<slug>/index.md.
 
 Pipeline (spec §3):
@@ -290,60 +290,73 @@ Pipeline (spec §3):
 
 Two cascade types share this function; the internal branch on #+HUGO_SECTION:
 selects the per-type normalizer symbol and controls whether the outputs
-parse/strip steps run."
-  (let* ((md        (a3madkour-pub/note-metadata file))
-         (id        (plist-get md :id))
-         (slug      (plist-get md :slug))
-         (section   (plist-get md :section))   ; e.g. "research/themes"
-         (new-url   (a3madkour-pub/note-url file))
-         (site-root (a3madkour-pub-research--site-root))
-         (content-subdir (a3madkour-pub-research--section-to-content-subdir section))
-         (bundle-dir (expand-file-name
-                      (format "content/%s/%s/" content-subdir slug)
-                      site-root))
-         (out-path   (expand-file-name "index.md" bundle-dir))
-         (norm-sym   (a3madkour-pub-research--section-to-normalize-sym section))
-         (question-p (string= section "research/questions"))
-         ;; Step 1: For questions, parse outputs BEFORE the body is stripped.
-         (outputs    (when question-p
-                       (a3madkour-pub-research--question-outputs-from-file file)))
-         ;; Step 2: pre-export rewrite.  For questions, we also need to strip
-         ;; the outputs subtree from the file before ox-hugo sees it.
-         (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
-                      file id "a3-pub-research"))
-         ;; Step 3: If question, strip outputs subtree from the temp source.
-         ;; We do this by rewriting tmp-src in-place (new write to same path).
-         (exported
-          (unwind-protect
-              (progn
-                (when question-p
-                  (let ((stripped (a3madkour-pub-research--strip-outputs-subtree
-                                   (with-temp-buffer
-                                     (insert-file-contents tmp-src)
-                                     (buffer-string)))))
-                    (with-temp-file tmp-src (insert stripped))))
-                ;; Step 4: ox-hugo export.
-                (a3madkour-pub-export/export-file tmp-src))
-            ;; Always delete the tmp file.
-            (when (file-exists-p tmp-src)
-              (delete-file tmp-src))))
-         ;; Step 5: inject description before normalize.
-         (with-desc  (a3madkour-pub-frontmatter--inject-description
-                      (plist-get exported :frontmatter) file))
-         ;; Step 6: per-type normalize.
-         (normalized (a3madkour-pub-frontmatter/normalize
-                      norm-sym with-desc file))
-         ;; Step 7 (question-only): inject parsed outputs into frontmatter.
-         (final-fm   (a3madkour-pub-research--inject-outputs normalized outputs))
-         (body       (plist-get exported :body)))
-    ;; Step 8: asset copy.
-    (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
-    ;; Step 9: write bundle.
-    (a3madkour-pub-research--write-if-different
-     out-path
-     (concat (a3madkour-pub-research--render-frontmatter final-fm) body))
-    ;; Step 10: record publish.
-    (a3madkour-pub-history/record-publish id new-url 'live)))
+parse/strip steps run.
+
+RUN is the a3-pub-async-run handle (used for log-step in later tasks).
+ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
+  (condition-case _err
+      (progn
+        (ignore run)
+        (let* ((md        (a3madkour-pub/note-metadata file))
+               (id        (plist-get md :id))
+               (slug      (plist-get md :slug))
+               (section   (plist-get md :section))   ; e.g. "research/themes"
+               (new-url   (a3madkour-pub/note-url file))
+               (site-root (a3madkour-pub-research--site-root))
+               (content-subdir (a3madkour-pub-research--section-to-content-subdir section))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/" content-subdir slug)
+                            site-root))
+               (out-path   (expand-file-name "index.md" bundle-dir))
+               (norm-sym   (a3madkour-pub-research--section-to-normalize-sym section))
+               (question-p (string= section "research/questions"))
+               ;; Step 1: For questions, parse outputs BEFORE the body is stripped.
+               (outputs    (when question-p
+                             (a3madkour-pub-research--question-outputs-from-file file)))
+               ;; Step 2: pre-export rewrite.  For questions, we also need to strip
+               ;; the outputs subtree from the file before ox-hugo sees it.
+               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                            file id "a3-pub-research"))
+               ;; Step 3: If question, strip outputs subtree from the temp source.
+               ;; We do this by rewriting tmp-src in-place (new write to same path).
+               (exported
+                (unwind-protect
+                    (progn
+                      (when question-p
+                        (let ((stripped (a3madkour-pub-research--strip-outputs-subtree
+                                         (with-temp-buffer
+                                           (insert-file-contents tmp-src)
+                                           (buffer-string)))))
+                          (with-temp-file tmp-src (insert stripped))))
+                      ;; Step 4: ox-hugo export.
+                      (a3madkour-pub-export/export-file tmp-src))
+                  ;; Always delete the tmp file.
+                  (when (file-exists-p tmp-src)
+                    (delete-file tmp-src))))
+               ;; Step 5: inject description before normalize.
+               (with-desc  (a3madkour-pub-frontmatter--inject-description
+                            (plist-get exported :frontmatter) file))
+               ;; Step 6: per-type normalize.
+               (normalized (a3madkour-pub-frontmatter/normalize
+                            norm-sym with-desc file))
+               ;; Step 7 (question-only): inject parsed outputs into frontmatter.
+               (final-fm   (a3madkour-pub-research--inject-outputs normalized outputs))
+               (body       (plist-get exported :body)))
+          ;; Step 8: asset copy.
+          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          ;; Step 9: write bundle.
+          (a3madkour-pub-research--write-if-different
+           out-path
+           (concat (a3madkour-pub-research--render-frontmatter final-fm) body))
+          ;; Step 10: record publish.
+          (a3madkour-pub-history/record-publish id new-url 'live))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (when on-done (funcall on-done 'err)))))
+
+(defun a3madkour-pub-research/planned-steps (_file)
+  "Return rough step count for B.3 research handler."
+  3)
 
 (provide 'a3madkour-publish-research)
 

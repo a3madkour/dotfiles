@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'a3madkour-publish-research)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-research--module-loads ()
   "Smoke: module loadable and exposes publish-research-file."
@@ -261,7 +262,8 @@ Body before.
             ;; defvar leaks into subsequent tests.
             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
               (a3madkour-pub/begin-publish)
-              (a3madkour-pub-research/publish-research-file src)
+              (a3madkour-pub-research/publish-research-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))
               (a3madkour-pub/finish-publish)))
           (let ((out (expand-file-name
                       "content/research/themes/example-theme/index.md" site-dir)))
@@ -312,7 +314,8 @@ Body before.
                 (a3madkour-pub/org-notes-dir notes-dir))
             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
               (a3madkour-pub/begin-publish)
-              (a3madkour-pub-research/publish-research-file src)
+              (a3madkour-pub-research/publish-research-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))
               (a3madkour-pub/finish-publish)))
           (let ((out (expand-file-name
                       "content/research/questions/example-question/index.md" site-dir)))
@@ -371,9 +374,34 @@ Body before.
                      (lambda (_n) ""))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
-            (a3madkour-pub-research/publish-research-file tmp-src)
+            (a3madkour-pub-research/publish-research-file
+             tmp-src (make-a3-pub-async-run) :on-done (lambda (_) nil))
             (should (equal captured-id "research-id-55"))))
       (when (file-exists-p tmp-src) (delete-file tmp-src)))))
+
+;;; -- Task 16: handler async signature --
+
+(ert-deftest a3madkour-pub-research-test/handler-async-signature ()
+  "publish-research-file accepts (file run &key on-done) and calls on-done."
+  (let (done-status)
+    (with-a3-pub-async-sync
+     (condition-case _
+         (a3madkour-pub-research/publish-research-file
+          "/tmp/fake.org" (make-a3-pub-async-run)
+          :on-done (lambda (s) (setq done-status s)))
+       (error (setq done-status 'err))))
+    (should (memq done-status '(ok err)))))
+
+(ert-deftest a3madkour-pub-research-test/handler-async-error-routes-on-done-err ()
+  "When the sync pipeline throws, on-done fires with 'err."
+  (let (done-status)
+    (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+               (lambda (_) (error "boom"))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub-research/publish-research-file
+        "/tmp/fake.org" (make-a3-pub-async-run)
+        :on-done (lambda (s) (setq done-status s)))))
+    (should (eq done-status 'err))))
 
 (provide 'a3madkour-publish-research-test)
 
