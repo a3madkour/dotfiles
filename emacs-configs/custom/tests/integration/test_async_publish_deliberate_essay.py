@@ -1,10 +1,13 @@
 """Integration test: async deliberate publish of an example essay.
 
-Runs `a3-pub.sh --publish-deliberate` against a copied example-multi
-fixture and asserts:
+Runs `a3-pub.sh --skip-math-check --publish-deliberate` against a copied
+example-multi fixture and asserts:
   - Exit code 0.
   - Site data url-history.yaml has a non-empty notes list.
   - The site/data/url-history.yaml shows the published note in 'live' state.
+
+`--skip-math-check` keeps the test focused on the publish pipeline — the
+math validator has its own dedicated tests under tools/check_math.py.
 """
 import pathlib
 import subprocess
@@ -20,7 +23,7 @@ def test_async_publish_deliberate_essay(required_binaries, pub_env,
         import pytest
         pytest.skip(f"missing fixture {FIXTURE_ORG}")
     rc = subprocess.run(
-        [str(a3_pub_sh), "--publish-deliberate", str(FIXTURE_ORG)],
+        [str(a3_pub_sh), "--skip-math-check", "--publish-deliberate", str(FIXTURE_ORG)],
         env=pub_env, capture_output=True, text=True, timeout=300,
     )
     assert rc.returncode == 0, (
