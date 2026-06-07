@@ -259,7 +259,11 @@ clears the mode-line indicator."
     (unwind-protect
         (progn
           (a3madkour-pub/finish-publish :scope scope)
-          (when (and (eq status 'ok) (eq scope 'deliberate))
+          ;; Citations flush fires on both deliberate and living per the
+          ;; original F slice behavior (a3-publish-deliberate AND
+          ;; a3-publish-living both tail-called emit-yaml).  Gated on
+          ;; status=ok only — cancelled / err skip the flush.
+          (when (eq status 'ok)
             (when (require 'a3madkour-publish-citations nil 'noerror)
               (a3madkour-pub-citations/emit-yaml :mode 'merge))))
       (setq a3-pub-async--in-flight-run nil)

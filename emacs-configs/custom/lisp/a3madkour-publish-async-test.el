@@ -279,5 +279,24 @@ with results in registration order."
     (should (eq (lookup-key a3-pub-mode-map (kbd "C-c C-c"))
                 'a3-pub-async/cancel-current-run))))
 
+(ert-deftest a3-pub-async-test/finish-ok-fires-citation-emit-on-living ()
+  "Citations emit-yaml fires on (status='ok, scope='living) too — matches
+the pre-async F slice behavior where BOTH a3-publish-deliberate and
+a3-publish-living tail-called emit-yaml."
+  ;; Preload citations so the (require ...) inside finish-publish is a
+  ;; no-op — otherwise loading the real file would overwrite the cl-letf
+  ;; stub on emit-yaml.
+  (require 'a3madkour-publish-citations)
+  (let* ((run (make-a3-pub-async-run :id 'r :status :running
+                                     :buffer (a3-pub-async/buffer)
+                                     :start-time (current-time)))
+         (emit-fired nil))
+    (let ((a3-pub-async--in-flight-run run))
+      (cl-letf (((symbol-function 'a3madkour-pub/finish-publish) (lambda (&rest _) nil))
+                ((symbol-function 'a3madkour-pub-citations/emit-yaml)
+                 (lambda (&rest _) (setq emit-fired t))))
+        (a3-pub-async/finish-publish run :scope 'living :status 'ok)
+        (should emit-fired)))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here
