@@ -14,6 +14,7 @@
 (require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-rewrite)         ; for --html-escape
+(require 'a3madkour-publish-async)           ; for run-process + with-a3-pub-async-sync
 
 (defgroup a3madkour-pub-assets nil
   "Asset link handling for the a3madkour-publish library."
@@ -273,6 +274,47 @@ Returns the absolute destination path (no I/O performed)."
            (format "%s-%s" base hash))
          dest-dir))))))
 
+(defun a3madkour-pub--asset-do-move-async (src dest dry-run on-done)
+  "Async variant of `a3madkour-pub--asset-do-move'.
+
+Calls ON-DONE with the result plist when the move (or git mv → fallback)
+completes.
+
+Result plist shapes:
+  (:method dry-run :info \"would move: SRC -> DEST\")  ;; when dry-run
+  (:method git-mv  :info \"...\")                       ;; when git mv succeeds
+  (:method mv      :info \"...\")                       ;; when not git, OR git mv failed → rename-file
+  (:method failed  :rc <rc>)                            ;; if rename-file also raised
+
+Behavior change vs. the prior sync function: a non-zero git-mv exit no
+longer signals an error.  Instead the async path falls through to
+`rename-file' (mirroring the not-git branch), and only routes to
+:method 'failed when that secondary attempt also raises.  Caller is
+responsible for creating DEST's directory if needed."
+  (when (not dry-run)
+    (make-directory (file-name-directory dest) t))
+  (cond
+   (dry-run
+    (funcall on-done (list :method 'dry-run
+                           :info (format "would move: %s -> %s" src dest))))
+   ((eq (vc-backend src) 'Git)
+    (a3-pub-async/run-process
+     "git" (list "mv" src dest)
+     :name "asset-git-mv"
+     :on-done
+     (lambda (rc _tail)
+       (if (zerop rc)
+           (funcall on-done (list :method 'git-mv
+                                  :info (format "moved (git mv): %s -> %s" src dest)))
+         (condition-case _
+             (progn (rename-file src dest)
+                    (funcall on-done (list :method 'mv
+                                           :info (format "moved (fallback): %s -> %s" src dest))))
+           (error (funcall on-done (list :method 'failed :rc rc))))))))
+   (t (rename-file src dest)
+      (funcall on-done (list :method 'mv
+                             :info (format "moved: %s -> %s" src dest))))))
+
 (defun a3madkour-pub--asset-do-move (src dest dry-run)
   "Move SRC to DEST.  Uses `git mv' if SRC is git-tracked, plain rename otherwise.
 
@@ -282,24 +324,15 @@ When DRY-RUN is non-nil, no I/O performed; returns
 When DRY-RUN is nil, performs the move and returns one of:
   (:method git-mv :info \"moved (git mv): SRC -> DEST\")
   (:method mv     :info \"moved: SRC -> DEST\")
+  (:method failed :rc <rc>)                ;; git mv non-zero AND rename-file raised
 
-Caller is responsible for creating DEST's directory if needed."
-  (when (not dry-run)
-    (make-directory (file-name-directory dest) t))
-  (cond
-   (dry-run
-    (list :method 'dry-run
-          :info (format "would move: %s -> %s" src dest)))
-   ((eq (vc-backend src) 'Git)
-    (let ((rc (call-process "git" nil nil nil "mv" src dest)))
-      (unless (zerop rc)
-        (error "git mv failed (rc=%d): %s -> %s" rc src dest)))
-    (list :method 'git-mv
-          :info (format "moved (git mv): %s -> %s" src dest)))
-   (t
-    (rename-file src dest)
-    (list :method 'mv
-          :info (format "moved: %s -> %s" src dest)))))
+Sync wrapper around `a3madkour-pub--asset-do-move-async'.  Caller is
+responsible for creating DEST's directory if needed."
+  (let (result)
+    (with-a3-pub-async-sync
+     (a3madkour-pub--asset-do-move-async
+      src dest dry-run (lambda (r) (setq result r))))
+    result))
 
 (defun a3madkour-pub--asset-rewrite-source-link (org-file old-link new-link)
   "In ORG-FILE, replace every occurrence of OLD-LINK with NEW-LINK.

@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-assets)
+(require 'a3madkour-publish-async)
 
 ;; -- --asset-resolve-path: classification --
 
@@ -937,6 +938,43 @@
                 (let ((rel (plist-get result :rel-path)))
                   (should-not (and rel (string-match-p "page//" rel))))))))
       (delete-directory tmp t))))
+
+;; -- --asset-do-move-async (Task 23) --
+
+(ert-deftest a3madkour-pub-assets-test/git-mv-async-success ()
+  "Async variant returns :method 'git-mv on rc=0."
+  (let (result)
+    (cl-letf (((symbol-function 'vc-backend) (lambda (_) 'Git))
+              ((symbol-function 'call-process) (lambda (&rest _) 0))
+              ((symbol-function 'make-directory) (lambda (&rest _) nil)))
+      (with-a3-pub-async-sync
+       (a3madkour-pub--asset-do-move-async
+        "/src" "/dst" nil
+        (lambda (r) (setq result r)))))
+    (should (eq (plist-get result :method) 'git-mv))))
+
+(ert-deftest a3madkour-pub-assets-test/git-mv-async-fallback-on-failure ()
+  "When git mv exits non-zero, async path falls through to rename-file."
+  (let (result rename-called)
+    (cl-letf (((symbol-function 'vc-backend) (lambda (_) 'Git))
+              ((symbol-function 'call-process) (lambda (&rest _) 1))
+              ((symbol-function 'make-directory) (lambda (&rest _) nil))
+              ((symbol-function 'rename-file)
+               (lambda (&rest _) (setq rename-called t))))
+      (with-a3-pub-async-sync
+       (a3madkour-pub--asset-do-move-async
+        "/src" "/dst" nil
+        (lambda (r) (setq result r)))))
+    (should rename-called)
+    (should (eq (plist-get result :method) 'mv))))
+
+(ert-deftest a3madkour-pub-assets-test/do-move-sync-wrapper-still-works ()
+  "The existing sync entry-point is preserved via the wrapper."
+  (cl-letf (((symbol-function 'vc-backend) (lambda (_) 'Git))
+            ((symbol-function 'call-process) (lambda (&rest _) 0))
+            ((symbol-function 'make-directory) (lambda (&rest _) nil)))
+    (let ((result (a3madkour-pub--asset-do-move "/src" "/dst" nil)))
+      (should (eq (plist-get result :method) 'git-mv)))))
 
 (provide 'a3madkour-publish-assets-test)
 
