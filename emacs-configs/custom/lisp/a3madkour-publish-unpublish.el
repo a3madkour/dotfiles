@@ -159,12 +159,14 @@ Return values:
   'failed  — bundle existed but `delete-directory' signalled an error.
              The error is caught and reported via `message' with a `[a3-pub]
              delete-bundle FAILED' prefix so the publish log surfaces it.
-             The manifest is NOT reset; callers may treat this as transient.
 
-B.1.1 follow-up: prior to this slice, a thrown error from `delete-directory'
-propagated into `finish-publish' and aborted the publish run with no clear
-attribution.  Visibility-only fix — retry / manifest-state reset for
-self-healing on a subsequent run is left as a future task."
+`finish-publish' callers MUST inspect this return: on `'failed', do NOT
+mark the manifest entry `removed' — leave it at its prior state (`live' /
+`draft') so the diff on the next publish run re-detects the id under
+`:removed' and retries the delete.  Without that gate, a single failed
+delete (wrong content-root, permission error, transient FS issue) would
+silently orphan the on-disk bundle forever.  (Bug 1.1 in
+`docs/superpowers/specs/2026-06-07-polish-and-bugfix-roadmap.md'.)"
   (let* ((root (or content-root (a3madkour-pub--site-content-dir-effective)))
          (bundle (file-name-as-directory
                   (expand-file-name (format "%s/%s" section slug) root))))
@@ -240,6 +242,17 @@ Returns:
          (removed-set (make-hash-table :test 'equal))
          slug-shifted-result orphan-warnings)
     ;; Step A: sweep.  Skipped under 'deliberate.
+    ;;
+    ;; Bug 1.1 (polish-and-bugfix-roadmap.md): only advance the manifest to
+    ;; `removed' when `--unpublish-delete-bundle' actually succeeded (or the
+    ;; bundle was already absent — also a no-op).  When the delete signalled
+    ;; an error and returned `'failed', leave the manifest entry at its
+    ;; previous state (`live' / `draft') so the NEXT publish run's diff
+    ;; re-includes the id under `:removed' and retries the delete.  This is
+    ;; the self-healing contract — without it, a single failed delete (wrong
+    ;; content-root, permission error, transient FS issue) would silently
+    ;; orphan the on-disk bundle forever, because the diff would never
+    ;; surface the id again once its manifest entry said `removed'.
     (unless (eq scope 'deliberate)
       (dolist (id removed)
         (puthash id t removed-set)
@@ -248,8 +261,10 @@ Returns:
                (url (when entry (alist-get 'current_url entry)))
                (parts (when url (a3madkour-pub--unpublish-url-to-section-slug url))))
           (when (and parts (not dry-run))
-            (a3madkour-pub--unpublish-delete-bundle (car parts) (cdr parts))
-            (a3madkour-pub-history/record-publish id nil 'removed)))))
+            (let ((delete-result
+                   (a3madkour-pub--unpublish-delete-bundle (car parts) (cdr parts))))
+              (unless (eq delete-result 'failed)
+                (a3madkour-pub-history/record-publish id nil 'removed)))))))
     ;; Step B: slug-shift sync.  Under 'deliberate, narrow to touched ids.
     (let ((deliberate-ids
            (when (eq scope 'deliberate)

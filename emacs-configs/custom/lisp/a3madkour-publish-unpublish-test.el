@@ -252,6 +252,49 @@ B.1.1: prior contract was to propagate; updated to catch + WARN."
       (when (file-exists-p manifest-path) (delete-file manifest-path))
       (delete-directory content-root t))))
 
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-a-failed-delete-keeps-manifest-state ()
+  "Bug 1.1: when --unpublish-delete-bundle returns 'failed, finish-publish
+must NOT advance the manifest to `removed' — otherwise the next run's diff
+won't surface the id under :removed and the orphan bundle persists forever.
+
+Self-healing contract: on a 'failed delete, manifest stays at live/draft;
+the next publish run's diff re-includes the id in :removed and retries."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (bundle (expand-file-name "garden/gone" content-root))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (manifest `((notes . [((id . "id-gone")
+                                       (current_url . "/garden/gone/")
+                                       (history . [])
+                                       (state . "live"))]))))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'a3madkour-pub-history--now-iso)
+                       (lambda () "2026-05-24T12:00:00Z")))
+              (a3madkour-pub-history/write-manifest manifest)
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                         (lambda () (make-hash-table :test 'equal)))
+                        ;; Force delete-directory to signal an error so
+                        ;; --unpublish-delete-bundle returns 'failed.
+                        ((symbol-function 'delete-directory)
+                         (lambda (&rest _) (error "permission denied"))))
+                (let ((result (a3madkour-pub/finish-publish)))
+                  ;; Diff still reports the id as removed from the source set.
+                  (should (equal (plist-get result :removed) '("id-gone")))
+                  ;; Bundle survives (the stubbed delete failed).
+                  (should (file-directory-p bundle))
+                  ;; Manifest must stay at "live" so the next run retries.
+                  (let* ((m (a3madkour-pub-history/read-manifest))
+                         (note (aref (alist-get 'notes m) 0)))
+                    (should (equal (alist-get 'state note) "live"))))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
 (ert-deftest a3madkour-pub-unpublish-test/finish-publish-dry-run-no-mutation ()
   ":dry-run t skips bundle delete AND manifest mutation; still reports :removed."
   (let* ((content-root (make-temp-file "a3-pub-content-" t))
