@@ -788,7 +788,7 @@
           (with-temp-file org-file
             (insert "* H\n[[file:diagram.svg]]\n"))
           (cl-letf (((symbol-function 'a3madkour-pub/rewrite-asset-link)
-                     (lambda (_path _text source-note-id &optional _dry-run)
+                     (lambda (_path _text source-note-id &optional _dry-run _source-file)
                        (setq captured-source-note-id source-note-id)
                        (list :inert "(stub)" :warnings nil))))
             (a3madkour-pub/asset-validate-and-copy
@@ -810,7 +810,7 @@
           (with-temp-file org-file
             (insert "* H\n[[file:diagram.svg]]\n"))
           (cl-letf (((symbol-function 'a3madkour-pub/rewrite-asset-link)
-                     (lambda (_path _text source-note-id &optional _dry-run)
+                     (lambda (_path _text source-note-id &optional _dry-run _source-file)
                        (setq captured-source-note-id source-note-id)
                        (list :inert "(stub)" :warnings nil))))
             ;; Should NOT signal — formerly threw user-error on "from-validate".

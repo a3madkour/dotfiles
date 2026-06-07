@@ -502,6 +502,98 @@ Body text.
             (should (string-match-p "fig\\.svg" index-body))))
       (delete-directory tmp t))))
 
+(ert-deftest a3madkour-pub-essays-test/figure-ref-round-trip-when-id-not-in-orgroam-db ()
+  "Mirrors the production failure mode: org-roam DB doesn't index ~/org/essays/
+so `--id-to-file' returns nil for essay UUIDs.  The rewriter still has the
+source-file in scope (via `rewrite-to-tmp-file's first arg) and MUST thread
+it through so the essays-aware asset branch resolves.
+
+Without this fix the index.md ends up with `(missing asset: fig.svg)' instead
+of the `<img>' element."
+  (let* ((tmp (file-name-as-directory
+               (make-temp-file "a3-figure-roundtrip-no-db-" t)))
+         (essays-dir (file-name-as-directory (expand-file-name "essays/" tmp)))
+         (id "cafef00d-1234-5678-9abc-def012345678")
+         (slug "test-figure-essay-no-db")
+         (org-file (expand-file-name (concat slug ".org") essays-dir))
+         (asset-dir (file-name-as-directory
+                     (expand-file-name (format "assets/%s/" id) essays-dir)))
+         (asset (expand-file-name "fig.svg" asset-dir))
+         (site-root (file-name-as-directory (expand-file-name "site/" tmp)))
+         (bundle-dir (file-name-as-directory
+                      (expand-file-name (format "content/essays/%s/" slug)
+                                        site-root))))
+    (unwind-protect
+        (progn
+          (make-directory asset-dir t)
+          (make-directory bundle-dir t)
+          (with-temp-file asset (insert "<svg/>"))
+          (with-temp-file org-file
+            (insert (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+title: Test figure essay no db
+#+date: 2026-06-07
+#+hugo_publish: t
+#+hugo_section: essays
+#+hugo_slug: %s
+
+Body text.
+
+[[file:fig.svg]]
+"
+                            id slug)))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_f)
+                       (list :id id :slug slug :section "essays"
+                             :state 'live :title "Test figure essay no db")))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_f) (format "/essays/%s/" slug)))
+                    ((symbol-function 'a3madkour-pub-essays--site-root)
+                     (lambda () site-root))
+                    ;; KEY DIFFERENCE: id-to-file returns nil (DB miss),
+                    ;; mirroring production where ~/org/essays/ is not in
+                    ;; org-roam-directory.
+                    ((symbol-function 'a3madkour-pub--id-to-file)
+                     (lambda (_i) nil))
+                    ((symbol-function 'a3madkour-pub/note-slug)
+                     (lambda (_f) slug))
+                    ((symbol-function 'a3madkour-pub-citations/rewrite-cite-keys-in-buffer)
+                     (lambda (_f) nil))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (tmp-src)
+                       (let ((body (with-temp-buffer
+                                     (insert-file-contents tmp-src)
+                                     (buffer-string))))
+                         (list :body
+                               (replace-regexp-in-string
+                                "@@html:\\(.*?\\)@@" "\\1" body)
+                               :frontmatter nil))))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (_section raw _f) raw))
+                    ((symbol-function 'a3madkour-pub-essays--render-frontmatter)
+                     (lambda (_n) ""))
+                    ((symbol-function 'a3madkour-pub-essays--copy-asset-dir)
+                     (lambda (_id _b) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (_id _url _state) nil)))
+            (let ((a3madkour-pub/essays-dir essays-dir))
+              (a3madkour-pub-essays/publish-essay-file
+               org-file (make-a3-pub-async-run) :on-done (lambda (_) nil))))
+          (let* ((index-path (expand-file-name "index.md" bundle-dir))
+                 (svg-path (expand-file-name "fig.svg" bundle-dir))
+                 (index-body
+                  (when (file-exists-p index-path)
+                    (with-temp-buffer
+                      (insert-file-contents index-path)
+                      (buffer-string)))))
+            (should (file-exists-p index-path))
+            (should (file-exists-p svg-path))
+            (should-not (string-match-p "missing asset" index-body))
+            (should (string-match-p "<img " index-body))
+            (should (string-match-p "fig\\.svg" index-body))))
+      (delete-directory tmp t))))
+
 ;;; -- Task 13: handler async signature --
 
 (ert-deftest a3madkour-pub-essays-test/handler-async-signature ()

@@ -351,7 +351,7 @@ asset move and the link rewrite in `git status' after the publish."
         (replace-match new-link t t)))
     (write-region (point-min) (point-max) org-file nil 'silent)))
 
-(defun a3madkour-pub/rewrite-asset-link (path text source-note-id &optional dry-run)
+(defun a3madkour-pub/rewrite-asset-link (path text source-note-id &optional dry-run source-file)
   "Resolve an asset link to HTML + path metadata.
 
 PATH is the link path (relative `./assets/...', absolute `~/...' or `/...').
@@ -359,6 +359,11 @@ TEXT is the link display text (may equal PATH for [[no-text]] form).
 SOURCE-NOTE-ID is the source note's UUID — used to derive source slug
 for cross-namespace validation + auto-remediation destination.
 DRY-RUN, when non-nil, prevents auto-remediation I/O (Task 15).
+SOURCE-FILE, when supplied, is the source note's absolute file path —
+used directly instead of `--id-to-file' so essays under directories
+outside `org-roam-directory' (and therefore absent from the org-roam DB)
+still resolve via the essays-aware branch of `--asset-resolve-path'.
+When nil, falls back to `--id-to-file' (legacy callers).
 
 Returns one of:
   (:html STRING :resolved-path REL :source-path SRC :kind image|other
@@ -371,7 +376,8 @@ Returns one of:
    :warnings (WOULD-MOVE-STRING))
 
 See parent spec §7 + design doc §5."
-  (let* ((source-file (a3madkour-pub--id-to-file source-note-id))
+  (let* ((source-file (or source-file
+                          (a3madkour-pub--id-to-file source-note-id)))
          (source-slug (and source-note-id
                            (a3madkour-pub/note-slug source-note-id)))
          (resolved (a3madkour-pub--asset-resolve-path path source-file))
@@ -532,7 +538,7 @@ and suppresses file I/O for copies + cleanup."
              (abs-path (a3madkour-pub--asset-normalize-link-path path org-file))
              (text (cdr ref))
              (rewrite-result (a3madkour-pub/rewrite-asset-link
-                              abs-path text source-note-id dry-run))
+                              abs-path text source-note-id dry-run org-file))
              (src (plist-get rewrite-result :source-path))
              (resolved (plist-get rewrite-result :resolved-path)))
         ;; Always merge WARNs:

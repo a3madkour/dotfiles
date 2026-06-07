@@ -286,12 +286,15 @@ into the rendered anchor.  :inert variants pass through unchanged
               :warnings (plist-get id-result :warnings))
       id-result)))
 
-(defun a3madkour-pub/rewrite-link (org-link source-note-id)
+(defun a3madkour-pub/rewrite-link (org-link source-note-id &optional source-file)
   "Rewrite ORG-LINK to web HTML, inert text, or asset placeholder.
 
 ORG-LINK is the raw org bracket form, e.g., `\"[[id:UUID][text]]\"`.
 SOURCE-NOTE-ID is the id of the org file containing ORG-LINK
 (used to determine source state for the live→draft WARN).
+SOURCE-FILE, when supplied, is the source note's absolute file path —
+threaded through to asset-link resolution so files outside
+`org-roam-directory' still hit the essays-aware branch.
 
 Returns one of:
   (:html HTML-STRING :warnings (WARN ...))    ; rendered anchor
@@ -325,7 +328,7 @@ See parent spec §6 for the per-link-type rules."
             :warnings nil))
      ;; Asset-shaped link (no scheme, non-`.org` extension) — A.1.c dispatch.
      ((a3madkour-pub--asset-shaped-link-p path)
-      (a3madkour-pub/rewrite-asset-link path text source-note-id))
+      (a3madkour-pub/rewrite-asset-link path text source-note-id nil source-file))
      ;; Other branches added in later tasks.
      (t
       (error "rewrite-link: scheme %S not yet handled (this branch lands in a later task)"
@@ -338,7 +341,7 @@ Group 1 = path, group 2 = optional display text.  Rejects nested
 brackets (`[^][]+') — org's bracket-link syntax does not permit them in
 either path or text, so this is sufficient for our scan.")
 
-(defun a3madkour-pub-rewrite/rewrite-buffer-links (source-note-id)
+(defun a3madkour-pub-rewrite/rewrite-buffer-links (source-note-id &optional source-file)
   "Scan the current buffer for org bracket-link forms; rewrite each in place.
 
 For every `[[...]]` form whose path uses a scheme A.1 knows how to resolve
@@ -375,7 +378,7 @@ would never resolve against B's hyphen-slug bundle paths."
                     (equal scheme "file")
                     (member scheme a3madkour-pub-typed-link-types))
             (let* ((result      (a3madkour-pub/rewrite-link
-                                 org-link source-note-id))
+                                 org-link source-note-id source-file))
                    (raw-html    (plist-get result :html))
                    ;; @@html:...@@ is org's HTML export snippet — passes raw
                    ;; HTML verbatim through ox-hugo's markdown export rather
@@ -423,7 +426,7 @@ the happy-path return."
           (with-temp-buffer
             (insert-file-contents source-file)
             (setq warnings
-                  (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id))
+                  (a3madkour-pub-rewrite/rewrite-buffer-links source-note-id source-file))
             ;; F Task 12: cite-key rewrite runs in the same pre-export pass.
             ;; Loaded lazily so non-F-aware tests of rewrite-to-tmp-file still
             ;; work; the citations module is part of a3-pub.sh's `-l' list
