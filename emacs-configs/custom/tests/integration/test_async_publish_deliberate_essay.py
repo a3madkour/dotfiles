@@ -34,6 +34,9 @@ def test_async_publish_deliberate_essay(required_binaries, pub_env,
     manifest_path = site_data_dir / "url-history.yaml"
     manifest = yaml.safe_load(manifest_path.read_text())
     notes = manifest.get("notes") or []
-    assert any(n.get("history") for n in notes), (
-        f"no notes published; manifest now reads:\n{manifest_path.read_text()}"
+    # A first publish records the note with state='live' + url + history=[]
+    # (no PRIOR url). Assert the note is present in live state — the
+    # async lifecycle did fire `record-publish`.
+    assert any(n.get("state") == "live" for n in notes), (
+        f"no live notes after publish; manifest now reads:\n{manifest_path.read_text()}"
     )
