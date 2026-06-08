@@ -97,5 +97,175 @@ which flows through to finish-publish."
     (should (a3-pub-async-run-p run-seen))
     (should (cl-find 'finish calls :key #'car))))
 
+;; -- Tier 5.1: a3-unpublish-deliberate recovery command --
+
+(defmacro a3-pub-unpub-delib-test--with-fixture (vars &rest body)
+  "Build the on-disk fixture for `a3-unpublish-deliberate' tests.
+
+VARS is a let-bindings-like list of additional bindings to evaluate
+inside the unwind-protect.  Inside BODY the following are bound:
+  CONTENT-ROOT     content/ temp dir
+  BUNDLE           content-root/essays/x/
+  MANIFEST-PATH    temp YAML file backing the manifest
+  MANIFEST-INIT    fn taking a manifest alist; writes it + stubs path"
+  (declare (indent 1))
+  `(let* ((content-root (make-temp-file "a3-pub-unpub-delib-content-" t))
+          (bundle (expand-file-name "essays/x" content-root))
+          (manifest-path (make-temp-file "a3-pub-unpub-delib-history-" nil ".yaml"))
+          ,@vars)
+     (unwind-protect
+         (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                    (lambda () manifest-path))
+                   ((symbol-function 'a3madkour-pub-history--now-iso)
+                    (lambda () "2026-06-08T12:00:00Z")))
+           ,@body)
+       (when (file-exists-p manifest-path) (delete-file manifest-path))
+       (when (file-directory-p content-root) (delete-directory content-root t)))))
+
+(defun a3-pub-unpub-delib-test--seed-manifest (manifest-path manifest)
+  "Write MANIFEST to MANIFEST-PATH via `a3madkour-pub-history/write-manifest'."
+  (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+             (lambda () manifest-path)))
+    (a3madkour-pub-history/write-manifest manifest)))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-command-defined ()
+  "5.1: `a3-unpublish-deliberate' is defined and interactive."
+  (should (fboundp 'a3-unpublish-deliberate))
+  (should (commandp 'a3-unpublish-deliberate)))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-happy-path ()
+  "5.1 happy: bundle deleted, manifest advanced to `removed', plist returned."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      (make-directory bundle t)
+      (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path
+       '((notes . [((id . "id-x")
+                    (current_url . "/essays/x/")
+                    (history . [])
+                    (state . "live"))])))
+      (let ((result (a3-unpublish-deliberate "id-x")))
+        (should (equal (plist-get result :id) "id-x"))
+        (should (equal (plist-get result :url) "/essays/x/"))
+        (should (equal (plist-get result :section) "essays"))
+        (should (equal (plist-get result :slug) "x")))
+      (should-not (file-directory-p bundle))
+      (let* ((m (a3madkour-pub-history/read-manifest))
+             (note (aref (alist-get 'notes m) 0)))
+        (should (equal (alist-get 'state note) "removed"))))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-unknown-id-user-errors ()
+  "5.1: unknown id → user-error, manifest unchanged."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path '((notes . [])))
+      (should-error
+       (a3-unpublish-deliberate "00000000-0000-0000-0000-000000000000")
+       :type 'user-error))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-already-removed-user-errors ()
+  "5.1: idempotent guard — calling on an already-removed entry errors."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path
+       '((notes . [((id . "id-x")
+                    (current_url . "/essays/x/")
+                    (history . [])
+                    (state . "removed"))])))
+      (should-error (a3-unpublish-deliberate "id-x")
+                    :type 'user-error))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-living-section-refused ()
+  "5.1: garden / library / research live in publish-living, not deliberate.
+The recovery command refuses to operate on them — author should unmark
+`#+HUGO_PUBLISH:' in the source and re-run publish-living instead."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path
+       '((notes . [((id . "id-g")
+                    (current_url . "/garden/g/")
+                    (history . [])
+                    (state . "live"))])))
+      (should-error (a3-unpublish-deliberate "id-g")
+                    :type 'user-error)
+      (let* ((m (a3madkour-pub-history/read-manifest))
+             (note (aref (alist-get 'notes m) 0)))
+        (should (equal (alist-get 'state note) "live"))))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-delete-failed-keeps-manifest ()
+  "5.1: when --unpublish-delete-bundle returns 'failed, the command signals
+user-error and leaves the manifest at its prior state (mirrors bug 1.1's
+self-healing contract: the bundle stays on disk + the manifest stays live,
+so a later run can retry)."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      (make-directory bundle t)
+      (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path
+       '((notes . [((id . "id-x")
+                    (current_url . "/essays/x/")
+                    (history . [])
+                    (state . "live"))])))
+      (cl-letf (((symbol-function 'delete-directory)
+                 (lambda (&rest _) (error "permission denied"))))
+        (should-error (a3-unpublish-deliberate "id-x")
+                      :type 'user-error))
+      (let* ((m (a3madkour-pub-history/read-manifest))
+             (note (aref (alist-get 'notes m) 0)))
+        (should (equal (alist-get 'state note) "live"))))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-bundle-absent-self-heals ()
+  "5.1: stale-manifest recovery — when the bundle is already absent (delete
+returns nil, not 'failed), the manifest is STILL advanced to `removed' so
+the state converges.  This is the canonical \"hand-deleted the bundle but
+forgot to update the manifest\" recovery case."
+  (a3-pub-unpub-delib-test--with-fixture ()
+    (let ((a3madkour-pub-site-content-dir content-root))
+      ;; NB: do NOT create the bundle directory.
+      (a3-pub-unpub-delib-test--seed-manifest
+       manifest-path
+       '((notes . [((id . "id-x")
+                    (current_url . "/essays/x/")
+                    (history . [])
+                    (state . "live"))])))
+      (a3-unpublish-deliberate "id-x")
+      (let* ((m (a3madkour-pub-history/read-manifest))
+             (note (aref (alist-get 'notes m) 0)))
+        (should (equal (alist-get 'state note) "removed"))))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-resolver-uuid-passthrough ()
+  "5.1 resolver: a UUID string is returned verbatim — no file lookup.
+Recovery often runs after the source file is gone; the manifest is the
+source of truth for the id↔url mapping."
+  (let ((id "deadbeef-0000-0000-0000-000000000000"))
+    (should (equal (a3madkour-pub-deliberate--resolve-to-id id) id))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-resolver-non-uuid-id-passthrough ()
+  "5.1 resolver: any non-empty string that isn't an existing file is treated
+as an opaque id (manifest contract doesn't require UUID format)."
+  (should (equal (a3madkour-pub-deliberate--resolve-to-id "id-from-fixture")
+                 "id-from-fixture")))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-resolver-file-path-lookups-id ()
+  "5.1 resolver: a real file path is resolved via `note-metadata'."
+  (let ((tmp (make-temp-file "a3-pub-unpub-resolver-" nil ".org")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                   (lambda (_file) '(:id "id-from-file"))))
+          (should (equal (a3madkour-pub-deliberate--resolve-to-id tmp)
+                         "id-from-file")))
+      (when (file-exists-p tmp) (delete-file tmp)))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unpublish-resolver-bogus-input-nil ()
+  "5.1 resolver: nil / non-string / empty string → nil."
+  (should (null (a3madkour-pub-deliberate--resolve-to-id nil)))
+  (should (null (a3madkour-pub-deliberate--resolve-to-id "")))
+  (should (null (a3madkour-pub-deliberate--resolve-to-id 42))))
+
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here
