@@ -44,7 +44,7 @@ orchestrator step needs to remove a bundle.
 Override per-call by passing a third arg to the helper, or `let'-bind this
 defcustom inside a fixture."
   :type '(choice (const :tag "Derive from site-data-dir" nil) directory)
-  :group 'a3madkour-publish)
+  :group 'a3madkour-pub)
 
 (defun a3madkour-pub--site-content-dir-effective ()
   "Return the effective Hugo `content/' root.

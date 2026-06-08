@@ -267,7 +267,7 @@ natural types."
      ((string-match-p "\\`[][{}>|*&!%@`\"'?,-]" val)
       (a3madkour-pub-library--yaml-single-quote val))
      (t val)))
-   (t (format "%S" val))))
+   (t (a3madkour-pub-library--yaml-single-quote (format "%S" val)))))
 
 (defun a3madkour-pub-library--render-tags (tags)
   "Render a list of tag strings as a YAML flow-sequence."

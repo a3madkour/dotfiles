@@ -78,7 +78,7 @@ Skips horizontal-rule rows; the header row is the first standard row."
                                      (org-element-interpret-data c)))))))
                            (org-element-contents row))))
 
-(defun a3madkour-pub-research--coerce-year (raw _file)
+(defun a3madkour-pub-research--coerce-year (raw)
   "Coerce year RAW to int.  Float-trip to dodge octal trap on '08'/'09'."
   (when (and raw (stringp raw))
     (let ((cleaned (string-trim raw)))
@@ -117,7 +117,7 @@ Row order preserved.  See spec §6 for the table contract."
                  (title (nth (nth 1 col-indices) row))
                  (url (nth (nth 2 col-indices) row))
                  (year-raw (nth (nth 3 col-indices) row))
-                 (year (a3madkour-pub-research--coerce-year year-raw file)))
+                 (year (a3madkour-pub-research--coerce-year year-raw)))
             (cond
              ((not (member kind a3madkour-pub-research--output-kinds))
               (a3madkour-pub-research--warn

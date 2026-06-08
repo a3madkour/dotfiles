@@ -35,7 +35,7 @@
 stripped from round-tripped tag lists by `filter-editorial-tags'.
 Used by both garden (file-level tags) and library (per-heading tags)
 normalizers."
-  :type '(repeat string) :group 'a3madkour-publish)
+  :type '(repeat string) :group 'a3madkour-pub)
 
 (defun a3madkour-pub-frontmatter/filter-editorial-tags (tags &optional extra-exclusions)
   "Strip editorial tags from TAGS (a list of strings).

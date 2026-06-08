@@ -493,6 +493,25 @@ YYYY-MM-DD string."
   (should (equal (a3madkour-pub-library--render-scalar "| Pipe Title")
                  "'| Pipe Title'")))
 
+(ert-deftest a3madkour-pub-library--render-scalar-fallback-hashtable-single-quoted ()
+  "Tier 4.4: the `%S' fallback wraps non-scalar values (hashtable, struct,
+vector) in a YAML single-quoted scalar so the row remains parseable. Without
+the wrapper the raw `%S' print form contains `#<...>' / `#s(...)' / `[...]'
+sequences that PyYAML rejects."
+  (let ((ht (make-hash-table :test 'equal)))
+    (puthash "k" "v" ht)
+    (let ((out (a3madkour-pub-library--render-scalar ht)))
+      (should (string-prefix-p "'" out))
+      (should (string-suffix-p "'" out)))))
+
+(ert-deftest a3madkour-pub-library--render-scalar-fallback-vector-single-quoted ()
+  "Tier 4.4: vector input falls through to the wrapped `%S' branch."
+  (let ((out (a3madkour-pub-library--render-scalar [1 2 3])))
+    (should (string-prefix-p "'" out))
+    (should (string-suffix-p "'" out))
+    ;; Single-quote-doubling rule still applies to any embedded `''.
+    (should (string-match-p "1 2 3" out))))
+
 (ert-deftest a3madkour-pub-library--publish-library-file-end-to-end ()
   "publish-library-file walks headings + writes data/<medium>.yaml."
   (let* ((notes-dir (make-temp-file "a3-pub-libnotes-" t))
