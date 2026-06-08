@@ -50,6 +50,20 @@ Errors when SECTION is not a known library section."
       (error "a3madkour-pub-library: unknown library section %S" section))
     (cdr entry)))
 
+(defun a3madkour-pub-library/sections ()
+  "Return the list of library section strings (e.g. \"library/reading\").
+
+Public wrapper over `a3madkour-pub-library--config' for consumption from
+sibling modules (Tier 5.2 author.el)."
+  (mapcar #'car a3madkour-pub-library--config))
+
+(defun a3madkour-pub-library/extras-for (medium)
+  "Return the per-medium extras spec for MEDIUM, or nil if unknown.
+
+Each element is (DRAWER-KEY YAML-KEY COERCION-OR-NIL).  Public wrapper
+over `a3madkour-pub-library--extras-by-media' for sibling modules."
+  (cdr (assoc medium a3madkour-pub-library--extras-by-media)))
+
 (defconst a3madkour-pub-library--extras-by-media
   '(("book"
      ("ISBN" :isbn nil) ("PROGRESS_PCT" :progress_pct int)

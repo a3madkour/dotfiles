@@ -637,6 +637,28 @@ sequences that PyYAML rejects."
         :on-done (lambda (s) (setq done-status s)))))
     (should (eq done-status 'err))))
 
+;; -- Tier 5.2: public wrappers for author.el --
+
+(ert-deftest a3madkour-pub-library/sections-returns-config-section-keys ()
+  "Tier 5.2: `/sections' enumerates the slash-form section strings from --config."
+  (let ((result (a3madkour-pub-library/sections)))
+    (should (member "library/reading" result))
+    (should (member "library/listening" result))
+    (should (member "library/playing" result))
+    (should (member "library/watching" result))
+    (should (= (length result) 4))))
+
+(ert-deftest a3madkour-pub-library/extras-for-book-returns-book-extras ()
+  "Tier 5.2: `/extras-for' looks up the per-medium extras spec."
+  (let ((book (a3madkour-pub-library/extras-for "book")))
+    (should book)
+    ;; Book extras include ISBN as the first drawer key per --extras-by-media.
+    (should (equal (caar book) "ISBN"))))
+
+(ert-deftest a3madkour-pub-library/extras-for-unknown-medium-nil ()
+  "Tier 5.2: `/extras-for' returns nil for an unknown medium (not an error)."
+  (should (null (a3madkour-pub-library/extras-for "bogus"))))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here
