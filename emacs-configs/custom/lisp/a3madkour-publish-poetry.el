@@ -118,6 +118,19 @@ alist; the normalizer reads it as `lines:'."
                      lines)))
     (cl-count-if (lambda (l) (not (string-blank-p l))) stripped)))
 
+(defun a3madkour-pub-poetry--classify-audio (raw)
+  "Classify the value of an `#+AUDIO:' keyword.
+
+Return nil for nil/empty input.  Otherwise return a plist:
+  (:kind :url  :value <trimmed-url>)   for `http(s)://...'
+  (:kind :file :value <trimmed-name>)  for bare filenames"
+  (when (and raw (stringp raw))
+    (let ((v (string-trim raw)))
+      (cond
+       ((string-empty-p v) nil)
+       ((string-match-p "\\`https?://" v) (list :kind :url :value v))
+       (t                                 (list :kind :file :value v))))))
+
 (provide 'a3madkour-publish-poetry)
 
 ;;; a3madkour-publish-poetry.el ends here

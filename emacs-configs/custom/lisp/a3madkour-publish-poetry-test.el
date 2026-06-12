@@ -98,6 +98,38 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
     (should (= (alist-get 'lines out) 6))
     (should-not (assq :body-line-count out))))
 
+(ert-deftest a3madkour-pub-poetry-test/audio-classify-absolute-https ()
+  "An absolute https:// URL classifies as :url."
+  (let ((c (a3madkour-pub-poetry--classify-audio "https://example.com/r.mp3")))
+    (should (equal (plist-get c :kind) :url))
+    (should (equal (plist-get c :value) "https://example.com/r.mp3"))))
+
+(ert-deftest a3madkour-pub-poetry-test/audio-classify-absolute-http ()
+  "An absolute http:// URL classifies as :url."
+  (let ((c (a3madkour-pub-poetry--classify-audio "http://example.com/r.mp3")))
+    (should (equal (plist-get c :kind) :url))))
+
+(ert-deftest a3madkour-pub-poetry-test/audio-classify-relative-filename ()
+  "A bare filename classifies as :file."
+  (let ((c (a3madkour-pub-poetry--classify-audio "reading.mp3")))
+    (should (equal (plist-get c :kind) :file))
+    (should (equal (plist-get c :value) "reading.mp3"))))
+
+(ert-deftest a3madkour-pub-poetry-test/audio-classify-empty ()
+  "Empty / nil input → nil."
+  (should-not (a3madkour-pub-poetry--classify-audio nil))
+  (should-not (a3madkour-pub-poetry--classify-audio ""))
+  (should-not (a3madkour-pub-poetry--classify-audio "   ")))
+
+(ert-deftest a3madkour-pub-poetry-test/audio-keyword-absolute-emission ()
+  "`#+AUDIO: https://...' → frontmatter `audio_url:' set to the URL; no asset copy."
+  (let* ((raw '((title . "T") (date . "2026-06-12") (lastmod . "2026-06-12")
+                (draft . nil) (:body-line-count . 1)
+                (audio_url . "https://example.com/reading.mp3")))
+         (out (a3madkour-pub-frontmatter/normalize 'works-poetry raw nil)))
+    (should (equal (alist-get 'audio_url out)
+                   "https://example.com/reading.mp3"))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here
