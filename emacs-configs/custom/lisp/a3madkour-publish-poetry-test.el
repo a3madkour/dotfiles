@@ -246,6 +246,19 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
                  "Plain poem"
                  nil))))
 
+(ert-deftest a3madkour-pub-poetry-test/multi-export-warn-and-skip ()
+  "`#+multi_export: t' on a poem → warning surfaced, D.2 dispatch not invoked."
+  (let* ((dispatched nil)
+         (file (make-temp-file "poetry-multi-" nil ".org"
+                               ":PROPERTIES:\n:ID: 77777777-7777-7777-7777-777777777777\n:END:\n#+TITLE: T\n#+HUGO_SECTION: works/poetry\n#+multi_export: t\n\n[00:01]hi\n")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-multi/dispatch-export)
+                   (lambda (&rest _args) (setq dispatched t))))
+          (let ((warnings (a3madkour-pub-poetry--maybe-warn-multi-export file)))
+            (should (cl-some (lambda (w) (string-match-p "multi_export" w)) warnings))
+            (should-not dispatched)))
+      (delete-file file))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here

@@ -210,6 +210,15 @@ AUDIO-RAW is the raw `#+AUDIO:' keyword value (string or nil)."
             warnings)))
     (nreverse warnings)))
 
+(defun a3madkour-pub-poetry--maybe-warn-multi-export (file)
+  "Return a warning list iff FILE has `#+multi_export: t' (poetry doesn't support it).
+Returns nil otherwise.  D.2 dispatch is never invoked on poetry."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (when (a3madkour-pub-keywords/boolean-p
+           (a3madkour-pub-keywords/extract "multi_export"))
+      (list "#+multi_export: t set on a poem — D.2 PDF/Word target shape doesn't exist for synced poetry; ignoring."))))
+
 (provide 'a3madkour-publish-poetry)
 
 ;;; a3madkour-publish-poetry.el ends here
