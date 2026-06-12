@@ -31,10 +31,11 @@ Independent of the `#+HUGO_SECTION:' dispatch symbol (`works-poetry')."
   :group 'a3madkour-pub)
 
 (defcustom a3madkour-pub/poetry-dir
-  (expand-file-name "notes/works/poetry/" (getenv "HOME"))
+  (expand-file-name "~/org/notes/works/poetry/")
   "Root directory of the author's poem org files.  Source corpus for the
 `works-poetry' dispatch.  Each poem lives at `<poetry-dir>/<slug>.org'
-with assets under `<poetry-dir>/assets/<id>/'."
+with assets under `<poetry-dir>/assets/<id>/'.  Default matches the
+`a3madkour-pub/org-notes-dir' convention (`~/org/notes/`)."
   :type 'directory
   :group 'a3madkour-pub)
 
@@ -242,8 +243,14 @@ supply an explicit `(lastmod . \"YYYY-MM-DD\")' cell."
     (unless (alist-get 'lines out)
       (setf (alist-get 'lines out) 0))
     (setq out (assq-delete-all :body-line-count out))
-    ;; summary: scrub timing markers (per spec §6); default "" if missing.
-    (let ((s (alist-get 'summary out)))
+    ;; summary: read from #+HUGO_SUMMARY: (ox-hugo has no built-in slot for it,
+    ;; mirrors essays normalizer), scrub timing markers (per spec §6), default ""
+    ;; if missing.
+    (let* ((existing (alist-get 'summary out))
+           (kw-summary (when source-file
+                         (a3madkour-pub-frontmatter--read-org-keyword
+                          source-file "HUGO_SUMMARY")))
+           (s (or kw-summary existing)))
       (setf (alist-get 'summary out)
             (or (a3madkour-pub-poetry--scrub-markers s) "")))
     ;; lastmod cascade: drawer → keyword → git → fs → today (mirrors essays).
