@@ -224,10 +224,10 @@ Pipeline:
   5. audio_url passed through if present (Tasks 5-6 wire the #+AUDIO: keyword
      reader into raw-alist injection).
 
-SOURCE-FILE is the original .org path (passed through for parity with
-peer normalizers; this normalizer does not yet read it, but Tasks 4-7
-may extend it to do so via `a3madkour-pub-frontmatter--read-org-keyword')."
-  (ignore source-file)
+SOURCE-FILE is the original .org path; required by the lastmod cascade
+(below) so this normalizer cannot run safely with nil SOURCE-FILE unless
+`lastmod' is already injected.  Unit tests that bypass the cascade must
+supply an explicit `(lastmod . \"YYYY-MM-DD\")' cell."
   (let* ((allowed (a3madkour-pub-poetry--allowed-keys))
          (out (cl-remove-if-not
                (lambda (cell) (memq (car cell) allowed))
@@ -246,6 +246,20 @@ may extend it to do so via `a3madkour-pub-frontmatter--read-org-keyword')."
     (let ((s (alist-get 'summary out)))
       (setf (alist-get 'summary out)
             (or (a3madkour-pub-poetry--scrub-markers s) "")))
+    ;; lastmod cascade: drawer → keyword → git → fs → today (mirrors essays).
+    ;; Skip when source-file is nil AND lastmod was already supplied (unit-test mode).
+    (when (or source-file (not (alist-get 'lastmod out)))
+      (let* ((drawer-lm (alist-get 'last_modified raw-alist))
+             (kw-lm     (alist-get 'lastmod raw-alist))
+             (kw-trim   (when (and (stringp kw-lm) (>= (length kw-lm) 10))
+                          (substring kw-lm 0 10))))
+        (setq out (assq-delete-all 'lastmod out))
+        (setq out (assq-delete-all 'last_modified out))
+        (setf (alist-get 'lastmod out)
+              (a3madkour-pub-frontmatter/last-modified-cascade
+               source-file
+               :drawer  drawer-lm
+               :keyword kw-trim))))
     out))
 
 (defun a3madkour-pub-poetry--count-poem-lines (body)
