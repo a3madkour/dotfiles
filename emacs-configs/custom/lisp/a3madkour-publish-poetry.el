@@ -85,7 +85,7 @@ may extend it to do so via `a3madkour-pub-frontmatter--read-org-keyword')."
   (let* ((allowed (a3madkour-pub-poetry--allowed-keys))
          (out (cl-remove-if-not
                (lambda (cell) (memq (car cell) allowed))
-               (copy-tree raw-alist))))
+               (copy-alist raw-alist))))
     ;; Default draft → nil (false)
     (setf (alist-get 'draft out) (and (alist-get 'draft out) t))
     ;; Default lines → 0 (Task 4 will inject :body-line-count and use it)

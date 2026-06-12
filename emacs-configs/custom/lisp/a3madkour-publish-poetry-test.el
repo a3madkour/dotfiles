@@ -51,7 +51,11 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
     (should (equal (alist-get 'tags out) '("example" "synced")))
     (should-not (alist-get 'has_sidenotes out))
     (should-not (alist-get 'has_citations out))
-    (should-not (alist-get 'toc out))))
+    (should-not (alist-get 'toc out))
+    ;; defaults applied for missing required keys
+    (should (eq    (alist-get 'draft   out) nil))
+    (should (eq    (alist-get 'lines   out) 0))
+    (should (equal (alist-get 'summary out) ""))))
 
 (provide 'a3madkour-publish-poetry-test)
 
