@@ -19,7 +19,7 @@
 
 (defvar a3madkour-pub-deliberate--handlers
   '((essays       . a3madkour-pub-essays/publish-essay-file)
-    (works-poetry . a3madkour-pub-poetry/publish-poetry-file))
+    (works/poetry . a3madkour-pub-poetry/publish-poetry-file))
   "Alist of (SECTION-SYMBOL . HANDLER-FUNCTION).
 Handler signature: (file run &key on-done).")
 
