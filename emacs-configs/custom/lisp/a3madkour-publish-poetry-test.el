@@ -57,6 +57,47 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
     (should (eq    (alist-get 'lines   out) 0))
     (should (equal (alist-get 'summary out) ""))))
 
+(ert-deftest a3madkour-pub-poetry-test/lines-counter-basic ()
+  "Counts non-blank lines; stanza breaks excluded."
+  (let ((body "[00:01]Lorem [00:02]ipsum [00:03]dolor [00:04]sit
+[00:05]amet [00:06]consectetur [00:07]adipiscing [00:08]elit
+
+[00:09]sed [00:10]do [00:11]eiusmod [00:12]tempor
+[00:13]incididunt [00:14]ut [00:15]labore [00:16]dolore
+
+[00:17]Duis aute *irure* reprehenderit
+
+[00:18]ut [00:19]enim \\[00:99] [00:20]minim [00:21]veniam"))
+    (should (= (a3madkour-pub-poetry--count-poem-lines body) 6))))
+
+(ert-deftest a3madkour-pub-poetry-test/lines-counter-marker-only-line-counts ()
+  "A line containing only a `[mm:ss]' marker still counts."
+  (let ((body "[00:01]Lorem
+[00:17]
+[00:18]veniam"))
+    (should (= (a3madkour-pub-poetry--count-poem-lines body) 3))))
+
+(ert-deftest a3madkour-pub-poetry-test/lines-counter-skips-leading-h2 ()
+  "A leading H2 (e.g. `## Title') is excluded from the count."
+  (let ((body "## Untitled Poem
+
+[00:01]Lorem
+[00:02]ipsum"))
+    (should (= (a3madkour-pub-poetry--count-poem-lines body) 2))))
+
+(ert-deftest a3madkour-pub-poetry-test/lines-counter-empty-body ()
+  "Empty body → 0."
+  (should (= (a3madkour-pub-poetry--count-poem-lines "") 0))
+  (should (= (a3madkour-pub-poetry--count-poem-lines "   \n\n   \n") 0)))
+
+(ert-deftest a3madkour-pub-poetry-test/normalize-uses-injected-line-count ()
+  "Normalizer reads `:body-line-count' from raw-alist and emits `lines:'."
+  (let* ((raw '((title . "T") (date . "2026-06-12") (lastmod . "2026-06-12")
+                (draft . nil) (:body-line-count . 6)))
+         (out (a3madkour-pub-frontmatter/normalize 'works-poetry raw nil)))
+    (should (= (alist-get 'lines out) 6))
+    (should-not (assq :body-line-count out))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here

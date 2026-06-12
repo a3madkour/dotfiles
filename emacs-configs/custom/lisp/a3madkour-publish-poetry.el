@@ -88,13 +88,35 @@ may extend it to do so via `a3madkour-pub-frontmatter--read-org-keyword')."
                (copy-alist raw-alist))))
     ;; Default draft → nil (false)
     (setf (alist-get 'draft out) (and (alist-get 'draft out) t))
-    ;; Default lines → 0 (Task 4 will inject :body-line-count and use it)
+    ;; lines: prefer caller-injected :body-line-count, else explicit lines,
+    ;; else 0 (caught by linter when handler forgets to inject).
+    (let ((injected (alist-get :body-line-count raw-alist)))
+      (when injected
+        (setf (alist-get 'lines out) injected)))
     (unless (alist-get 'lines out)
       (setf (alist-get 'lines out) 0))
+    (setq out (assq-delete-all :body-line-count out))
     ;; Default summary → "" (linter requires key)
     (unless (alist-get 'summary out)
       (setf (alist-get 'summary out) ""))
     out))
+
+(defun a3madkour-pub-poetry--count-poem-lines (body)
+  "Return the count of non-blank poem lines in markdown BODY.
+
+Rules:
+  - Stanza-break blank lines excluded.
+  - Lines with only `[mm:ss]' markers still count.
+  - A leading H2 (line matching `## ...') is excluded.
+
+Used by the handler to inject `:body-line-count' into the raw frontmatter
+alist; the normalizer reads it as `lines:'."
+  (let* ((lines (split-string (or body "") "\n"))
+         (stripped (if (and lines
+                            (string-match-p "\\`##[ \t]" (car lines)))
+                       (cdr lines)
+                     lines)))
+    (cl-count-if (lambda (l) (not (string-blank-p l))) stripped)))
 
 (provide 'a3madkour-publish-poetry)
 
