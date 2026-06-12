@@ -23,24 +23,20 @@
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-keywords)
 
-(defgroup a3madkour-pub-poetry nil
-  "Tier 8.2 works-poetry publish handler."
-  :group 'a3madkour-pub)
-
 (defcustom a3madkour-pub-poetry/section-dir-name "works/poetry"
   "Relative content directory under `content/' for poetry bundles.
 The on-disk path becomes `content/<section-dir-name>/<slug>/index.md'.
 Independent of the `#+HUGO_SECTION:' dispatch symbol (`works-poetry')."
   :type 'string
-  :group 'a3madkour-pub-poetry)
+  :group 'a3madkour-pub)
 
 (defcustom a3madkour-pub/poetry-dir
   (expand-file-name "notes/works/poetry/" (getenv "HOME"))
-  "Root directory of the author's poem org files.
-Each poem lives at `<poetry-dir>/<slug>.org' with assets under
-`<poetry-dir>/assets/<id>/'."
+  "Root directory of the author's poem org files.  Source corpus for the
+`works-poetry' dispatch.  Each poem lives at `<poetry-dir>/<slug>.org'
+with assets under `<poetry-dir>/assets/<id>/'."
   :type 'directory
-  :group 'a3madkour-pub-poetry)
+  :group 'a3madkour-pub)
 
 (defconst a3madkour-pub-poetry--audio-extensions
   '("mp3" "m4a" "ogg" "wav")
