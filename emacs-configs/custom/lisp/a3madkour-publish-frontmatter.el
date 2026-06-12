@@ -79,6 +79,8 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (a3madkour-pub-frontmatter--normalize-research-theme raw-alist source-file))
    ((eq section 'research-questions)
     (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
+   ((eq section 'works-poetry)
+    (a3madkour-pub-frontmatter--normalize-works-poetry raw-alist source-file))
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
