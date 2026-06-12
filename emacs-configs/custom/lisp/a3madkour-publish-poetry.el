@@ -131,6 +131,46 @@ Return nil for nil/empty input.  Otherwise return a plist:
        ((string-match-p "\\`https?://" v) (list :kind :url :value v))
        (t                                 (list :kind :file :value v))))))
 
+(defun a3madkour-pub-poetry--copy-audio-asset (id filename bundle-dest-dir)
+  "Copy `<poetry-dir>/assets/ID/FILENAME' → `BUNDLE-DEST-DIR/FILENAME'.
+
+Validates:
+  - Extension is in `a3madkour-pub-poetry--audio-extensions'.
+  - Source file exists.
+  - Source file is non-zero bytes.
+
+Signals `user-error' on any validation failure.  Returns FILENAME on
+success.  Creates BUNDLE-DEST-DIR if missing."
+  (let* ((ext (file-name-extension filename))
+         (src (expand-file-name (format "assets/%s/%s" id filename)
+                                a3madkour-pub/poetry-dir))
+         (dest (expand-file-name filename bundle-dest-dir)))
+    (unless (and ext (member (downcase ext) a3madkour-pub-poetry--audio-extensions))
+      (user-error "a3madkour-pub-poetry: #+AUDIO: extension %S not in allowlist %S"
+                  ext a3madkour-pub-poetry--audio-extensions))
+    (unless (file-exists-p src)
+      (user-error "a3madkour-pub-poetry: #+AUDIO: source file not found: %s" src))
+    (let ((size (nth 7 (file-attributes src))))
+      (unless (and size (> size 0))
+        (user-error "a3madkour-pub-poetry: #+AUDIO: source file is empty: %s" src)))
+    (make-directory bundle-dest-dir t)
+    (copy-file src dest t)
+    filename))
+
+(defun a3madkour-pub-poetry--collapse-escaped-markers (md)
+  "Collapse double-backslash escape sequences ox-hugo emits.
+
+Task 0 recon outcome: org-source `\\[mm:ss]' (single backslash) is emitted
+by ox-hugo as markdown `\\\\[mm:ss]' (double backslash).  The runtime
+parser (layouts/partials/works/synced-text-parser.html:21) matches only
+the single-backslash form; the doubled form leaves a stray backslash in
+rendered output.  This helper restores the single-backslash shape that
+the parser + shipped fixture expect."
+  (replace-regexp-in-string
+   "\\\\\\\\\\(\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]\\)"
+   "\\\\\\1"
+   md t))
+
 (provide 'a3madkour-publish-poetry)
 
 ;;; a3madkour-publish-poetry.el ends here

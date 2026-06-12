@@ -130,6 +130,79 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
     (should (equal (alist-get 'audio_url out)
                    "https://example.com/reading.mp3"))))
 
+(ert-deftest a3madkour-pub-poetry-test/copy-audio-asset-success ()
+  "Relative `#+AUDIO:' filename → file copied from poetry-dir/assets/<id>/ to bundle."
+  (let* ((src-id (format "33333333-3333-3333-3333-%012d" (random 1000000)))
+         (poetry-root (make-temp-file "poetry-src-" t))
+         (bundle-dir (make-temp-file "poetry-bundle-" t))
+         (src-assets (expand-file-name (format "assets/%s/" src-id) poetry-root))
+         (src-audio (expand-file-name "reading.mp3" src-assets)))
+    (make-directory src-assets t)
+    (with-temp-file src-audio (insert "ID3" (make-string 64 ?x)))   ; non-zero
+    (let ((a3madkour-pub/poetry-dir poetry-root))
+      (a3madkour-pub-poetry--copy-audio-asset src-id "reading.mp3" bundle-dir))
+    (should (file-exists-p (expand-file-name "reading.mp3" bundle-dir)))
+    (delete-directory poetry-root t)
+    (delete-directory bundle-dir t)))
+
+(ert-deftest a3madkour-pub-poetry-test/copy-audio-asset-missing-file ()
+  "Missing source file → signals `user-error'."
+  (let* ((src-id "44444444-4444-4444-4444-444444444444")
+         (poetry-root (make-temp-file "poetry-src-" t))
+         (bundle-dir (make-temp-file "poetry-bundle-" t)))
+    (let ((a3madkour-pub/poetry-dir poetry-root))
+      (should-error
+       (a3madkour-pub-poetry--copy-audio-asset src-id "nope.mp3" bundle-dir)
+       :type 'user-error))
+    (delete-directory poetry-root t)
+    (delete-directory bundle-dir t)))
+
+(ert-deftest a3madkour-pub-poetry-test/copy-audio-asset-bad-extension ()
+  "Disallowed extension → signals `user-error', no copy attempted."
+  (let* ((src-id "55555555-5555-5555-5555-555555555555")
+         (poetry-root (make-temp-file "poetry-src-" t))
+         (bundle-dir (make-temp-file "poetry-bundle-" t))
+         (src-assets (expand-file-name (format "assets/%s/" src-id) poetry-root)))
+    (make-directory src-assets t)
+    (with-temp-file (expand-file-name "notes.txt" src-assets) (insert "x"))
+    (let ((a3madkour-pub/poetry-dir poetry-root))
+      (should-error
+       (a3madkour-pub-poetry--copy-audio-asset src-id "notes.txt" bundle-dir)
+       :type 'user-error))
+    (delete-directory poetry-root t)
+    (delete-directory bundle-dir t)))
+
+(ert-deftest a3madkour-pub-poetry-test/copy-audio-asset-zero-byte ()
+  "Zero-byte file → signals `user-error'."
+  (let* ((src-id "66666666-6666-6666-6666-666666666666")
+         (poetry-root (make-temp-file "poetry-src-" t))
+         (bundle-dir (make-temp-file "poetry-bundle-" t))
+         (src-assets (expand-file-name (format "assets/%s/" src-id) poetry-root)))
+    (make-directory src-assets t)
+    (with-temp-file (expand-file-name "empty.mp3" src-assets))   ; zero bytes
+    (let ((a3madkour-pub/poetry-dir poetry-root))
+      (should-error
+       (a3madkour-pub-poetry--copy-audio-asset src-id "empty.mp3" bundle-dir)
+       :type 'user-error))
+    (delete-directory poetry-root t)
+    (delete-directory bundle-dir t)))
+
+(ert-deftest a3madkour-pub-poetry-test/collapse-double-backslash-escape ()
+  "ox-hugo Case C output `\\\\[mm:ss]' collapses to `\\[mm:ss]'."
+  (let ((md "[00:18]ut [00:19]enim \\\\[00:99] [00:20]minim"))
+    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md)
+                   "[00:18]ut [00:19]enim \\[00:99] [00:20]minim"))))
+
+(ert-deftest a3madkour-pub-poetry-test/collapse-leaves-bare-markers-alone ()
+  "Bare `[mm:ss]' (no leading backslash) is untouched."
+  (let ((md "[00:01]Lorem [00:02]ipsum"))
+    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md) md))))
+
+(ert-deftest a3madkour-pub-poetry-test/collapse-leaves-single-backslash-alone ()
+  "An already-single-backslash escape `\\[mm:ss]' is left untouched."
+  (let ((md "[00:18]ut \\[00:99] [00:20]minim"))
+    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md) md))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here
