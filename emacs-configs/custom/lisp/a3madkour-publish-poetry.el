@@ -183,6 +183,33 @@ Returns nil for nil input."
   (when s
     (replace-regexp-in-string a3madkour-pub-poetry--marker-regexp "" s t t)))
 
+(defun a3madkour-pub-poetry--body-has-markers-p (body)
+  "Non-nil if BODY contains at least one `[mm:ss]' marker (unescaped).
+Treats `\\[mm:ss]' as escaped (literal) and excludes it."
+  (and body
+       (let ((case-fold-search nil))
+         (string-match-p
+          ;; Negative lookbehind isn't supported in elisp; emulate by requiring
+          ;; the char before [mm:ss] to be either start-of-line, whitespace, or
+          ;; nothing (and not a backslash).  Use a non-capturing leading group.
+          "\\(?:^\\|[^\\\\]\\)\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]"
+          body))))
+
+(defun a3madkour-pub-poetry--collect-warnings (body audio-raw)
+  "Return the list of soft-warning strings for BODY + AUDIO-RAW.
+AUDIO-RAW is the raw `#+AUDIO:' keyword value (string or nil)."
+  (let ((warnings nil)
+        (has-markers (a3madkour-pub-poetry--body-has-markers-p body))
+        (has-audio   (and audio-raw (not (string-blank-p audio-raw)))))
+    (cond
+     ((and has-audio (not has-markers))
+      (push "#+AUDIO: declared but the poem isn't timed — the synced runtime won't engage."
+            warnings))
+     ((and has-markers (not has-audio))
+      (push "Body has [mm:ss] markers but no #+AUDIO: — the runtime will use animation-driven sync."
+            warnings)))
+    (nreverse warnings)))
+
 (provide 'a3madkour-publish-poetry)
 
 ;;; a3madkour-publish-poetry.el ends here

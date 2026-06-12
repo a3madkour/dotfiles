@@ -219,6 +219,33 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
          (out (a3madkour-pub-frontmatter/normalize 'works-poetry raw nil)))
     (should (equal (alist-get 'summary out) ""))))
 
+(ert-deftest a3madkour-pub-poetry-test/soft-warn-audio-without-markers ()
+  "#+AUDIO: set, body has zero markers → soft warning surfaced."
+  (let ((warnings (a3madkour-pub-poetry--collect-warnings
+                   "Plain poem with no timings"
+                   "reading.mp3")))
+    (should (cl-some (lambda (w) (string-match-p "isn't timed" w)) warnings))))
+
+(ert-deftest a3madkour-pub-poetry-test/soft-warn-markers-without-audio ()
+  "Body has markers, #+AUDIO: absent → soft warning surfaced."
+  (let ((warnings (a3madkour-pub-poetry--collect-warnings
+                   "[00:01]Lorem [00:02]ipsum"
+                   nil)))
+    (should (cl-some (lambda (w) (string-match-p "animation-driven sync" w))
+                     warnings))))
+
+(ert-deftest a3madkour-pub-poetry-test/soft-warn-both-present-quiet ()
+  "Markers + audio → no soft warnings."
+  (should (null (a3madkour-pub-poetry--collect-warnings
+                 "[00:01]Lorem [00:02]ipsum"
+                 "reading.mp3"))))
+
+(ert-deftest a3madkour-pub-poetry-test/soft-warn-both-absent-quiet ()
+  "No markers, no audio (plain poem) → no soft warnings."
+  (should (null (a3madkour-pub-poetry--collect-warnings
+                 "Plain poem"
+                 nil))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here
