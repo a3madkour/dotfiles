@@ -42,15 +42,161 @@ with assets under `<poetry-dir>/assets/<id>/'."
   '("mp3" "m4a" "ogg" "wav")
   "Allowed audio extensions for `#+AUDIO:' relative filenames.")
 
+(defun a3madkour-pub-poetry--site-root ()
+  "Resolve the site root from `a3madkour-pub/site-data-dir' (one level up from data/)."
+  (file-name-as-directory
+   (directory-file-name
+    (file-name-directory
+     (directory-file-name
+      (file-name-as-directory a3madkour-pub/site-data-dir))))))
+
+(defun a3madkour-pub-poetry--write-if-different (path content)
+  "Write CONTENT to PATH only if it differs from existing on-disk content.
+Returns t if a write happened, nil if no-op.  Mirrors the per-module
+write helpers in essays/garden (B.4 follow-up #3 will collapse these)."
+  (let ((existing (when (file-exists-p path)
+                    (with-temp-buffer
+                      (insert-file-contents path)
+                      (buffer-string)))))
+    (unless (string= existing content)
+      (make-directory (file-name-directory path) t)
+      (with-temp-file path (insert content))
+      t)))
+
+(defconst a3madkour-pub-poetry--date-re
+  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
+  "Regex for bare YYYY-MM-DD date strings (emitted unquoted in YAML).")
+
+(defun a3madkour-pub-poetry--render-yaml-value (v)
+  "Render V as a YAML scalar/list value.  Mirrors the garden/essays helper:
+strings quoted; YYYY-MM-DD dates unquoted; numbers as-is; t/nil → true/false;
+lists of strings → JSON-style array.
+
+NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
+  (cond
+   ((null v)    "false")
+   ((eq v t)    "true")
+   ((and (stringp v)
+         (string-match-p a3madkour-pub-poetry--date-re v))
+    v)
+   ((stringp v) (format "\"%s\"" v))
+   ((numberp v) (format "%s" v))
+   ((listp v)
+    (format "[%s]"
+            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+
+(defun a3madkour-pub-poetry--render-frontmatter (alist)
+  "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
+Returns a string with leading/trailing `---' delimiters.
+
+`tags' with an empty list → `[]' (not `false') — matches the essays
+renderer's key-aware special-case."
+  (let ((sorted (sort (copy-sequence alist)
+                      (lambda (a b)
+                        (string< (symbol-name (car a)) (symbol-name (car b)))))))
+    (concat "---\n"
+            (mapconcat
+             (lambda (cell)
+               (let* ((k   (car cell))
+                      (v   (cdr cell))
+                      (str (if (and (eq k 'tags) (null v))
+                               "[]"
+                             (a3madkour-pub-poetry--render-yaml-value v))))
+                 (format "%s: %s" (symbol-name k) str)))
+             sorted "\n")
+            "\n---\n")))
+
 (cl-defun a3madkour-pub-poetry/publish-poetry-file (file run &key on-done)
   "Publish a single poem FILE to `content/works/poetry/<slug>/index.md'.
 
-Stub for Task 10.  Tasks 2-9 build out the supporting helpers
-(section detection, normalizer, audio keyword resolver, asset copy,
-summary scrub, soft warnings, multi-export warn-and-skip).  Task 10
-wires them into this entry point."
-  (ignore file run on-done)
-  (error "a3madkour-pub-poetry/publish-poetry-file: not yet implemented (Task 10)"))
+Pipeline:
+  1. Resolve metadata (id / slug).
+  2. Soft-warning sweep (multi_export + marker/audio mismatch); collect for result.
+  3. Pre-export rewrite via shared rewrite-to-tmp-file.
+  4. ox-hugo export → markdown body string.
+  5. Read `#+AUDIO:'; classify; if relative, copy to bundle; inject `audio_url'.
+  6. Normalize via `works-poetry' dispatch arm (injects lines, scrubs summary).
+  7. Render frontmatter + body; write if different.
+  8. record-publish.
+
+RUN is the a3-pub-async-run handle (currently unused; reserved for parity
+with peer handlers).  ON-DONE is invoked with `ok' on completion or `err' on
+failure.
+
+Returns a plist:
+  (:status `ok'|`err'  :id ID  :slug SLUG  :url URL  :warnings (...))"
+  (ignore run)
+  (let ((warnings nil))
+    (condition-case err
+        (let* ((md         (a3madkour-pub/note-metadata file))
+               (id         (plist-get md :id))
+               (slug       (plist-get md :slug))
+               (new-url    (a3madkour-pub/note-url file))
+               (site-root  (a3madkour-pub-poetry--site-root))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/"
+                                    a3madkour-pub-poetry/section-dir-name slug)
+                            site-root))
+               (audio-raw  (with-temp-buffer
+                             (insert-file-contents file)
+                             (a3madkour-pub-keywords/extract "AUDIO")))
+               (audio-class (a3madkour-pub-poetry--classify-audio audio-raw)))
+          ;; Stage 2: multi_export warn-and-skip.
+          (setq warnings
+                (append warnings
+                        (a3madkour-pub-poetry--maybe-warn-multi-export file)))
+          ;; Stage 3: pre-export rewrite.
+          (let* ((tmp-file (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                            file id "a3-pub-poetry"))
+                 ;; Stage 4: ox-hugo export to markdown body.
+                 (export-result (unwind-protect
+                                    (a3madkour-pub-export/export-file tmp-file)
+                                  (when (file-exists-p tmp-file)
+                                    (delete-file tmp-file))))
+                 (raw-fm    (plist-get export-result :frontmatter))
+                 ;; Case C: collapse `\\[mm:ss]' → `\[mm:ss]' before downstream use.
+                 (body      (a3madkour-pub-poetry--collapse-escaped-markers
+                             (or (plist-get export-result :body) ""))))
+            ;; Stage 5a: inject audio_url + line-count into raw-fm.
+            (when audio-class
+              (setf (alist-get 'audio_url raw-fm) (plist-get audio-class :value)))
+            (setf (alist-get :body-line-count raw-fm)
+                  (a3madkour-pub-poetry--count-poem-lines body))
+            ;; Stage 5b: soft warnings re. marker/audio mismatch.
+            (setq warnings
+                  (append warnings
+                          (a3madkour-pub-poetry--collect-warnings body audio-raw)))
+            ;; Stage 6: normalize.
+            (let* ((normalized (a3madkour-pub-frontmatter/normalize
+                                'works-poetry raw-fm file))
+                   ;; Stage 7: render + write.
+                   (rendered (concat
+                              (a3madkour-pub-poetry--render-frontmatter normalized)
+                              body))
+                   (index-md (expand-file-name "index.md" bundle-dir)))
+              (make-directory bundle-dir t)
+              (a3madkour-pub-poetry--write-if-different index-md rendered)
+              ;; Stage 7b: shared asset pipeline (body-link assets, if any).
+              ;; Runs BEFORE the audio copy because asset-validate-and-copy
+              ;; cleanup-stales any bundle file not in its referenced-basenames
+              ;; set; we don't want it to delete the audio we just copied.
+              (a3madkour-pub/asset-validate-and-copy file bundle-dir id nil)
+              ;; Stage 7c: audio asset copy (relative form only).
+              ;; Deferred to AFTER asset-validate-and-copy's cleanup-stale pass
+              ;; so the audio file isn't swept as an unreferenced extra.
+              (when (and audio-class (eq (plist-get audio-class :kind) :file))
+                (a3madkour-pub-poetry--copy-audio-asset
+                 id (plist-get audio-class :value) bundle-dir))
+              ;; Stage 8: record-publish.
+              (a3madkour-pub-history/record-publish id new-url 'live)
+              (when on-done (funcall on-done 'ok))
+              (list :status 'ok :id id :slug slug :url new-url :warnings warnings))))
+      (error
+       (when on-done (funcall on-done 'err))
+       (list :status 'err
+             :id nil :slug nil :url nil
+             :warnings warnings
+             :error (error-message-string err))))))
 
 (defconst a3madkour-pub-poetry--required-keys
   '(title date lastmod draft lines)

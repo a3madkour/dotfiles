@@ -259,6 +259,48 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
             (should-not dispatched)))
       (delete-file file))))
 
+(ert-deftest a3madkour-pub-poetry-test/handler-end-to-end-in-process ()
+  "Round-trip: build a tmp corpus, publish a poem, assert emitted bytes + manifest.
+Uses a fake mp3 (non-zero bytes) for the audio asset.  Does NOT call run-tests.sh
+or hugo — pure in-process emacs."
+  (let* ((id "88888888-8888-8888-8888-888888888888")
+         (slug "test-poem")
+         (poetry-root (make-temp-file "poetry-corpus-" t))
+         (site-root   (make-temp-file "poetry-site-" t))
+         (org-file (expand-file-name (format "%s.org" slug) poetry-root))
+         (assets-dir (expand-file-name (format "assets/%s/" id) poetry-root))
+         (audio-file (expand-file-name "reading.mp3" assets-dir)))
+    (make-directory assets-dir t)
+    (with-temp-file audio-file (insert "ID3" (make-string 256 ?x)))
+    (with-temp-file org-file
+      (insert ":PROPERTIES:\n:ID:       " id "\n:END:\n")
+      (insert "#+TITLE: Test Poem\n")
+      (insert "#+DATE: 2026-06-12\n")
+      (insert "#+HUGO_SECTION: works/poetry\n")
+      (insert "#+HUGO_PUBLISH: t\n")
+      (insert "#+AUDIO: reading.mp3\n")
+      (insert "\n")
+      (insert "[00:01]Lorem [00:02]ipsum\n")
+      (insert "[00:17]Duis aute\n"))
+    (unwind-protect
+        (let* ((a3madkour-pub/poetry-dir poetry-root)
+               (a3madkour-pub/site-data-dir (expand-file-name "data/" site-root))
+               (a3madkour-pub-poetry/section-dir-name "works/poetry")
+               (result (a3madkour-pub-poetry/publish-poetry-file
+                        org-file nil :on-done #'ignore))
+               (bundle-dir (expand-file-name
+                            (format "content/works/poetry/%s/" slug) site-root))
+               (index-md (expand-file-name "index.md" bundle-dir))
+               (bundled-audio (expand-file-name "reading.mp3" bundle-dir)))
+          (should (file-exists-p index-md))
+          (should (file-exists-p bundled-audio))
+          (let ((emitted (with-temp-buffer (insert-file-contents index-md) (buffer-string))))
+            (should (string-match-p "audio_url: \"reading.mp3\"" emitted))
+            (should (string-match-p "lines: 2" emitted))
+            (should (string-match-p "\\[00:01\\]Lorem \\[00:02\\]ipsum" emitted))))
+      (delete-directory poetry-root t)
+      (delete-directory site-root t))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here
