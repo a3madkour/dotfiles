@@ -96,9 +96,10 @@ may extend it to do so via `a3madkour-pub-frontmatter--read-org-keyword')."
     (unless (alist-get 'lines out)
       (setf (alist-get 'lines out) 0))
     (setq out (assq-delete-all :body-line-count out))
-    ;; Default summary → "" (linter requires key)
-    (unless (alist-get 'summary out)
-      (setf (alist-get 'summary out) ""))
+    ;; summary: scrub timing markers (per spec §6); default "" if missing.
+    (let ((s (alist-get 'summary out)))
+      (setf (alist-get 'summary out)
+            (or (a3madkour-pub-poetry--scrub-markers s) "")))
     out))
 
 (defun a3madkour-pub-poetry--count-poem-lines (body)
@@ -170,6 +171,17 @@ the parser + shipped fixture expect."
    "\\\\\\\\\\(\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]\\)"
    "\\\\\\1"
    md t))
+
+(defconst a3madkour-pub-poetry--marker-regexp
+  "\\\\?\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]"
+  "Matches `[mm:ss]', `[mm:ss.f]', `\\[mm:ss]', `\\[mm:ss.f]'.
+Used to scrub timing markers from `summary:' values.")
+
+(defun a3madkour-pub-poetry--scrub-markers (s)
+  "Return S with all `[mm:ss]'-shaped markers removed.
+Returns nil for nil input."
+  (when s
+    (replace-regexp-in-string a3madkour-pub-poetry--marker-regexp "" s t t)))
 
 (provide 'a3madkour-publish-poetry)
 

@@ -203,6 +203,22 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
   (let ((md "[00:18]ut \\[00:99] [00:20]minim"))
     (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md) md))))
 
+(ert-deftest a3madkour-pub-poetry-test/summary-marker-scrub ()
+  "Summary containing `[mm:ss]' or `\\[mm:ss]' substrings has them stripped."
+  (let* ((raw '((title . "T") (date . "2026-06-12") (lastmod . "2026-06-12")
+                (draft . nil) (:body-line-count . 1)
+                (summary . "Example [00:08]ipsum poem with \\[00:99] literal.")))
+         (out (a3madkour-pub-frontmatter/normalize 'works-poetry raw nil)))
+    (should (equal (alist-get 'summary out)
+                   "Example ipsum poem with  literal."))))
+
+(ert-deftest a3madkour-pub-poetry-test/summary-empty-preserved ()
+  "Empty / missing summary stays empty."
+  (let* ((raw '((title . "T") (date . "2026-06-12") (lastmod . "2026-06-12")
+                (draft . nil) (:body-line-count . 1)))
+         (out (a3madkour-pub-frontmatter/normalize 'works-poetry raw nil)))
+    (should (equal (alist-get 'summary out) ""))))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here
