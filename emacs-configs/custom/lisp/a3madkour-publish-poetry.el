@@ -126,12 +126,12 @@ failure.
 Returns a plist:
   (:status `ok'|`err'  :id ID  :slug SLUG  :url URL  :warnings (...))"
   (ignore run)
-  (let ((warnings nil))
+  (let ((warnings nil) (id nil) (slug nil) (new-url nil))
     (condition-case err
         (let* ((md         (a3madkour-pub/note-metadata file))
-               (id         (plist-get md :id))
-               (slug       (plist-get md :slug))
-               (new-url    (a3madkour-pub/note-url file))
+               (_          (setq id (plist-get md :id)
+                                 slug (plist-get md :slug)
+                                 new-url (a3madkour-pub/note-url file)))
                (site-root  (a3madkour-pub-poetry--site-root))
                (bundle-dir (expand-file-name
                             (format "content/%s/%s/"
@@ -180,7 +180,7 @@ Returns a plist:
               ;; Runs BEFORE the audio copy because asset-validate-and-copy
               ;; cleanup-stales any bundle file not in its referenced-basenames
               ;; set; we don't want it to delete the audio we just copied.
-              (a3madkour-pub/asset-validate-and-copy file bundle-dir id nil)
+              (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
               ;; Stage 7c: audio asset copy (relative form only).
               ;; Deferred to AFTER asset-validate-and-copy's cleanup-stale pass
               ;; so the audio file isn't swept as an unreferenced extra.
@@ -194,7 +194,7 @@ Returns a plist:
       (error
        (when on-done (funcall on-done 'err))
        (list :status 'err
-             :id nil :slug nil :url nil
+             :id id :slug slug :url new-url
              :warnings warnings
              :error (error-message-string err))))))
 
