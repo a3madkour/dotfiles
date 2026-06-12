@@ -15,9 +15,11 @@
 (require 'a3madkour-publish-unpublish)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-essays)
+(require 'a3madkour-publish-poetry)
 
 (defvar a3madkour-pub-deliberate--handlers
-  '((essays . a3madkour-pub-essays/publish-essay-file))
+  '((essays       . a3madkour-pub-essays/publish-essay-file)
+    (works-poetry . a3madkour-pub-poetry/publish-poetry-file))
   "Alist of (SECTION-SYMBOL . HANDLER-FUNCTION).
 Handler signature: (file run &key on-done).")
 

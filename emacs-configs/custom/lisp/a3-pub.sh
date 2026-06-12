@@ -219,6 +219,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-library \
     -l a3madkour-publish-research \
     -l a3madkour-publish-essays \
+    -l a3madkour-publish-poetry \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     -l a3madkour-publish-multi-filter \
