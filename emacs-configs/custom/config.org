@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-06-01 Mon]
+:LAST_MODIFIED: [2026-06-13 Sat]
 :END:
 
 * Bootstrap
@@ -3440,6 +3440,18 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
                       (if (equal (map-elt saved :kind) "execute")
                           (concat "```console\n" command "\n```")
 						command)))))))
+#+end_src
+* Website publish
+Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
+Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
+load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
+`yaml' is needed by `a3madkour-publish-export' / `-history' on the same chain.
+#+begin_src emacs-lisp
+(require 'a3madkour-publish-deliberate)
+(require 'a3madkour-publish-multi-filter)
+(require 'a3madkour-publish-multi-pdf)
+(require 'a3madkour-publish-multi-word)
+(require 'a3madkour-publish-multi)
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
