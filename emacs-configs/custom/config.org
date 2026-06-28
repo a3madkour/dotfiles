@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-06-13 Sat]
+:LAST_MODIFIED: [2026-06-28 Sun]
 :END:
 
 * Bootstrap
@@ -1426,6 +1426,11 @@ The =auctex= configuration block is adapted from [[https://github.com/doomemacs/
   )
 
 (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer) ;; Standard way
+(add-hook 'LaTeX-mode-hook
+		  (lambda ()
+			(add-hook 'after-save-hook
+					  (lambda () (TeX-command "LaTeXMk" #'TeX-master-file nil))
+						nil t)))
 (use-package latex-preview-pane)
 (use-package evil-tex
   :config (add-hook 'LaTeX-mode-hook #'evil-tex-mode))
