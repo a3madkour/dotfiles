@@ -275,16 +275,32 @@ dir to it; run BODY."
 
 (ert-deftest a3madkour-pub-citations-test/notes-ref-happy-path-returns-slug ()
   "F Task 10: ref-note published AND in manifest under /garden/<slug>/ →
-returns <slug> string."
+returns <slug> string.  Slug is title-derived (P2.5): `My Key' → `my-key'."
   (a3madkour-pub-citations-test--with-ref-note-dir
       '(("myKey2020" .
          "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: My Key\n"))
     (a3madkour-pub-citations-test--with-manifest
         '((notes . [((id . "id-key")
-                     (current_url . "/garden/mykey2020/")
+                     (current_url . "/garden/my-key/")
                      (state . "live"))]))
-      (should (equal "mykey2020"
+      (should (equal "my-key"
                      (a3madkour-pub-citations--lookup-notes-ref "myKey2020"))))))
+
+(ert-deftest a3madkour-pub-citations-test/notes-ref-filename-differs-from-title-slug ()
+  "P2.5: ref-note whose FILENAME (the cite key) differs from its
+title-derived published slug must still resolve notes_ref.  The probe URL
+must be built from the canonical slug (`a3madkour-pub/note-slug' — title
+derivation, honoring `#+HUGO_SLUG:'), NOT `file-name-base'."
+  ;; Filename base is `smith2020'; title slugifies to `the-nature-of-time'.
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("smith2020" .
+         "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: The Nature of Time\n"))
+    (a3madkour-pub-citations-test--with-manifest
+        '((notes . [((id . "id-smith")
+                     (current_url . "/garden/the-nature-of-time/")
+                     (state . "live"))]))
+      (should (equal "the-nature-of-time"
+                     (a3madkour-pub-citations--lookup-notes-ref "smith2020"))))))
 
 ;; -- Task 11: cite-emit-yaml --
 

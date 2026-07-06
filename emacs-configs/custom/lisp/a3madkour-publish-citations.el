@@ -234,10 +234,18 @@ in the manifest snapshot, return its garden slug.  Otherwise nil."
             (slug-override (a3madkour-pub-citations--read-keyword path "HUGO_SLUG")))
         (when (and (equal publish "t")
                    (equal section "garden"))
-          (let* ((default-slug (or slug-override
-                                   (downcase
-                                    (file-name-base path))))
-                 (url (format "/garden/%s/" default-slug)))
+          ;; P2.5: the published garden slug is title-derived (or an explicit
+          ;; `#+HUGO_SLUG:'), NOT the filename base.  Ref-note filenames are
+          ;; commonly the cite key, which slugifies differently from the title
+          ;; — using `file-name-base' here made the probe URL never match any
+          ;; manifest `current_url', silently dropping a valid notes_ref.
+          ;; Resolve the REAL slug via the canonical helper (lazy-require the
+          ;; parent module, mirroring `a3-sync-citations').
+          (require 'a3madkour-publish)
+          (let* ((real-slug (or (a3madkour-pub/note-slug path)
+                                slug-override
+                                (downcase (file-name-base path))))
+                 (url (format "/garden/%s/" real-slug)))
             (a3madkour-pub-citations--manifest-slug-for-garden-url
              ;; finish-publish clears the snapshot defvar at its bottom.  Task
              ;; 13 calls emit-yaml AFTER finish-publish, so the snapshot is

@@ -239,7 +239,11 @@ exist or has no top-level :ID:."
              (save-excursion
                (when (re-search-forward "^\\*+ " nil t)
                  (match-beginning 0)))))
-        (when (re-search-forward "^:ID: +\\([0-9a-f-]+\\)" first-heading t)
+        ;; Parity with `a3madkour-pub--extract-id' (permissive `\\S-+'):
+        ;; tolerate leading indentation and non-hex ids (e.g. org
+        ;; timestamp-style `20230101T120000'), else a valid published
+        ;; target degrades to :inert with a spurious WARN (bug P2.6).
+        (when (re-search-forward "^[ \t]*:ID:[ \t]+\\(\\S-+\\)" first-heading t)
           (match-string 1))))))
 
 (defun a3madkour-pub--rewrite-file-link (raw-path text source-note-id &optional source-file)
@@ -276,8 +280,16 @@ Caller-supplied SOURCE-FILE bypasses the DB lookup entirely."
          (target-file (expand-file-name file-path (or source-dir default-directory)))
          (target-id (a3madkour-pub--file-top-level-id target-file)))
     (if target-id
-        (a3madkour-pub--rewrite-id-link
-         (concat "id:" target-id) text source-note-id)
+        ;; Bug P2.7: preserve the no-display intent across the file→id hop.
+        ;; The no-description signal is `(equal text raw-path)'; after
+        ;; synthesizing the id-form raw-path, pass it AS text so
+        ;; `--rewrite-id-link's' `(equal text raw-path)' branch fires and
+        ;; substitutes the resolved URL (instead of the literal `file:foo').
+        (let ((id-raw (concat "id:" target-id)))
+          (a3madkour-pub--rewrite-id-link
+           id-raw
+           (if (equal text raw-path) id-raw text)
+           source-note-id))
       (list :inert text
             :warnings (list (format "file-link target %s lacks :ID:; cannot resolve"
                                     target-file))))))

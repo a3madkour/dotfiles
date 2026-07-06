@@ -712,6 +712,27 @@ on-done fires 'ok immediately after sync pipeline."
     (should-not export-bundle-called)
     (should (eq on-done-status 'ok))))
 
+(ert-deftest a3madkour-pub-essays--render-yaml-value-escapes-quotes ()
+  "P1.2: embedded double-quotes are escaped, not emitted raw."
+  (should (equal (a3madkour-pub-essays--render-yaml-value "The \"x\" y")
+                 "\"The \\\"x\\\" y\""))
+  (should (equal (a3madkour-pub-essays--render-yaml-value '("a\"b"))
+                 "[\"a\\\"b\"]")))
+
+(ert-deftest a3madkour-pub-essays--scan-has-flags-ignores-shortcodes-in-code ()
+  "P2.8: only has_math previously stripped code fences; the other has_* scans
+ran against the raw body, so an essay DOCUMENTING a shortcode inside a code
+block (e.g. teaching `{{< cite >}}' / `{{< widget >}}') got false has_* flags.
+All scans must run against the fence-stripped body."
+  (let ((body "Intro.\n\n```markdown\n{{< cite foo >}}\n{{< widget bar >}}\n{{< sidenote x >}}\n```\n\nOutro.\n"))
+    (let ((pl (a3madkour-pub-essays--scan-has-flags body)))
+      (should (null (plist-get pl :has_citations)))
+      (should (null (plist-get pl :has_widgets)))
+      (should (null (plist-get pl :has_sidenotes)))))
+  ;; A real shortcode OUTSIDE a code block still registers.
+  (let ((pl (a3madkour-pub-essays--scan-has-flags "Body {{< cite foo >}} end.\n")))
+    (should (eq t (plist-get pl :has_citations)))))
+
 (provide 'a3madkour-publish-essays-test)
 
 ;;; a3madkour-publish-essays-test.el ends here

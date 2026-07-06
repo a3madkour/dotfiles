@@ -163,14 +163,14 @@ e.g. outputs), use `--render-outputs-yaml' instead."
    ((and (stringp v)
          (string-match-p a3madkour-pub-research--date-re v))
     v)
-   ((stringp v) (format "\"%s\"" v))
+   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
    ((numberp v) (format "%s" v))
    ((listp v)
     (unless (cl-every #'stringp v)
       (error "a3madkour-pub-research--render-yaml-value: list contains \
 non-string element; caller must use --render-outputs-yaml for structured lists"))
     (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
 
 (defun a3madkour-pub-research--render-output-row (row)
   "Render a single output ROW plist as an inline YAML map.
@@ -181,8 +181,8 @@ ROW has keys :kind :title :url :year."
         (year  (plist-get row :year)))
     (format "{ kind: %s, title: %s, url: %s, year: %s }"
             (if kind kind "")
-            (if title (format "\"%s\"" title) "\"\"")
-            (if url (format "\"%s\"" url) "\"\"")
+            (if title (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar title)) "\"\"")
+            (if url (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar url)) "\"\"")
             (if year (format "%s" year) ""))))
 
 (defun a3madkour-pub-research--render-outputs-yaml (outputs)
@@ -349,7 +349,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
            out-path
            (concat (a3madkour-pub-research--render-frontmatter final-fm) body))
           ;; Step 10: record publish.
-          (a3madkour-pub-history/record-publish id new-url 'live))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))

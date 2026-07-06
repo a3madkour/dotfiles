@@ -496,5 +496,40 @@ the in-flight xelatex keeps running."
     (a3-pub-async--ensure-batch-sync-mode)
     (should-not a3-pub-async--synchronous-p)))
 
+;; -- P1.1a: async finish-publish gates the sweep on run status --
+
+(defun a3-pub-async-test--capture-reap (status)
+  "Run `a3-pub-async/finish-publish' with STATUS, stubbing the inner
+`a3madkour-pub/finish-publish' + citations flush, and return the `:reap'
+value the inner orchestrator was called with."
+  (let ((mode-line-misc-info nil)
+        (a3-pub-async--in-flight-run nil)
+        (a3-pub-async--spinner-timer nil)
+        (a3-pub-async--flash-timer nil)
+        (a3-pub-async--terminal-run nil)
+        (run (make-a3-pub-async-run :status :running
+                                    :start-time (current-time)
+                                    :scope 'living))
+        (captured 'unset))
+    (cl-letf (((symbol-function 'a3madkour-pub/finish-publish)
+               (lambda (&rest args) (setq captured (plist-get args :reap)) nil))
+              ((symbol-function 'a3madkour-pub-citations/emit-yaml)
+               (lambda (&rest _) nil)))
+      (a3-pub-async/finish-publish run :scope 'living :status status))
+    captured))
+
+(ert-deftest a3-pub-async-test/finish-publish-err-passes-reap-nil ()
+  "P1.1a: a failed run (status err) must call the orchestrator with
+`:reap nil' so the destructive sweep is skipped."
+  (should (null (a3-pub-async-test--capture-reap 'err))))
+
+(ert-deftest a3-pub-async-test/finish-publish-cancelled-passes-reap-nil ()
+  "P1.1a: a cancelled run must also skip the sweep (`:reap nil')."
+  (should (null (a3-pub-async-test--capture-reap 'cancelled))))
+
+(ert-deftest a3-pub-async-test/finish-publish-ok-passes-reap-t ()
+  "P1.1a: a clean run (status ok) reaps normally (`:reap t')."
+  (should (eq t (a3-pub-async-test--capture-reap 'ok))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

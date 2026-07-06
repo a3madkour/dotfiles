@@ -141,18 +141,62 @@ elsewhere in the codebase doesn't silently drop it from the emitted YAML."
 Creates the data dir if missing.  Each note entry's keys are pre-ordered
 canonically (id / current_url / history / state) so the emitted file is
 byte-stable across publish runs."
-  (let ((path (a3madkour-pub-history--manifest-path))
-        (canonical (a3madkour-pub-history--canonicalize-manifest manifest)))
-    (make-directory (file-name-directory path) t)
-    (with-temp-file path
-      (insert (yaml-encode canonical))
-      (unless (eq ?\n (char-before)) (insert "\n")))))
+  (let* ((path (a3madkour-pub-history--manifest-path))
+         (canonical (a3madkour-pub-history--canonicalize-manifest manifest))
+         (dir (file-name-directory path)))
+    (make-directory dir t)
+    ;; P1.1g: write atomically — serialize to a sibling temp file, then
+    ;; `rename-file' it over the target.  `rename` is atomic on POSIX within
+    ;; one filesystem, so a crash / SIGKILL / disk-full mid-write can never
+    ;; leave a truncated `url-history.yaml' (which would later parse-error and
+    ;; abort publishing, or feed the diff a partial manifest → spurious
+    ;; `:removed' deletions).  The reader only ever sees the old or the new
+    ;; file, never a half-written one.
+    (let ((tmp (make-temp-file (expand-file-name ".url-history-" dir) nil ".yaml.tmp")))
+      (unwind-protect
+          (progn
+            (with-temp-file tmp
+              (insert (yaml-encode canonical))
+              (unless (eq ?\n (char-before)) (insert "\n")))
+            (rename-file tmp path t)
+            (setq tmp nil))
+        (when (and tmp (file-exists-p tmp)) (ignore-errors (delete-file tmp)))))))
 
-(defun a3madkour-pub-history--find-note-by-id (notes-vec id)
-  "Return the index of the note with given ID in NOTES-VEC, or nil if absent."
-  (cl-loop for i from 0 below (length notes-vec)
-           when (equal id (alist-get 'id (aref notes-vec i)))
-           return i))
+(defun a3madkour-pub-history--blank-id-p (id)
+  "Return non-nil when ID is nil or an empty/whitespace-only string.
+
+Essays under `a3madkour-pub/essays-dir' are NOT org-roam-indexed, so a
+source without a file-level :ID: drawer yields id = nil.  Such id-less
+notes cannot be keyed on their (absent) id; they are keyed on a URL
+surrogate instead — see `a3madkour-pub-history--find-note-by-id'."
+  (or (null id)
+      (and (stringp id) (string-empty-p (string-trim id)))))
+
+(defun a3madkour-pub-history--find-note-by-id (notes-vec id &optional url)
+  "Return the index of the note matching ID in NOTES-VEC, or nil if absent.
+
+P2.2: keying id-less notes on nil collided EVERY id-less note onto a single
+`id: null' manifest entry, so the second id-less publish overwrote the first's
+`current_url'/history.  When ID is blank (see `--blank-id-p'), fall back to a
+stable URL surrogate: match the entry whose `id' is also blank AND whose
+`current_url' equals URL (the note's current URL — the `new-url' arg
+`record-publish' is about to write).  Two distinct id-less notes have distinct
+URLs, so they no longer collide.
+
+Blank-id matching requires URL; without it (e.g. `aliases-for', which has no
+reliable identity for an id-less note) blank-id lookup returns nil.  An id-less
+note whose URL changes across runs cannot be tracked — an inherent limitation
+of id-less notes — but it never corrupts a DIFFERENT entry."
+  (if (a3madkour-pub-history--blank-id-p id)
+      (when url
+        (cl-loop for i from 0 below (length notes-vec)
+                 for entry = (aref notes-vec i)
+                 when (and (a3madkour-pub-history--blank-id-p (alist-get 'id entry))
+                           (equal url (alist-get 'current_url entry)))
+                 return i))
+    (cl-loop for i from 0 below (length notes-vec)
+             when (equal id (alist-get 'id (aref notes-vec i)))
+             return i)))
 
 (defun a3madkour-pub-history--state-to-string (state)
   "Coerce STATE (symbol or string) to its canonical string form."
@@ -226,7 +270,9 @@ A.1.d additions:
     run; the accumulator is not cleared on each call."
   (let* ((manifest (a3madkour-pub-history/read-manifest))
          (notes (alist-get 'notes manifest))
-         (idx (a3madkour-pub-history--find-note-by-id notes id))
+         ;; P2.2: pass NEW-URL so id-less notes (id = nil, e.g. non-roam essays)
+         ;; are matched by their URL surrogate rather than colliding on `id: null'.
+         (idx (a3madkour-pub-history--find-note-by-id notes id new-url))
          (state-str (a3madkour-pub-history--state-to-string state)))
     (cond
      ;; New note.
@@ -346,19 +392,41 @@ process via `call-process' under `with-a3-pub-async-sync'."
       file (lambda (d) (setq result d))))
     result))
 
-(defun a3madkour-pub-history/filesystem-mtime-of-file (file)
+(defun a3madkour-pub-history/filesystem-mtime-of-file (file &optional prior-recorded)
   "Return the YYYY-MM-DD filesystem mtime of FILE.
-Returns nil when FILE does not exist.
+Returns nil when FILE does not exist and no PRIOR-RECORDED value is given.
 
 Used as the ultimate fallback for `last_modified' when neither
 :LAST_MODIFIED: drawer, #+HUGO_LASTMOD: keyword, nor git-mtime
-\(`--git-mtime-of-file') yields a value.  Best-effort idempotence —
-editor saves with no content change bump mtime and will produce a
-publish diff."
-  (when (file-exists-p file)
+\(`--git-mtime-of-file') yields a value.
+
+P2.14 — best-effort idempotence.  Git-mtime returns nil for an uncommitted
+file, so an author who edits-then-publishes BEFORE committing would otherwise
+fall through to the live filesystem mtime and get a fresh `last_modified'
+(mtime = today) on every run, churning the date.  When PRIOR-RECORDED is a
+non-empty string (a `last_modified' value recorded for this note on an EARLIER
+publish, threaded in by the caller), it is returned in preference to the live
+mtime, so an uncommitted edit does not churn the date.  A blank/empty
+PRIOR-RECORDED is treated as absent so genuinely first-seen files still get
+their real mtime.
+
+NOTE (scope): the production caller is
+`a3madkour-pub-frontmatter/last-modified-cascade' (in
+a3madkour-publish-frontmatter.el, outside this module).  It currently calls
+this function with FILE only, so wiring the churn fix end-to-end additionally
+requires that cascade to (a) look up the note's previously-recorded
+`last_modified' and (b) pass it here as PRIOR-RECORDED — and for
+`record-publish' to persist a `last_modified' on each entry so there IS a
+prior value to recall.  Those are cross-file changes; this leaf makes the
+churn-avoiding behavior available and correct."
+  (cond
+   ((and (stringp prior-recorded)
+         (not (string-empty-p (string-trim prior-recorded))))
+    prior-recorded)
+   ((file-exists-p file)
     (format-time-string "%Y-%m-%d"
                         (file-attribute-modification-time
-                         (file-attributes file)))))
+                         (file-attributes file))))))
 
 (provide 'a3madkour-publish-history)
 

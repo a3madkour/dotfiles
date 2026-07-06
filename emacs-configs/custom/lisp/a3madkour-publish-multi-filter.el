@@ -118,6 +118,19 @@ Returns (cons TITLE-OR-NIL ID-OR-NIL)."
               (match-string 1 attr-line))))
     (cons title id)))
 
+(defun a3madkour-pub-multi-filter--escape-attr-value (value chars)
+  "Return VALUE with every character in CHARS backslash-escaped.
+CHARS is a list of characters.  Guards an interpolated D.1 block title so it
+cannot break the delimiters of the surrounding export attribute — e.g. a `\"'
+inside a pandoc `:data-title \"...\"' or a `]' inside a latex `:options [...]'.
+Each character is escaped independently, so a literal backslash in CHARS
+correctly self-escapes without a double-pass ordering hazard."
+  (mapconcat (lambda (c)
+               (if (memq c chars)
+                   (string ?\\ c)
+                 (string c)))
+             value ""))
+
 (defun a3madkour-pub-multi-filter--translate-vocab (backend)
   "Walk current buffer; for each D.1 special block preceded by `#+attr_shortcode:',
 rewrite that attr line into BACKEND-appropriate org annotations.
@@ -157,14 +170,18 @@ point semantics when the search and replacement land adjacent in the buffer."
             (pcase backend
               ('latex
                (when title
-                 (insert (format "#+attr_latex: :options [%s]\n" title)))
+                 (insert (format "#+attr_latex: :options [%s]\n"
+                                 (a3madkour-pub-multi-filter--escape-attr-value
+                                  title (list ?\] ?\\)))))
                (when id
                  (insert (format "#+name: %s\n" id))))
               ('pandoc
                (insert "#+attr_html:")
                (insert (format " :class %s" kind))
                (when id (insert (format " :id %s" id)))
-               (when title (insert (format " :data-title \"%s\"" title)))
+               (when title (insert (format " :data-title \"%s\""
+                                           (a3madkour-pub-multi-filter--escape-attr-value
+                                            title (list ?\" ?\\)))))
                (insert "\n")))))))))
 
 (defun a3madkour-pub-multi-filter--rewrite-crossrefs (backend)

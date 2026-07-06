@@ -80,11 +80,11 @@ NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
    ((and (stringp v)
          (string-match-p a3madkour-pub-poetry--date-re v))
     v)
-   ((stringp v) (format "\"%s\"" v))
+   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
    ((numberp v) (format "%s" v))
    ((listp v)
     (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
 
 (defun a3madkour-pub-poetry--render-frontmatter (alist)
   "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
@@ -189,7 +189,7 @@ Returns a plist:
                 (a3madkour-pub-poetry--copy-audio-asset
                  id (plist-get audio-class :value) bundle-dir))
               ;; Stage 8: record-publish.
-              (a3madkour-pub-history/record-publish id new-url 'live)
+              (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live))
               (when on-done (funcall on-done 'ok))
               (list :status 'ok :id id :slug slug :url new-url :warnings warnings))))
       (error

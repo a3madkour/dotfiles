@@ -177,6 +177,47 @@ Keys are strings (the canonical `#+HUGO_SECTION:' slash-form)."
     (should-not (plist-member row :finished))
     (should-not (plist-member row :preview))))
 
+(ert-deftest a3madkour-pub-library--normalize-year-non-numeric-omitted ()
+  "Non-numeric :YEAR: drops the key (no silent `year: 0'), mirroring
+`a3madkour-pub-frontmatter--coerce-weight's non-numeric→nil handling."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: n/a
+:STATUS: finished
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (warnings '())
+         (row (cl-letf (((symbol-function 'message)
+                         (lambda (fmt &rest args)
+                           (push (apply #'format fmt args) warnings))))
+                (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org"))))
+    (should row)
+    (should-not (plist-member row :year))
+    (should (seq-some (lambda (m) (string-match-p "year.*non-numeric" m)) warnings))))
+
+(ert-deftest a3madkour-pub-library--normalize-missing-status-skipped ()
+  "Missing/empty required :STATUS: → WARN + skip (return nil), consistent
+with the empty-slug skip.  Emitting `status: null' would become a hard
+CI fail downstream in check_library_fixtures.py."
+  (let* ((src (a3madkour-pub-library-test--parse-headline
+               "* Item
+:PROPERTIES:
+:CREATOR: x
+:YEAR: 2024
+:END:
+"))
+         (cfg (a3madkour-pub-library--config-for "library/reading"))
+         (warnings '())
+         (row (cl-letf (((symbol-function 'message)
+                         (lambda (fmt &rest args)
+                           (push (apply #'format fmt args) warnings))))
+                (a3madkour-pub-library--normalize-item src "library/reading" cfg "/tmp/x.org"))))
+    (should-not row)
+    (should (seq-some (lambda (m) (string-match-p "status.*skip" m)) warnings))))
+
 (ert-deftest a3madkour-pub-library--normalize-tags-roundtrip ()
   "Per-heading org tags round-trip via filter-editorial-tags."
   (let* ((src (a3madkour-pub-library-test--parse-headline

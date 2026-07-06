@@ -171,6 +171,23 @@ WARNs on missing cover-file (emits key anyway).  Returns a plist or nil."
                                                "cover file missing at %s" cover-path))))))))
     result))
 
+(defun a3madkour-pub-library--coerce-year (raw file slug)
+  "Coerce RAW year to an integer, or nil when absent/non-numeric.
+Mirrors `a3madkour-pub-frontmatter--coerce-weight': a non-numeric value
+WARNs and returns nil (caller omits the key) rather than letting
+`string-to-number' silently emit `0'."
+  (cond
+   ((null raw) nil)
+   ((integerp raw) raw)
+   ((stringp raw)
+    (let ((cleaned (string-trim raw)))
+      (cond
+       ((string-empty-p cleaned) nil)
+       ((string-match-p "^[+-]?[0-9]+$" cleaned) (string-to-number cleaned))
+       (t (a3madkour-pub-library--warn file slug "year=%S non-numeric; omitting" raw)
+          nil))))
+   (t nil)))
+
 (cl-defun a3madkour-pub-library--normalize-item (headline section cfg file)
   "Build a YAML-row plist from HEADLINE for SECTION using CFG.
 FILE is the source path (used for WARN context + git-mtime fallback for
@@ -190,17 +207,27 @@ Returns nil when the item should be skipped (e.g. empty slug)."
            (status        (a3madkour-pub-library--headline-property headline "STATUS"))
            (creator       (a3madkour-pub-library--headline-property headline "CREATOR"))
            (year-raw      (a3madkour-pub-library--headline-property headline "YEAR"))
-           (year          (and year-raw (string-to-number year-raw)))
-           (row-plist     (list :slug slug
-                                :title title
-                                :creator creator
-                                :year year
-                                :media_type media-type
-                                :status status)))
+           (year          (a3madkour-pub-library--coerce-year year-raw file slug)))
+      ;; Missing required status → skip the row (WARN + return nil), the same
+      ;; skip contract as an empty slug.  Emitting `status: null' here would
+      ;; be a hard CI fail downstream in check_library_fixtures.py.
+      (unless status
+        (a3madkour-pub-library--warn file slug
+                                     "missing required status; skipping")
+        (cl-return-from a3madkour-pub-library--normalize-item nil))
+      (let ((row-plist (list :slug slug
+                             :title title
+                             :creator creator
+                             :media_type media-type
+                             :status status)))
+      ;; Non-numeric year is dropped by `--coerce-year' (nil); only emit the
+      ;; key when we have a real integer.
+      (when year
+        (setq row-plist (plist-put row-plist :year year)))
       (unless (member media-type allowed-mt)
         (a3madkour-pub-library--warn file slug
                                      "media_type=%s not in %S" media-type allowed-mt))
-      (unless (and status (member status allowed-stat))
+      (unless (member status allowed-stat)
         (a3madkour-pub-library--warn file slug
                                      "status=%s not in %S" status allowed-stat))
       ;; Optional drawer pass-throughs.
@@ -237,7 +264,7 @@ Returns nil when the item should be skipped (e.g. empty slug)."
       (let ((extras (a3madkour-pub-library--collect-extras headline media-type file slug)))
         (when extras
           (setq row-plist (plist-put row-plist :extras extras))))
-      row-plist)))
+      row-plist))))
 
 (defconst a3madkour-pub-library--yaml-key-order
   '(:slug :title :creator :year :media_type :status

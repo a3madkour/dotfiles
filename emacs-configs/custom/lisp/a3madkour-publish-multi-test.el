@@ -59,6 +59,40 @@
     (should pdf-ran) (should word-ran)
     (should (eq (plist-get done-status :status) 'ok))))
 
+(ert-deftest a3madkour-pub-multi/export-bundle-pdf-gets-original-svg-source ()
+  "P2.3 wiring: the PDF backend is dispatched against the PREPARED temp copy
+(positional source), but must receive `:svg-source-file' pointing at the
+ORIGINAL source so figure links resolve under the essays asset root instead of
+the temp dir (where they'd be filtered out and dropped)."
+  (let (captured-args)
+    (cl-letf*
+        (((symbol-function 'a3madkour-pub-multi-pdf/run)
+          (lambda (&rest args)
+            (setq captured-args args)
+            (let ((on-done (a3madkour-pub-multi--test--find-on-done args)))
+              (when on-done (funcall on-done '(:status ok :path "/x.pdf"))))))
+         ((symbol-function 'a3madkour-pub-multi-word/run)
+          (lambda (&rest args)
+            (let ((on-done (a3madkour-pub-multi--test--find-on-done args)))
+              (when on-done (funcall on-done '(:status ok :path "/x.docx"))))))
+         ;; prepare-source returns a DISTINCT temp path so we can tell the
+         ;; positional (prepared) source from the :svg-source-file (original).
+         ((symbol-function 'a3madkour-pub-multi--prepare-source-for-pdf)
+          (lambda (_source _slug _work) "/tmp/prepared-x.org"))
+         ((symbol-function 'a3madkour-pub-multi--templates-dir)
+          (lambda () "/tmp/templates/"))
+         ((symbol-function 'a3madkour-pub-multi--bib-path) (lambda () "/tmp/lib.bib"))
+         ((symbol-function 'a3madkour-pub-multi--has-citations-p) (lambda (_) nil))
+         ((symbol-function 'a3madkour-pub-multi--patch-downloads-frontmatter)
+          (lambda (&rest _) nil)))
+      (a3madkour-pub-multi/export-bundle
+       "/tmp/x.org" "x" "/tmp/bundle/"
+       :run (make-a3-pub-async-run :buffer (a3-pub-async/buffer))
+       :on-done (lambda (_) nil)))
+    ;; Positional source is the prepared temp copy; svg-source-file is original.
+    (should (equal (car captured-args) "/tmp/prepared-x.org"))
+    (should (equal (plist-get captured-args :svg-source-file) "/tmp/x.org"))))
+
 (ert-deftest a3madkour-pub-multi/export-bundle-word-err-rollup ()
   "If word backend errors, rolled-up :status is 'err."
   (let (done-status)

@@ -67,11 +67,11 @@ tested before the listp case."
    ((and (stringp v)
          (string-match-p a3madkour-pub-garden--date-re v))
     v)                                    ; unquoted YYYY-MM-DD → YAML date
-   ((stringp v) (format "\"%s\"" v))
+   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
    ((numberp v) (format "%s" v))
    ((listp v)
     (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
 
 (defun a3madkour-pub-garden--render-frontmatter (alist)
   "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
@@ -108,7 +108,8 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
   (condition-case _err
       (progn
         (ignore run)
-        (let* ((id        (plist-get (a3madkour-pub/note-metadata file) :id))
+        (let* ((md        (a3madkour-pub/note-metadata file))
+               (id        (plist-get md :id))
                (slug      (a3madkour-pub/note-slug file))
                (new-url   (a3madkour-pub/note-url file))
                (site-root (a3madkour-pub-garden--site-root))
@@ -131,7 +132,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
           (a3madkour-pub-garden--write-if-different
            out-path
            (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
-          (a3madkour-pub-history/record-publish id new-url 'live))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))

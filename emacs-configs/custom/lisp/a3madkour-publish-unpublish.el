@@ -46,6 +46,30 @@ defcustom inside a fixture."
   :type '(choice (const :tag "Derive from site-data-dir" nil) directory)
   :group 'a3madkour-pub)
 
+(defcustom a3madkour-pub-unpublish-removal-floor-count 5
+  "Minimum live-set size before the P1.1c mass-removal circuit-breaker engages.
+
+The breaker refuses a sweep only when at least this many notes are currently
+live/draft in the manifest.  Below the floor, removals proceed unconditionally
+so legitimately small sites (e.g. unpublishing the only note) are never
+blocked.  Set to a very large number to effectively disable the floor gate."
+  :type 'integer
+  :group 'a3madkour-pub)
+
+(defcustom a3madkour-pub-unpublish-max-removal-ratio 0.5
+  "Fraction of the live set that may be removed in one publish run.
+
+When the manifest holds at least `a3madkour-pub-unpublish-removal-floor-count'
+live/draft notes AND a single run would classify more than this fraction of
+them as `:removed', `a3madkour-pub/finish-publish' REFUSES the destructive
+sweep — no bundles are deleted, no manifest entries advance to `removed' — and
+surfaces a loud WARN.  This is the backstop against a misconfigured
+`org-notes-dir' or an empty source walk wiping the whole site in one run.
+
+Set to nil (or >= 1.0) to disable the ratio breaker."
+  :type '(choice (const :tag "Disabled" nil) number)
+  :group 'a3madkour-pub)
+
 (defun a3madkour-pub--site-content-dir-effective ()
   "Return the effective Hugo `content/' root.
 Honors `a3madkour-pub-site-content-dir' when set; otherwise derives from
@@ -142,13 +166,21 @@ keyed, not per-walk).  Repeated calls are independent."
              (id (plist-get parsed :id))
              (section (plist-get parsed :section))
              (slug (plist-get parsed :slug)))
-        (when (and state id section slug)
+        (cond
+         ((and state id section slug)
           (puthash id
                    (cons (format "/%s/%s/" section slug) state)
-                   set))))
+                   set))
+         ;; P1.1e: a published note (state+id+section) with a nil/empty slug
+         ;; can't form a URL, so it's skipped — but WARN rather than omit
+         ;; silently.  Silent omission would classify a genuinely-published
+         ;; note as `:removed' in the diff and risk deleting its bundle.
+         ((and state id section)
+          (message "[a3-pub] walk: note %s (%s) is published but has no slug (empty title / no #+HUGO_SLUG:) — skipped from the live set; check the source"
+                   id file)))))
     set))
 
-(defun a3madkour-pub--unpublish-delete-bundle (section slug &optional content-root)
+(cl-defun a3madkour-pub--unpublish-delete-bundle (section slug &optional content-root)
   "Recursively delete `<CONTENT-ROOT>/<SECTION>/<SLUG>/'.
 
 CONTENT-ROOT defaults to `a3madkour-pub-site-content-dir'.
@@ -167,20 +199,41 @@ mark the manifest entry `removed' — leave it at its prior state (`live' /
 delete (wrong content-root, permission error, transient FS issue) would
 silently orphan the on-disk bundle forever.  (Bug 1.1 in
 `docs/superpowers/specs/2026-06-07-polish-and-bugfix-roadmap.md'.)"
-  (let* ((root (or content-root (a3madkour-pub--site-content-dir-effective)))
-         (bundle (file-name-as-directory
-                  (expand-file-name (format "%s/%s" section slug) root))))
-    (cond
-     ((file-directory-p bundle)
-      (condition-case err
-          (progn (delete-directory bundle t) t)
-        (error
-         (message "[a3-pub] delete-bundle FAILED: %s (%s)"
-                  bundle (error-message-string err))
-         'failed)))
-     (t
-      (message "[a3-pub] delete-bundle: %s already absent (stale manifest?)" bundle)
-      nil))))
+  (let ((root (or content-root (a3madkour-pub--site-content-dir-effective))))
+    ;; P1.1d: never resolve the bundle path against `default-directory'.  A nil
+    ;; root means neither the content-dir nor the site-data-dir is configured;
+    ;; expanding "section/slug" against nil would target `./section/slug/'
+    ;; relative to Emacs' cwd and recursively delete an unrelated directory.
+    (unless root
+      (error "a3-pub delete-bundle: no content root configured (set a3madkour-pub-site-content-dir or a3madkour-pub/site-data-dir); refusing to delete %s/%s"
+             section slug))
+    ;; P1.1d: guard against empty section/slug producing a path that resolves
+    ;; to the content root itself.
+    (when (or (null section) (equal section "") (null slug) (equal slug ""))
+      (message "[a3-pub] delete-bundle: empty section/slug (%S / %S) — skipping" section slug)
+      (cl-return-from a3madkour-pub--unpublish-delete-bundle 'failed))
+    (let ((bundle (file-name-as-directory
+                   (expand-file-name (format "%s/%s" section slug) root))))
+      (cond
+       ((not (file-directory-p bundle))
+        (message "[a3-pub] delete-bundle: %s already absent (stale manifest?)" bundle)
+        nil)
+       ;; P1.1d: verify the target actually looks like a Hugo page bundle
+       ;; before the recursive delete — an `index.md' or `_index.md' must be
+       ;; present.  Refuse (return 'failed, like the caller's no-advance path)
+       ;; rather than nuke an arbitrary directory sitting at the derived path.
+       ((not (or (file-exists-p (expand-file-name "index.md" bundle))
+                 (file-exists-p (expand-file-name "_index.md" bundle))))
+        (message "[a3-pub] delete-bundle: %s is not a content bundle (no index.md/_index.md) — refusing to delete"
+                 bundle)
+        'failed)
+       (t
+        (condition-case err
+            (progn (delete-directory bundle t) t)
+          (error
+           (message "[a3-pub] delete-bundle FAILED: %s (%s)"
+                    bundle (error-message-string err))
+           'failed)))))))
 
 (defun a3madkour-pub--unpublish-url-to-section-slug (url)
   "Parse URL of shape `/<section>/<slug>/' (or nested) into a cons cell.
@@ -196,10 +249,19 @@ yield (\"research/questions\" . \"q\")."
         (cons (mapconcat #'identity (butlast parts) "/")
               (car (last parts)))))))
 
-(cl-defun a3madkour-pub/finish-publish (&key dry-run (scope 'living))
+(cl-defun a3madkour-pub/finish-publish (&key dry-run (scope 'living) (reap t))
   "Orchestrate the unpublish flow.  Returns a plist.
 
 When DRY-RUN is non-nil: no FS writes, no manifest mutation.
+
+When REAP is nil (P1.1a status gate): the destructive Step A sweep and the
+Step B slug-shift FS mutations are skipped, exactly as under DRY-RUN, but the
+diff is still computed and returned for logging.  Callers pass `:reap nil'
+when the publish run did NOT complete cleanly (status err / cancelled) — a
+partial or cancelled run leaves the accumulator incomplete, so trusting it as
+the authoritative new-live-set would classify still-valid notes as `:removed'
+and delete their bundles.  Gating the sweep on run success is the primary
+safety rail against that data-loss path.
 
 SCOPE is `'living' (default) or `'deliberate'.  `'living' runs the
 full Step A unpublish-sweep + Step B slug-shift + Step C re-link-check
@@ -233,15 +295,52 @@ Returns:
    :orphan-warnings (\"WARN: ...\" ...))"
   (let* ((new-set (if (zerop (hash-table-count a3madkour-pub--publish-run-accumulator))
                       (a3madkour-pub/walk-published-source-set)
-                    (copy-hash-table a3madkour-pub--publish-run-accumulator)))
+                    ;; P2.12: the accumulator carries EVERY record-publish call
+                    ;; this run, including `(record-publish id nil 'removed)'
+                    ;; from a deliberate unpublish.  A `removed'/nil-url entry
+                    ;; is NOT a live member of the new-set — including it would
+                    ;; misclassify a just-removed id as `:stayed' (or a bogus
+                    ;; `:slug-shifted' to nil).  Filter to live/draft, url-bearing.
+                    (let ((filtered (make-hash-table :test 'equal)))
+                      (maphash
+                       (lambda (id entry)
+                         (when (and (car entry)
+                                    (memq (cdr entry) '(live draft)))
+                           (puthash id entry filtered)))
+                       a3madkour-pub--publish-run-accumulator)
+                      filtered)))
          (diff (a3madkour-pub/diff-published-set new-set))
          (removed (plist-get diff :removed))
          (shifts (plist-get diff :slug-shifted))
          (manifest (a3madkour-pub-history/read-manifest-snapshot-or-disk))
          (notes (alist-get 'notes manifest))
          (removed-set (make-hash-table :test 'equal))
+         ;; P1.1c mass-removal circuit-breaker.  Refuse a real (non-dry-run,
+         ;; reaping) sweep that would delete more than the configured fraction
+         ;; of a non-trivial live set — the signature of a misconfigured
+         ;; `org-notes-dir' or an empty/partial source walk about to wipe the
+         ;; site.  Below the floor count, small legitimate removals proceed.
+         (old-live-count (cl-count-if
+                          (lambda (n) (member (alist-get 'state n) '("live" "draft")))
+                          notes))
+         (sweep-refused
+          (and (not (eq scope 'deliberate))
+               reap (not dry-run)
+               a3madkour-pub-unpublish-max-removal-ratio
+               (>= old-live-count a3madkour-pub-unpublish-removal-floor-count)
+               (> (/ (float (length removed)) (max 1 old-live-count))
+                  a3madkour-pub-unpublish-max-removal-ratio)))
          slug-shifted-result orphan-warnings)
-    ;; Step A: sweep.  Skipped under 'deliberate.
+    (when sweep-refused
+      (push (format (concat "WARN: refusing orphan sweep — %d of %d live notes "
+                            "would be removed in one run (> %d%% threshold); NO "
+                            "bundles deleted. Verify org-notes-dir / config, or "
+                            "lower a3madkour-pub-unpublish-max-removal-ratio if "
+                            "the mass removal is intentional.")
+                    (length removed) old-live-count
+                    (round (* 100 a3madkour-pub-unpublish-max-removal-ratio)))
+            orphan-warnings))
+    ;; Step A: sweep.  Skipped under 'deliberate, or when the breaker refused.
     ;;
     ;; Bug 1.1 (polish-and-bugfix-roadmap.md): only advance the manifest to
     ;; `removed' when `--unpublish-delete-bundle' actually succeeded (or the
@@ -253,14 +352,14 @@ Returns:
     ;; content-root, permission error, transient FS issue) would silently
     ;; orphan the on-disk bundle forever, because the diff would never
     ;; surface the id again once its manifest entry said `removed'.
-    (unless (eq scope 'deliberate)
+    (unless (or (eq scope 'deliberate) sweep-refused)
       (dolist (id removed)
         (puthash id t removed-set)
         (let* ((idx (a3madkour-pub-history--find-note-by-id notes id))
                (entry (when idx (aref notes idx)))
                (url (when entry (alist-get 'current_url entry)))
                (parts (when url (a3madkour-pub--unpublish-url-to-section-slug url))))
-          (when (and parts (not dry-run))
+          (when (and parts (not dry-run) reap)
             (let ((delete-result
                    (a3madkour-pub--unpublish-delete-bundle (car parts) (cdr parts))))
               (unless (eq delete-result 'failed)
@@ -296,7 +395,7 @@ Returns:
             (when (and old-parts new-parts)
               (let ((old-slug (cdr old-parts))
                     (new-slug (cdr new-parts)))
-                (unless dry-run
+                (unless (or dry-run (not reap))
                   (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
                   (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug)
                   ;; Delete the orphan Hugo content bundle at the old slug.
@@ -326,7 +425,7 @@ Returns:
     (setq a3madkour-pub--manifest-snapshot nil)
     (list :added (plist-get diff :added)
           :stayed (plist-get diff :stayed)
-          :removed (if (eq scope 'deliberate) nil removed)
+          :removed (if (or (eq scope 'deliberate) sweep-refused) nil removed)
           :slug-shifted (nreverse slug-shifted-result)
           :orphan-warnings (nreverse orphan-warnings))))
 

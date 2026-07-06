@@ -118,6 +118,42 @@ normalized frontmatter + body + record-publish call."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+(ert-deftest a3madkour-pub-garden--publish-file-records-draft-state ()
+  "P2.1: a draft note (HUGO_DRAFT: t) must be recorded in the manifest with
+state `draft', not the hard-coded `live'.  Otherwise a later draft→live flip
+emits no history event and the manifest is factually wrong."
+  (let* ((notes-dir (make-temp-file "a3-pub-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-site-" t))
+         (src       (expand-file-name "draft-note.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: dddddddd-bbbb-cccc-dddd-eeeeeeeeeeee\n"
+                    ":END:\n"
+                    "#+title: Draft Note\n"
+                    "#+filetags: :alpha:\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_DRAFT: t\n"
+                    "#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "Body text.\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-garden/publish-garden-file
+               src (make-a3-pub-async-run) :on-done (lambda (_) nil))
+              (a3madkour-pub/finish-publish))
+            (let* ((m (a3madkour-pub-history/read-manifest))
+                   (note (aref (alist-get 'notes m) 0)))
+              (should (equal (alist-get 'state note) "draft")))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (ert-deftest a3madkour-pub-garden--publish-garden-file-rewrites-links ()
   "publish-garden-file pre-rewrites [[id:UUID]] links so the emitted
 markdown has resolved HTML anchors and zero `{{< relref' shortcodes.
@@ -292,6 +328,14 @@ hyphen-slug bundles."
         "/tmp/fake.org" (make-a3-pub-async-run)
         :on-done (lambda (s) (setq done-status s)))))
     (should (eq done-status 'err))))
+
+(ert-deftest a3madkour-pub-garden--render-yaml-value-escapes-quotes ()
+  "P1.2: a string scalar with an embedded double-quote is escaped, not emitted
+raw (which would be invalid YAML that breaks the Hugo build)."
+  (should (equal (a3madkour-pub-garden--render-yaml-value "The \"x\" y")
+                 "\"The \\\"x\\\" y\""))
+  (should (equal (a3madkour-pub-garden--render-yaml-value '("a\"b"))
+                 "[\"a\\\"b\"]")))
 
 (provide 'a3madkour-publish-garden-test)
 

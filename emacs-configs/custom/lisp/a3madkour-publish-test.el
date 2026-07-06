@@ -447,6 +447,18 @@ non-empty string, defaulting to a path under ~/org/."
   (should (not (string-empty-p a3madkour-pub/essays-dir)))
   (should (string-match-p "/org/essays" a3madkour-pub/essays-dir)))
 
+(ert-deftest a3madkour-pub-test/yaml-escape-scalar ()
+  "P1.2: the shared YAML scalar escaper backslash-escapes `\\' then `\"' so
+embedded quotes/backslashes can't break the double-quoted frontmatter scalar."
+  (should (equal (a3madkour-pub/yaml-escape-scalar "plain") "plain"))
+  (should (equal (a3madkour-pub/yaml-escape-scalar "The \"Real\" Problem")
+                 "The \\\"Real\\\" Problem"))
+  (should (equal (a3madkour-pub/yaml-escape-scalar "back\\slash")
+                 "back\\\\slash"))
+  ;; Backslash escaped BEFORE quote (order matters — no double-escaping).
+  (should (equal (a3madkour-pub/yaml-escape-scalar "a\\\"b")
+                 "a\\\\\\\"b")))
+
 (provide 'a3madkour-publish-test)
 
 ;;; a3madkour-publish-test.el ends here

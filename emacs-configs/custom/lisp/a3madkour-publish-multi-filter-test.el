@@ -184,6 +184,32 @@ along with the leading whitespace separator."
       (a3madkour-pub-multi-filter--translate-vocab 'latex)
       (should (string= before (buffer-string))))))
 
+(ert-deftest a3madkour-pub-multi-filter/vocab-pandoc-escapes-title-quote ()
+  "A D.1 block title containing a double-quote is escaped in the pandoc :data-title attr,
+so it cannot break the surrounding quoted attribute value."
+  (with-temp-buffer
+    (insert "#+attr_shortcode: :title foo\"bar :id thm-x\n"
+            "#+begin_theorem\nFoo.\n#+end_theorem\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--translate-vocab 'pandoc)
+    (let ((text (buffer-string)))
+      (should (string-match-p (regexp-quote ":data-title \"foo\\\"bar\"") text))
+      ;; the raw, unescaped (attr-breaking) form must NOT appear
+      (should-not (string-match-p (regexp-quote ":data-title \"foo\"bar\"") text)))))
+
+(ert-deftest a3madkour-pub-multi-filter/vocab-latex-escapes-title-bracket ()
+  "A D.1 block title containing ] is guarded in the latex :options value,
+so it cannot terminate the LaTeX optional-argument bracket early."
+  (with-temp-buffer
+    (insert "#+attr_shortcode: :title foo]bar :id thm-y\n"
+            "#+begin_theorem\nFoo.\n#+end_theorem\n")
+    (org-mode)
+    (a3madkour-pub-multi-filter--translate-vocab 'latex)
+    (let ((text (buffer-string)))
+      (should (string-match-p (regexp-quote ":options [foo\\]bar]") text))
+      ;; the raw, unescaped (bracket-breaking) form must NOT appear
+      (should-not (string-match-p (regexp-quote ":options [foo]bar]") text)))))
+
 (ert-deftest a3madkour-pub-multi-filter/crossref-latex ()
   "[[#thm-ivt][text]] org link rewrites to @@latex:\\hyperref export snippet."
   (with-temp-buffer

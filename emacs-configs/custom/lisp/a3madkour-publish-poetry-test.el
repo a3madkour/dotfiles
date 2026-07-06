@@ -301,6 +301,13 @@ or hugo — pure in-process emacs."
       (delete-directory poetry-root t)
       (delete-directory site-root t))))
 
+(ert-deftest a3madkour-pub-poetry--render-yaml-value-escapes-quotes ()
+  "P1.2: embedded double-quotes are escaped, not emitted raw."
+  (should (equal (a3madkour-pub-poetry--render-yaml-value "The \"x\" y")
+                 "\"The \\\"x\\\" y\""))
+  (should (equal (a3madkour-pub-poetry--render-yaml-value '("a\"b"))
+                 "[\"a\\\"b\"]")))
+
 (provide 'a3madkour-publish-poetry-test)
 
 ;;; a3madkour-publish-poetry-test.el ends here

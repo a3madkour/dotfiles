@@ -190,10 +190,41 @@ B.1.1: prior contract was to propagate; updated to catch + WARN."
     (unwind-protect
         (progn
           (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
           (cl-letf (((symbol-function 'delete-directory)
                      (lambda (&rest _) (error "permission denied"))))
             (should (eq 'failed
                         (a3madkour-pub--unpublish-delete-bundle "garden" "foo" root)))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/delete-bundle-nil-root-errors ()
+  "P1.1d: with no content-root configured (arg nil AND both content/data
+defcustoms nil), delete-bundle must SIGNAL rather than silently resolve
+`section/slug' relative to `default-directory' and recursively delete it."
+  (let ((a3madkour-pub-site-content-dir nil)
+        (a3madkour-pub/site-data-dir nil))
+    (should-error (a3madkour-pub--unpublish-delete-bundle "garden" "foo" nil))))
+
+(ert-deftest a3madkour-pub-unpublish-test/delete-bundle-refuses-non-bundle-dir ()
+  "P1.1d: a directory that exists but has no index.md/_index.md is NOT a Hugo
+content bundle; delete-bundle refuses to recursively delete it (returns
+'failed, dir survives, WARN emitted).  Guards against nuking an arbitrary
+directory that happens to sit at the derived path."
+  (let* ((root (make-temp-file "a3-pub-content-" t))
+         (dir (expand-file-name "garden/not-a-bundle" root))
+         captured)
+    (unwind-protect
+        (progn
+          (make-directory dir t)
+          (with-temp-file (expand-file-name "random.txt" dir) (insert "x"))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args) (push (apply #'format fmt args) captured))))
+            (let ((result (a3madkour-pub--unpublish-delete-bundle
+                           "garden" "not-a-bundle" root)))
+              (should (eq result 'failed))
+              (should (file-directory-p dir))
+              (should (cl-some (lambda (m) (string-match-p "not a content bundle" m))
+                               captured)))))
       (delete-directory root t))))
 
 ;; -- url-to-section-slug: URL parser edge cases --
@@ -514,6 +545,7 @@ the next publish run's diff re-includes the id in :removed and retries."
   "Step B: slug shift triggers asset-dir rename + source-link rewrite."
   (let* ((notes-dir (make-temp-file "a3-pub-notes-" t))
          (asset-root (make-temp-file "a3-pub-assets-" t))
+         (content-root (make-temp-file "a3-pub-content-" t))
          (old-asset-dir (expand-file-name "page/foo" asset-root))
          (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
     (unwind-protect
@@ -523,6 +555,7 @@ the next publish run's diff re-includes the id in :removed and retries."
           (a3-pub-unpublish-test--write-org notes-dir "note.org"
             "[[./assets/page/foo/x.png][x]]\n")
           (let ((a3madkour-pub-canonical-asset-root asset-root)
+                (a3madkour-pub-site-content-dir content-root)
                 (a3madkour-pub/org-notes-dir notes-dir))
             (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
                        (lambda () manifest-path))
@@ -547,6 +580,7 @@ the next publish run's diff re-includes the id in :removed and retries."
                   (should (string-match-p "page/foo-v2/x.png" content)))))))
       (delete-directory notes-dir t)
       (delete-directory asset-root t)
+      (delete-directory content-root t)
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
 (ert-deftest a3madkour-pub-unpublish-test/finish-publish-step-b-dry-run ()
@@ -960,6 +994,7 @@ and emits a [a3-pub] WARN message including the bundle path."
     (unwind-protect
         (progn
           (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
           (cl-letf (((symbol-function 'delete-directory)
                      (lambda (&rest _) (error "permission denied (test stub)")))
                     ((symbol-function 'message)
@@ -1098,6 +1133,193 @@ addition didn't regress the default path."
        (let ((result (a3madkour-pub--unpublish-rename-asset-dir "old" "new" "/tmp/root/")))
          (should (eq result :renamed-mv))))
       (should rename-called))))
+
+;; -- P2.12: accumulator new-set excludes removed / nil-url entries --
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-new-set-excludes-removed-accumulator-entries ()
+  "P2.12: `record-publish' pushes EVERY call into the run accumulator,
+including `a3-unpublish-deliberate's `(record-publish id nil 'removed)'.
+`finish-publish' must not treat such a nil-url/`removed' accumulator entry as
+a live member of the new-set — otherwise a just-removed id is misclassified
+`:stayed' (and even `:slug-shifted' from its old URL to nil) instead of
+`:removed'."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path)))
+          (a3madkour-pub-history/write-manifest
+           '((notes . [((id . "id-live") (current_url . "/garden/live/")
+                        (history . []) (state . "live"))
+                       ((id . "id-gone") (current_url . "/garden/gone/")
+                        (history . []) (state . "live"))])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-live" '("/garden/live/" . live)
+                   a3madkour-pub--publish-run-accumulator)
+          ;; Simulate a deliberate-unpublish record-publish this run.
+          (puthash "id-gone" '(nil . removed)
+                   a3madkour-pub--publish-run-accumulator)
+          (let ((result (a3madkour-pub/finish-publish :dry-run t)))
+            (should (member "id-gone" (plist-get result :removed)))
+            (should (member "id-live" (plist-get result :stayed)))
+            (should-not (member "id-gone" (plist-get result :stayed)))
+            (should-not (plist-get result :slug-shifted))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
+;; -- P1.1: destructive-sweep safety rails --
+
+(ert-deftest a3madkour-pub-unpublish-test/walk-warns-on-published-nil-slug ()
+  "P1.1e: a note that is published (state+id+section) but whose slug is nil
+(empty title, no HUGO_SLUG) is skipped from the new-set — but NOT silently.
+A WARN must surface so the author sees why the note was omitted (silent
+omission would classify it `:removed' and risk deleting its bundle)."
+  (let ((notes-dir (make-temp-file "a3-pub-notes-" t))
+        captured)
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "n.org" notes-dir) (insert "x"))
+          (let ((a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'a3madkour-pub--parse-file)
+                       (lambda (_f) (list :state 'live :id "id-x"
+                                          :section "garden" :slug nil)))
+                      ((symbol-function 'message)
+                       (lambda (fmt &rest args) (push (apply #'format fmt args) captured))))
+              (let ((set (a3madkour-pub/walk-published-source-set)))
+                (should (zerop (hash-table-count set)))
+                (should (cl-some (lambda (m) (string-match-p "id-x" m)) captured))))))
+      (delete-directory notes-dir t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-mass-removal-refused ()
+  "P1.1c circuit-breaker: when the removal set is large (>= floor count) AND
+exceeds the max removal ratio of the live set, the sweep is refused — no
+bundles deleted, no manifest mutation — and a loud WARN is surfaced.  Guards
+against a misconfigured `org-notes-dir' / empty walk wiping the whole site."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         ;; 6 live notes; a bundle on disk for the first one.
+         (notes (cl-loop for i from 0 below 6
+                         collect `((id . ,(format "id-%d" i))
+                                   (current_url . ,(format "/garden/n%d/" i))
+                                   (history . [])
+                                   (state . "live"))))
+         (bundle (expand-file-name "garden/n0" content-root)))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-unpublish-removal-floor-count 5)
+                (a3madkour-pub-unpublish-max-removal-ratio 0.5))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path)))
+              (a3madkour-pub-history/write-manifest `((notes . ,(vconcat notes))))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              ;; Empty new-set → diff classifies ALL 6 as removed (ratio 1.0).
+              (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                         (lambda () (make-hash-table :test 'equal))))
+                (let ((result (a3madkour-pub/finish-publish)))
+                  ;; Refused: nothing deleted, all still live.
+                  (should (file-directory-p bundle))
+                  (should-not (plist-get result :removed))
+                  (let ((m (a3madkour-pub-history/read-manifest)))
+                    (should (cl-every (lambda (n) (equal (alist-get 'state n) "live"))
+                                      (alist-get 'notes m))))
+                  ;; Loud warning surfaced.
+                  (should (cl-some (lambda (w) (string-match-p "refus" w))
+                                   (plist-get result :orphan-warnings))))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-small-removal-not-refused ()
+  "P1.1c: below the floor count, legitimate small removals (e.g. unpublishing
+the only note) proceed — the breaker must not block them.  This is the
+regression guard for `finish-publish-step-a-happy'."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (bundle (expand-file-name "garden/gone" content-root)))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-unpublish-removal-floor-count 5)
+                (a3madkour-pub-unpublish-max-removal-ratio 0.5))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'a3madkour-pub-history--now-iso)
+                       (lambda () "2026-05-24T12:00:00Z")))
+              (a3madkour-pub-history/write-manifest
+               '((notes . [((id . "id-gone") (current_url . "/garden/gone/")
+                            (history . []) (state . "live"))])))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                         (lambda () (make-hash-table :test 'equal))))
+                (let ((result (a3madkour-pub/finish-publish)))
+                  (should (equal (plist-get result :removed) '("id-gone")))
+                  (should-not (file-directory-p bundle)))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-reap-nil-skips-deletion ()
+  "P1.1a status gate: `:reap nil' (a failed/cancelled run) must NOT delete
+the bundle or advance the manifest to `removed', even though the diff still
+classifies the id under :removed.  Mirrors :dry-run but is driven by run
+status rather than preview intent."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (bundle (expand-file-name "garden/gone" content-root))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (manifest `((notes . [((id . "id-gone")
+                                       (current_url . "/garden/gone/")
+                                       (history . [])
+                                       (state . "live"))]))))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path)))
+              (a3madkour-pub-history/write-manifest manifest)
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                         (lambda () (make-hash-table :test 'equal))))
+                (let ((result (a3madkour-pub/finish-publish :reap nil)))
+                  ;; Diff still reports the removal (for logging).
+                  (should (equal (plist-get result :removed) '("id-gone")))
+                  ;; But nothing was deleted or mutated.
+                  (should (file-directory-p bundle))
+                  (let* ((m (a3madkour-pub-history/read-manifest))
+                         (note (aref (alist-get 'notes m) 0)))
+                    (should (equal (alist-get 'state note) "live"))))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-reap-t-default-still-deletes ()
+  "P1.1a: `:reap' defaults to t, preserving the existing sweep behavior."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (bundle (expand-file-name "garden/gone" content-root))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml")))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (manifest `((notes . [((id . "id-gone")
+                                       (current_url . "/garden/gone/")
+                                       (history . [])
+                                       (state . "live"))]))))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'a3madkour-pub-history--now-iso)
+                       (lambda () "2026-05-24T12:00:00Z")))
+              (a3madkour-pub-history/write-manifest manifest)
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                         (lambda () (make-hash-table :test 'equal))))
+                (a3madkour-pub/finish-publish)
+                (should-not (file-directory-p bundle))))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
 
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

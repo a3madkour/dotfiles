@@ -945,6 +945,67 @@ Observable on `content/essays/example-multi/index.md' after the
               (should-not (string-match-p "alt=\"file:" (plist-get result :html))))))
       (delete-directory tmp t))))
 
+;; -- Bug P2.6: --file-top-level-id parity with --extract-id --
+
+(ert-deftest a3madkour-pub-rewrite-test/file-top-level-id-indented-drawer ()
+  "Bug P2.6: `--file-top-level-id' must tolerate an INDENTED `:ID:' drawer,
+matching `--extract-id's' `^[ \\t]*' leniency.  A file whose file-level
+property drawer is indented must still yield its id, not nil (which would
+degrade an incoming file-link to :inert with a spurious WARN)."
+  (let ((tgt (make-temp-file "a3pub-indent-id-" nil ".org"
+                             "#+title: Indented drawer target
+  :PROPERTIES:
+  :ID: deadbeef-dead-beef-dead-beefdeadbeef
+  :END:
+")))
+    (unwind-protect
+        (should (equal (a3madkour-pub--file-top-level-id tgt)
+                       "deadbeef-dead-beef-dead-beefdeadbeef"))
+      (delete-file tgt))))
+
+(ert-deftest a3madkour-pub-rewrite-test/file-top-level-id-non-hex-timestamp ()
+  "Bug P2.6: `--file-top-level-id' must accept a NON-HEX (org timestamp-style)
+id token, matching `--extract-id's' permissive `\\S-+'.  A file whose :ID:
+is `20230101T120000' must yield that id, not nil."
+  (let ((tgt (make-temp-file "a3pub-ts-id-" nil ".org"
+                             "#+title: Timestamp id target
+:PROPERTIES:
+:ID: 20230101T120000
+:END:
+")))
+    (unwind-protect
+        (should (equal (a3madkour-pub--file-top-level-id tgt)
+                       "20230101T120000"))
+      (delete-file tgt))))
+
+;; -- Bug P2.7: no-display file link substitutes the resolved URL --
+
+(ert-deftest a3madkour-pub-rewrite-test/file-link-no-display-substitutes-url ()
+  "Bug P2.7: `[[file:foo.org]]' with NO display text must render the resolved
+URL as the anchor body — NOT the literal `file:foo.org'.  The no-description
+intent must survive the file→id hop into `--rewrite-id-link'."
+  (let ((tgt (make-temp-file "a3pub-nodisp-file-" nil ".org"
+                             "#+title: Target
+#+HUGO_PUBLISH: t
+#+HUGO_SECTION: garden
+:PROPERTIES:
+:ID: deadbeef-dead-beef-dead-beefdeadbeef
+:END:
+")))
+    (unwind-protect
+        (a3madkour-pub-rewrite-test--with-stubbed
+         (("deadbeef-dead-beef-dead-beefdeadbeef"
+           :state live :section "garden" :slug "target")
+          ("source-id" :state live :section "garden" :slug "src"))
+         (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                    (lambda (id)
+                      (and (equal id "deadbeef-dead-beef-dead-beefdeadbeef") tgt))))
+           (let ((result (a3madkour-pub/rewrite-link
+                          (format "[[file:%s]]" tgt) "source-id")))
+             (should (equal (plist-get result :html)
+                            "<a href=\"/garden/target/\">/garden/target/</a>")))))
+      (delete-file tgt))))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here

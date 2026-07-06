@@ -316,6 +316,46 @@ a live-site perspective.)"
             (should (equal (alist-get 'reason (aref hist 0)) "removed"))))
       (clrhash a3madkour-pub--publish-run-accumulator))))
 
+;; -- P2.2: id-less notes must not collide on a single `id: null' entry --
+
+(ert-deftest a3madkour-pub-history-test/record-publish-id-less-notes-dont-collide ()
+  "P2.2: two DISTINCT id-less notes (nil id, different URLs) must produce
+TWO separate manifest entries.  Essays under `a3madkour-pub/essays-dir' are
+not org-roam-indexed, so an essay without an :ID: drawer yields id = nil;
+keying the manifest on nil collided every such note onto one `id: null'
+entry and the second overwrote the first's URL/history."
+  (a3-pub-history-test--with-tmp-manifest path
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (a3madkour-pub-history/record-publish nil "/essays/first/" 'live)
+          (a3madkour-pub-history/record-publish nil "/essays/second/" 'live)
+          (let* ((m (a3madkour-pub-history/read-manifest))
+                 (notes (alist-get 'notes m))
+                 (urls (cl-loop for i from 0 below (length notes)
+                                collect (alist-get 'current_url (aref notes i)))))
+            (should (= 2 (length notes)))
+            (should (member "/essays/first/" urls))
+            (should (member "/essays/second/" urls))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
+(ert-deftest a3madkour-pub-history-test/record-publish-id-less-note-updates-in-place ()
+  "P2.2: re-publishing the SAME id-less note (nil id, same URL) updates its
+own entry in place — no duplicate entry is created, and a state change lands
+on that single entry (matched via the URL surrogate)."
+  (a3-pub-history-test--with-tmp-manifest path
+    (unwind-protect
+        (progn
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (a3madkour-pub-history/record-publish nil "/essays/only/" 'live)
+          (a3madkour-pub-history/record-publish nil "/essays/only/" 'draft)
+          (let* ((m (a3madkour-pub-history/read-manifest))
+                 (notes (alist-get 'notes m)))
+            (should (= 1 (length notes)))
+            (should (equal "/essays/only/" (alist-get 'current_url (aref notes 0))))
+            (should (equal "draft" (alist-get 'state (aref notes 0))))))
+      (clrhash a3madkour-pub--publish-run-accumulator))))
+
 ;; -- B.0: read-manifest-snapshot-or-disk --
 
 (ert-deftest a3madkour-pub-hist-test/read-manifest-snapshot-or-disk-prefers-snapshot ()
@@ -395,6 +435,26 @@ when non-nil, ignoring disk."
   (should-not (a3madkour-pub-history/filesystem-mtime-of-file
                "/nonexistent/path/x.org")))
 
+(ert-deftest a3madkour-pub-history--filesystem-mtime-prefers-prior-recorded ()
+  "P2.14: when a previously-recorded last_modified is supplied, an uncommitted
+edit does NOT churn the date — the prior recorded value is returned in
+preference to the (fresh, today-ish) filesystem mtime.  A blank/empty prior
+is ignored, so the real mtime still surfaces for genuinely first-seen files."
+  (let* ((tmpdir (make-temp-file "a3-pub-fsmtime-prior-" t))
+         (file (expand-file-name "x.org" tmpdir)))
+    (unwind-protect
+        (progn
+          (with-temp-file file (insert "content\n"))
+          ;; A prior recorded date (distinct from today's mtime) wins → no churn.
+          (should (equal "2024-01-02"
+                         (a3madkour-pub-history/filesystem-mtime-of-file
+                          file "2024-01-02")))
+          ;; Empty / blank prior is treated as absent → real mtime surfaces.
+          (let ((got (a3madkour-pub-history/filesystem-mtime-of-file file "")))
+            (should (stringp got))
+            (should (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" got))))
+      (delete-directory tmpdir t))))
+
 (ert-deftest a3madkour-pub-history-test/canonicalize-entry-reorders-keys ()
   "Entry built in non-canonical order is re-ordered to id / current_url / history / state."
   (let* ((entry '((current_url . "/x/") (history . []) (state . "live") (id . "abc")))
@@ -442,6 +502,28 @@ byte-identical YAML output."
             ((symbol-function 'file-exists-p) (lambda (_) t)))
     (should (string= "2026-01-15"
                      (a3madkour-pub-history/git-mtime-of-file "/tmp/x.org")))))
+
+(ert-deftest a3madkour-pub-history-test/write-manifest-atomic-preserves-on-failure ()
+  "P1.1g: write-manifest is atomic (temp file + rename).  A failure during the
+final swap must leave the PREVIOUS manifest fully intact — never a truncated
+half-written file that later feeds spurious `:removed' classifications."
+  (a3-pub-history-test--with-tmp-manifest path
+    (let ((good '((notes . [((id . "keep") (current_url . "/garden/keep/")
+                             (history . []) (state . "live"))]))))
+      (a3madkour-pub-history/write-manifest good)
+      (let ((before (with-temp-buffer (insert-file-contents path) (buffer-string))))
+        ;; Force the atomic swap to fail; the target must be untouched.
+        (cl-letf (((symbol-function 'rename-file)
+                   (lambda (&rest _) (error "simulated crash during swap"))))
+          (should-error
+           (a3madkour-pub-history/write-manifest
+            '((notes . [((id . "other") (current_url . "/garden/other/")
+                         (history . []) (state . "live"))])))))
+        ;; Previous manifest still byte-identical and parseable.
+        (let ((after (with-temp-buffer (insert-file-contents path) (buffer-string))))
+          (should (string= before after)))
+        (let ((m (a3madkour-pub-history/read-manifest)))
+          (should (equal (alist-get 'id (aref (alist-get 'notes m) 0)) "keep")))))))
 
 (provide 'a3madkour-publish-history-test)
 

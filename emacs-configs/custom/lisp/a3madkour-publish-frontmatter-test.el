@@ -321,6 +321,28 @@ Mirror the existing `flavor' / `author' strip pattern in --normalize-garden."
     (should (equal (a3madkour-pub-frontmatter/last-modified-cascade "/tmp/x.org")
                    "2025-01-01"))))
 
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-prior-recorded-beats-fs ()
+  "P2.14: a prior-recorded last_modified is preferred over the filesystem
+mtime, so a never-committed note republished before its first commit keeps a
+STABLE date instead of churning to today every run (defeating idempotence).
+git-mtime still wins over it (committed history is authoritative)."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) nil))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2099-12-31")))
+    ;; prior-recorded beats the churning fs mtime.
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :prior-recorded "2026-01-01")
+                   "2026-01-01")))
+  ;; ...but a real git-mtime still outranks the prior-recorded value.
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2027-05-05"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2099-12-31")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :prior-recorded "2026-01-01")
+                   "2027-05-05"))))
+
 (ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-today-fallback ()
   "today is the ultimate fallback when nothing else resolves."
   (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
@@ -593,6 +615,43 @@ alist value (if any) passes through unchanged."
           (let ((out (a3madkour-pub-frontmatter/normalize
                       'essays '((title . "x") (date . "2026-04-12")) tmp)))
             (should (eq (alist-get 'draft out) nil))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-draft-string-false-coerces-nil ()
+  "P2.9: a string `draft: false' (e.g. via a #+HUGO_DRAFT: keyword path) must
+coerce to nil, not silently flip to t under the naive `(and v ... t)' test."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12") (draft . "false")) tmp)))
+            (should (eq (alist-get 'draft out) nil))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-toc-string-false-coerces-nil ()
+  "P2.9: a string `toc: false' must coerce to nil, not flip to t."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12") (toc . "false")) tmp)))
+            (should (eq (alist-get 'toc out) nil))))
+      (delete-file tmp))))
+
+(ert-deftest a3madkour-pub-frontmatter-test/essays-series-order-keyword-negative-preserved ()
+  "P2.11: an explicit #+HUGO_SERIES_ORDER of a non-positive value must be
+preserved, not dropped by the old `(> coerced 0)' gate (which silently
+reverted to the default 0)."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp
+            (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n#+HUGO_SERIES_ORDER: -1\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (date . "2026-04-12")) tmp)))
+            (should (eq (alist-get 'series_order out) -1))))
       (delete-file tmp))))
 
 (ert-deftest a3madkour-pub-frontmatter-test/essays-toc-defaults-true ()

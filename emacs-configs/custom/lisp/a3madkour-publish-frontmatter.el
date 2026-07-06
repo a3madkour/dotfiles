@@ -182,28 +182,39 @@ mechanism we intentionally override)."
     out))
 
 (cl-defun a3madkour-pub-frontmatter/last-modified-cascade
-    (file &key drawer keyword)
-  "Resolve the last_modified value for FILE via the 5-step cascade.
+    (file &key drawer keyword prior-recorded)
+  "Resolve the last_modified value for FILE via the cascade.
 
 Cascade order:
   1. DRAWER (the :LAST_MODIFIED: property if present in the source)
   2. KEYWORD (the #+HUGO_LASTMOD: keyword value if present)
   3. git-mtime via `a3madkour-pub-history/git-mtime-of-file'
-  4. filesystem mtime via `a3madkour-pub-history/filesystem-mtime-of-file'
-  5. today (`format-time-string \"%Y-%m-%d\"')
+  4. PRIOR-RECORDED (the note's last_modified from a previous publish) — P2.14
+  5. filesystem mtime via `a3madkour-pub-history/filesystem-mtime-of-file'
+  6. today (`format-time-string \"%Y-%m-%d\"')
 
 Returns a YYYY-MM-DD string; never nil.  DRAWER + KEYWORD are passed
 in by per-section normalizers (each section reads them from different
 places — file-level keyword for garden/essays/research, per-heading
 drawer for library).
 
-Empty-string values for DRAWER or KEYWORD are treated as absent: Elisp
-`\"\"' is truthy so a bare `or' would short-circuit on it, returning an
-empty string that the downstream linter rejects."
+PRIOR-RECORDED (P2.14) sits BELOW git-mtime (committed history is
+authoritative) but ABOVE the filesystem mtime.  git-mtime is empty for a
+never-committed note, so without this slot such a note falls to the fs
+mtime = today on every run, churning last_modified and defeating the
+living-publish idempotence contract (spec §11).  Preferring the previously
+recorded value keeps the date stable until the note is committed (after
+which git-mtime takes over).  Callers pass the manifest's recorded value;
+when absent, behavior is unchanged.
+
+Empty-string values for DRAWER / KEYWORD / PRIOR-RECORDED are treated as
+absent: Elisp `\"\"' is truthy so a bare `or' would short-circuit on it,
+returning an empty string that the downstream linter rejects."
   (cl-flet ((nonempty (v) (and (stringp v) (not (string-empty-p v)) v)))
     (or (nonempty drawer)
         (nonempty keyword)
         (nonempty (a3madkour-pub-history/git-mtime-of-file file))
+        (nonempty prior-recorded)
         (nonempty (a3madkour-pub-history/filesystem-mtime-of-file file))
         (format-time-string "%Y-%m-%d"))))
 
@@ -216,6 +227,20 @@ empty string that the downstream linter rejects."
 (defconst a3madkour-pub-frontmatter--essay-optional-keys
   '(tile_size featured hero source_stream)
   "4 optional frontmatter keys per CLAUDE.md essay contract.")
+
+(defun a3madkour-pub-frontmatter--coerce-bool (v)
+  "Coerce V (a parsed frontmatter value) to a boolean t/nil (P2.9).
+nil, `:nil', and the string forms false/nil/no/off/0/\"\" (any case, trimmed)
+map to nil; every other non-nil value maps to t.  Handles the string case that
+the old `(if (memq v '(nil :nil)) nil t)' test silently flipped to t when a
+`#+HUGO_TOC:'/`#+HUGO_DRAFT:' keyword surfaced the value as a string."
+  (cond
+   ((null v) nil)
+   ((eq v :nil) nil)
+   ((and (stringp v)
+         (member (downcase (string-trim v)) '("false" "nil" "no" "off" "0" "")))
+    nil)
+   (t t)))
 
 (defun a3madkour-pub-frontmatter--normalize-essays (raw-alist source-file)
   "B.4: essays frontmatter normalizer.
@@ -236,13 +261,13 @@ Returns the normalized alist."
       (push (cons 'draft nil) out))
     (when (assq 'draft out)
       (let ((v (alist-get 'draft out)))
-        (setf (alist-get 'draft out) (and v (not (eq v nil)) t))))
+        (setf (alist-get 'draft out) (a3madkour-pub-frontmatter--coerce-bool v))))
     ;; toc default true
     (unless (assq 'toc out)
       (push (cons 'toc t) out))
     (when (assq 'toc out)
       (let ((v (alist-get 'toc out)))
-        (setf (alist-get 'toc out) (if (memq v '(nil :nil)) nil t))))
+        (setf (alist-get 'toc out) (a3madkour-pub-frontmatter--coerce-bool v))))
     ;; series defaults + coercions.
     ;; ox-hugo emits #+HUGO_SERIES: as a single-element list ("name"); coerce
     ;; to bare string.  Multi-element lists pass through unchanged (unlikely
@@ -259,9 +284,9 @@ Returns the normalized alist."
     ;; Override the default (0) with the source keyword value when present.
     (when-let ((src-so (a3madkour-pub-frontmatter--read-org-keyword
                         source-file "HUGO_SERIES_ORDER")))
-      (let ((coerced (string-to-number src-so)))
-        (when (> coerced 0)
-          (setf (alist-get 'series_order out) coerced))))
+      ;; P2.11: set unconditionally — an explicit 0 or negative order is a
+      ;; legitimate author value, not a reason to revert to the default.
+      (setf (alist-get 'series_order out) (string-to-number src-so)))
     ;; tags default: emit tags: [] when absent (linter requires the key).
     (unless (assq 'tags out)
       (push (cons 'tags '()) out))

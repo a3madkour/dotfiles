@@ -403,6 +403,13 @@ Body before.
         :on-done (lambda (s) (setq done-status s)))))
     (should (eq done-status 'err))))
 
+(ert-deftest a3madkour-pub-research--render-yaml-value-escapes-quotes ()
+  "P1.2: embedded double-quotes are escaped, not emitted raw."
+  (should (equal (a3madkour-pub-research--render-yaml-value "The \"x\" y")
+                 "\"The \\\"x\\\" y\""))
+  (should (equal (a3madkour-pub-research--render-yaml-value '("a\"b"))
+                 "[\"a\\\"b\"]")))
+
 (provide 'a3madkour-publish-research-test)
 
 ;;; a3madkour-publish-research-test.el ends here

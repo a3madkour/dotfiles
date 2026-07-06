@@ -318,6 +318,15 @@ that reason."
              (file-directory-p org-roam-directory))
     (org-roam-db-sync)))
 
+(defun a3madkour-pub/yaml-escape-scalar (s)
+  "Escape S for embedding inside a double-quoted YAML scalar.
+Backslash-escapes `\\' first, then `\"', so a title/summary/tag containing a
+quote or backslash (e.g. `The \"Real\" Problem') cannot break the emitted
+frontmatter and fail the Hugo build (P1.2).  Shared by every per-section
+frontmatter renderer; mirrors the citation module's own escaper."
+  (let ((out (replace-regexp-in-string "\\\\" "\\\\\\\\" s)))
+    (replace-regexp-in-string "\"" "\\\\\"" out)))
+
 (provide 'a3madkour-publish)
 
 ;;; a3madkour-publish.el ends here

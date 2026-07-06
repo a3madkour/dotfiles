@@ -130,6 +130,12 @@ log-step instrumentation."
                                         :results results))))))))
     (a3madkour-pub-multi-pdf/run prepared slug bundle-dir tpl-dir
                                  :run run
+                                 ;; P2.3: list SVG figures from the ORIGINAL
+                                 ;; source, not the relocated temp copy — the
+                                 ;; essays-aware asset resolver keys off the
+                                 ;; source living under the essays dir, so the
+                                 ;; temp copy would drop every figure.
+                                 :svg-source-file source-file
                                  :on-done
                                  (lambda (r)
                                    (funcall report (append (list :backend 'pdf) r))))

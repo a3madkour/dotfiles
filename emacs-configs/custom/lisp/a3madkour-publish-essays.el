@@ -57,16 +57,20 @@ Patterns (all case-sensitive; shortcodes match the trailing space):
 
 Each value is `t' on a positive match or `nil' on no match.  Callers
 merge with per-keyword `#+HUGO_HAS_<X>:' overrides (see Task 5)."
-  (let ((math-body (a3madkour-pub-essays--strip-code-fences body)))
-    (list :has_sidenotes  (and (string-match-p "{{< sidenote "   body) t)
-          :has_citations  (and (string-match-p "{{< cite "        body) t)
-          :has_footnotes  (and (string-match-p "\\[\\^[^]]+\\]"  body) t)
-          :has_math       (and (or (string-match-p "{{< math "    math-body)
-                                   (string-match-p "\\\\("        math-body)
-                                   (string-match-p "\\\\\\["      math-body)
-                                   (string-match-p "\\\\begin{[a-zA-Z]+\\*?}" math-body)) t)
-          :has_widgets    (and (string-match-p "{{< widget "      body) t)
-          :has_video_sync (and (string-match-p "{{< video-sync "  body) t))))
+  ;; P2.8: scan the fence-stripped body for ALL flags, not just has_math.
+  ;; Otherwise an essay documenting a shortcode / footnote inside a code block
+  ;; (teaching `{{< cite >}}', `{{< widget >}}', a `[^N]' regex, etc.)
+  ;; false-positives the corresponding has_* metadata.
+  (let ((scan-body (a3madkour-pub-essays--strip-code-fences body)))
+    (list :has_sidenotes  (and (string-match-p "{{< sidenote "   scan-body) t)
+          :has_citations  (and (string-match-p "{{< cite "        scan-body) t)
+          :has_footnotes  (and (string-match-p "\\[\\^[^]]+\\]"  scan-body) t)
+          :has_math       (and (or (string-match-p "{{< math "    scan-body)
+                                   (string-match-p "\\\\("        scan-body)
+                                   (string-match-p "\\\\\\["      scan-body)
+                                   (string-match-p "\\\\begin{[a-zA-Z]+\\*?}" scan-body)) t)
+          :has_widgets    (and (string-match-p "{{< widget "      scan-body) t)
+          :has_video_sync (and (string-match-p "{{< video-sync "  scan-body) t))))
 
 ;; Task 5: has_* override merge.
 
@@ -170,11 +174,11 @@ NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
    ((and (stringp v)
          (string-match-p a3madkour-pub-essays--date-re v))
     v)
-   ((stringp v) (format "\"%s\"" v))
+   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
    ((numberp v) (format "%s" v))
    ((listp v)
     (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" s)) v ", ")))))
+            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
 
 (defun a3madkour-pub-essays--render-frontmatter (alist)
   "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
@@ -270,7 +274,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
           (a3madkour-pub-essays--write-if-different
            out-path
            (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
-          (a3madkour-pub-history/record-publish id new-url 'live))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
         ;; --- multi-export dispatch (async when marker present) ---
         ;; Calls `export-bundle' DIRECTLY (async with run handle + on-done
         ;; threaded through to backends so the spinner + step-line wiring

@@ -86,6 +86,12 @@ ON-DONE is called with t/nil based on PDF existence after the run."
                     (cons a3madkour-pub-multi-biber-command   "biber")
                     (cons a3madkour-pub-multi-xelatex-command "pass 3/4")
                     (cons a3madkour-pub-multi-xelatex-command "pass 4/4"))))
+    ;; P2.4a: the work dir is reused and never cleaned, so a stale
+    ;; `<slug>.pdf' from a prior run would let a failing compile report
+    ;; `:ok' (success is judged by `file-exists-p pdf-path' below).  Delete
+    ;; any pre-existing PDF before the chain so existence means THIS run.
+    (when (file-exists-p pdf-path)
+      (delete-file pdf-path))
     (cl-labels
         ((run-next (remaining)
            (if (null remaining)
@@ -103,18 +109,32 @@ ON-DONE is called with t/nil based on PDF existence after the run."
                 :on-done
                 (lambda (rc _tail)
                   (when step-cb (funcall step-cb label rc))
-                  (run-next (cdr remaining))))))))
+                  ;; P2.4b: a non-zero FIRST xelatex pass is fatal — later
+                  ;; passes just compound the error and can leave a garbage
+                  ;; PDF.  Abort the chain and report failure (on-done nil).
+                  (if (and (string= label "pass 1/4") (not (zerop rc)))
+                      (when on-done (funcall on-done nil))
+                    (run-next (cdr remaining)))))))))
       (run-next seq))))
 
 (cl-defun a3madkour-pub-multi-pdf/run (source-file slug bundle-dir templates-dir
-                                       &key run on-done)
+                                       &key run on-done svg-source-file)
   "Async PDF backend.  RUN is the a3-pub-async-run handle (for log-step).
-ON-DONE is called with (:status 'ok :path target) or (:status 'err :err-snippet …)."
+ON-DONE is called with (:status 'ok :path target) or (:status 'err :err-snippet …).
+
+SOURCE-FILE drives the ox-latex export.  The orchestrator dispatches this
+backend against a relocated temp copy (so ox-latex's `#+EXPORT_FILE_NAME:'
+matches SLUG), but that copy lives outside the essays tree — its relative
+`./assets/…' / `file:…' figure refs no longer resolve, so listing SVGs from
+it silently drops every figure (bug P2.3).  SVG-SOURCE-FILE, when non-nil,
+names the ORIGINAL source; SVG figures are resolved against it instead,
+mirroring the Word backend which always lists from the real source."
   (let* ((work-dir (expand-file-name (format "multi-export-%s/" slug)
                                      temporary-file-directory))
          (fig-dir (expand-file-name "figures/" work-dir))
          (tex-path (expand-file-name (concat slug ".tex") work-dir))
-         (svgs (a3madkour-pub-multi-pdf--list-svg-figures source-file))
+         (svgs (a3madkour-pub-multi-pdf--list-svg-figures
+                (or svg-source-file source-file)))
          (svg-pairs (mapcar (lambda (svg)
                               (list svg (expand-file-name
                                          (concat (file-name-base svg) ".pdf")

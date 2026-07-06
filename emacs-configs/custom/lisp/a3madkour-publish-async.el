@@ -380,7 +380,11 @@ clears the mode-line indicator."
     (setf (a3-pub-async-run-status run) status-kw)
     (unwind-protect
         (progn
-          (a3madkour-pub/finish-publish :scope scope)
+          ;; P1.1a: gate the destructive orphan sweep on run success.  A
+          ;; partial (err) or cancelled run leaves the accumulator incomplete;
+          ;; reaping off it would delete still-valid bundles.  `:reap nil'
+          ;; makes the orchestrator compute+log the diff but skip all deletes.
+          (a3madkour-pub/finish-publish :scope scope :reap (eq status 'ok))
           ;; Citations flush fires on both deliberate and living per the
           ;; original F slice behavior (a3-publish-deliberate AND
           ;; a3-publish-living both tail-called emit-yaml).  Gated on
@@ -410,7 +414,11 @@ clears the mode-line indicator."
 Sends SIGINT to every live process; status flag set first so sentinels
 firing in the next ms short-circuit.  Releases the lock via
 `a3-pub-async/finish-publish' so a subsequent publish can start in the
-same Emacs session.  Tmp dirs cleaned, accumulator discarded."
+same Emacs session.  Tmp dirs cleaned.  The lifecycle is completed with
+STATUS `cancelled', which (P1.1a) makes the orchestrator skip the
+destructive orphan sweep entirely — a cancelled run's accumulator is
+incomplete, so no bundles are deleted off it.  The next `begin-publish'
+clears the accumulator fresh."
   (interactive)
   (let ((run a3-pub-async--in-flight-run))
     (when run
