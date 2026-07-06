@@ -8,11 +8,11 @@ Row IDs are `P<tier>.<n>`. Tiers: **P1** blocking, **P2** correctness (non-block
 
 ## Status — 2026-07-06
 
-**P1 (both) + P2 (all 14) implemented via TDD. Suite: 731/731 green** (was 692 at audit; +39 tests). Nothing committed — left for review. Two items carry a documented follow-up:
+**P1 (both) + P2 (all 14) implemented via TDD, incl. the two follow-ups. Suite: 735/735 green** (was 692 at audit; +43 tests). Committed on `main` (`7b8b7b3` for P1+P2 core; P2.14 full-wiring is a follow-up commit).
 
 - **P2.3** — fully wired (multi-pdf `:svg-source-file` seam + `multi.el` caller passing the original source).
-- **P2.14** — the cascade `:prior-recorded` slot is implemented + tested (correct decision point). **Deferred:** persisting `last_modified` in `url-history.yaml` and threading it (manifest schema + `record-publish` param + normalizer lookup) so a caller actually supplies the prior value. This is a schema change disproportionate to the nonblocking severity — recommend a separate small slice. Until then the seam is inert in production (behavior unchanged).
-- **P2.2 residual** (flagged, not a regression): the manifest collision is fixed (`--blank-id-p` + url-keyed `find-note-by-id`), but the *run-accumulator* still keys id-less notes on id; deduping there touches `diff-published-set`/`finish-publish` contracts — noted for a later pass.
+- **P2.14 — DONE (full wiring).** Manifest now persists `last_modified` (`record-publish :last-modified`, canonical key order extended, `recorded-last-modified` reader). The cascade gained a `prior-recorded` slot + an ambient `--prior-last-modified` dynamic var; all 4 handlers bind the note's recorded value around `normalize` and pass the resolved date back to `record-publish`. Proven idempotent by an end-to-end garden test (uncommitted note republished with a bumped fs-mtime keeps its first date). Byte-stability of the manifest preserved (key emitted only when present).
+- **P2.2 residual — assessed, deliberately NOT changed.** The manifest collision is fixed. The run-accumulator still keys id-less notes on id, BUT id-less notes are essays-only, essays register into `deliberate--handlers`, and `deliberate` scope skips Step A (the only accumulator/diff consumer for removals). Living-swept sections (garden/library/research) are all org-roam-indexed (have ids). So the collision is **unreachable in practice**. A correct fix needs an invasive real-id-vs-surrogate distinction across `diff-published-set`/`walk`/`finish-publish` (`record-publish id nil 'removed` would misfire on a URL-surrogate key) — real data-loss risk for zero practical benefit. Left as a documented limitation.
 
 P3/P4/P5 remain open (not selected this round).
 

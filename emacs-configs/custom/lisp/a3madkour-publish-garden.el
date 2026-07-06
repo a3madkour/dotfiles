@@ -125,14 +125,22 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                                (a3madkour-pub-export/export-file tmp-src)
                              (when (file-exists-p tmp-src)
                                (delete-file tmp-src))))
-               (normalized (a3madkour-pub-frontmatter/normalize
-                            'garden (plist-get exported :frontmatter) file))
+               ;; P2.14: reuse the note's previously-recorded last_modified as
+               ;; the cascade's prior value so an uncommitted republish keeps a
+               ;; stable date instead of churning to the filesystem mtime.
+               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
+                             (a3madkour-pub-frontmatter/normalize
+                              'garden (plist-get exported :frontmatter) file)))
                (body       (plist-get exported :body)))
           (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
           (a3madkour-pub-garden--write-if-different
            out-path
            (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
-          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                :last-modified
+                                                (or (alist-get 'lastmod normalized)
+                                                    (alist-get 'last_modified normalized))))
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))

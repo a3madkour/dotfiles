@@ -104,7 +104,7 @@ See parent design spec §6 (B-coupling fix)."
     (a3madkour-pub-history/read-manifest)))
 
 (defconst a3madkour-pub-history--canonical-key-order
-  '(id current_url history state)
+  '(id current_url history state last_modified)
   "Canonical key order for each entry in `url-history.yaml'.
 Applied at write time so the emitted file is byte-stable across publish runs
 regardless of construction order in upstream code (yaml.el serializes alists
@@ -240,7 +240,7 @@ sees genuine same-id URL transitions where both URLs are non-nil."
   "Return current time as an ISO-8601 UTC string."
   (format-time-string "%FT%TZ" nil t))
 
-(cl-defun a3madkour-pub-history/record-publish (id new-url state &key had-slug-override-p)
+(cl-defun a3madkour-pub-history/record-publish (id new-url state &key had-slug-override-p last-modified)
   "Update the manifest entry for ID.
 
 Cases:
@@ -277,10 +277,15 @@ A.1.d additions:
     (cond
      ;; New note.
      ((null idx)
-      (let* ((new-note `((id . ,id)
-                         (current_url . ,new-url)
-                         (history . [])
-                         (state . ,state-str)))
+      (let* ((new-note (append `((id . ,id)
+                                 (current_url . ,new-url)
+                                 (history . [])
+                                 (state . ,state-str))
+                               ;; P2.14: persist last_modified when supplied so
+                               ;; the next run can reuse it as the idempotent
+                               ;; date for a still-uncommitted note.
+                               (when last-modified
+                                 `((last_modified . ,last-modified)))))
              (new-notes (vconcat notes (vector new-note))))
         (setf (alist-get 'notes manifest) new-notes)
         (a3madkour-pub-history/write-manifest manifest)))
@@ -289,9 +294,14 @@ A.1.d additions:
       (let* ((current (aref notes idx))
              (old-url (alist-get 'current_url current))
              (old-state (alist-get 'state current))
+             (old-lm (alist-get 'last_modified current))
+             ;; P2.14: keep the prior last_modified when the caller doesn't
+             ;; supply a fresh one, so a state-only update never wipes it.
+             (effective-lm (or last-modified old-lm))
              (url-changed-p (not (equal old-url new-url)))
-             (state-changed-p (not (equal old-state state-str))))
-        (when (or url-changed-p state-changed-p)
+             (state-changed-p (not (equal old-state state-str)))
+             (lm-changed-p (not (equal effective-lm old-lm))))
+        (when (or url-changed-p state-changed-p lm-changed-p)
           (let* ((reason (cond
                           ((and url-changed-p (null new-url)) "removed")
                           ;; A.1.d: republish — removed → live transition.
@@ -318,10 +328,12 @@ A.1.d additions:
                                          (replaced_at . ,(a3madkour-pub-history--now-iso))
                                          (reason . ,reason))))
                     (alist-get 'history current)))
-                 (updated `((id . ,id)
-                            (current_url . ,new-url)
-                            (history . ,new-history)
-                            (state . ,state-str))))
+                 (updated (append `((id . ,id)
+                                    (current_url . ,new-url)
+                                    (history . ,new-history)
+                                    (state . ,state-str))
+                                  (when effective-lm
+                                    `((last_modified . ,effective-lm))))))
             (aset notes idx updated)
             (a3madkour-pub-history/write-manifest manifest))))))
     ;; A.1.d: accumulator append (always, regardless of which branch above
@@ -329,6 +341,24 @@ A.1.d additions:
     ;; `a3madkour-pub/diff-published-set' can compare cdr against `live' /
     ;; `draft' symbols (Task 5 contract).
     (puthash id (cons new-url state) a3madkour-pub--publish-run-accumulator)))
+
+(defun a3madkour-pub-history/recorded-last-modified (id &optional url)
+  "Return the `last_modified' recorded for note ID, or nil if none.
+P2.14: consulted by the last_modified cascade so a never-committed note keeps a
+stable date across republishes instead of churning to today.  URL is the note's
+current URL, used as the surrogate key for id-less notes (see
+`a3madkour-pub-history--find-note-by-id').
+
+Degrades to nil (rather than signalling) when the manifest can't be read — this
+is an idempotence optimization, not a correctness dependency, so an unset
+`site-data-dir' or unreadable manifest simply falls through to the fs mtime."
+  (ignore-errors
+    (let* ((manifest (a3madkour-pub-history/read-manifest))
+           (notes (alist-get 'notes manifest))
+           (idx (a3madkour-pub-history--find-note-by-id notes id url)))
+      (when idx
+        (let ((lm (alist-get 'last_modified (aref notes idx))))
+          (and (stringp lm) (not (string-empty-p lm)) lm))))))
 
 (defun a3madkour-pub-history/aliases-for (id)
   "Return all prior URLs recorded for ID, oldest-first.  Nil if ID unknown.

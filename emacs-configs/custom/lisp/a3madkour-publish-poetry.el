@@ -167,9 +167,11 @@ Returns a plist:
             (setq warnings
                   (append warnings
                           (a3madkour-pub-poetry--collect-warnings body audio-raw)))
-            ;; Stage 6: normalize.
-            (let* ((normalized (a3madkour-pub-frontmatter/normalize
-                                'works-poetry raw-fm file))
+            ;; Stage 6: normalize.  P2.14: reuse prior recorded last_modified.
+            (let* ((normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                      (a3madkour-pub-history/recorded-last-modified id new-url)))
+                                 (a3madkour-pub-frontmatter/normalize
+                                  'works-poetry raw-fm file)))
                    ;; Stage 7: render + write.
                    (rendered (concat
                               (a3madkour-pub-poetry--render-frontmatter normalized)
@@ -189,7 +191,10 @@ Returns a plist:
                 (a3madkour-pub-poetry--copy-audio-asset
                  id (plist-get audio-class :value) bundle-dir))
               ;; Stage 8: record-publish.
-              (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live))
+              (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                    :last-modified
+                                                    (or (alist-get 'lastmod normalized)
+                                                        (alist-get 'last_modified normalized)))
               (when on-done (funcall on-done 'ok))
               (list :status 'ok :id id :slug slug :url new-url :warnings warnings))))
       (error

@@ -181,6 +181,12 @@ mechanism we intentionally override)."
       (setf (alist-get 'description out) kw-val))
     out))
 
+(defvar a3madkour-pub-frontmatter--prior-last-modified nil
+  "Ambient prior `last_modified' for the note being normalized (P2.14).
+Per-section handlers `let'-bind this to the note's manifest-recorded
+last_modified around their `normalize' call so the cascade can prefer it over a
+churning filesystem mtime for never-committed notes.  nil = absent.")
+
 (cl-defun a3madkour-pub-frontmatter/last-modified-cascade
     (file &key drawer keyword prior-recorded)
   "Resolve the last_modified value for FILE via the cascade.
@@ -214,7 +220,10 @@ returning an empty string that the downstream linter rejects."
     (or (nonempty drawer)
         (nonempty keyword)
         (nonempty (a3madkour-pub-history/git-mtime-of-file file))
-        (nonempty prior-recorded)
+        ;; P2.14: the explicit PRIOR-RECORDED key, else the ambient value the
+        ;; handler bound around this publish's normalize (the note's previously
+        ;; recorded last_modified from the manifest).
+        (nonempty (or prior-recorded a3madkour-pub-frontmatter--prior-last-modified))
         (nonempty (a3madkour-pub-history/filesystem-mtime-of-file file))
         (format-time-string "%Y-%m-%d"))))
 

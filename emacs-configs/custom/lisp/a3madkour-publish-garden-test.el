@@ -154,6 +154,52 @@ emits no history event and the manifest is factually wrong."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+(ert-deftest a3madkour-pub-garden--publish-file-lastmod-idempotent-uncommitted ()
+  "P2.14 end-to-end: a never-committed note (git-mtime empty) republished after
+a save (filesystem mtime bumped) must keep its FIRST-recorded last_modified —
+the handler reuses the manifest-recorded value, so the emitted frontmatter and
+manifest don't churn on every run."
+  (let* ((notes-dir (make-temp-file "a3-pub-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-site-" t))
+         (src       (expand-file-name "note.org" notes-dir))
+         (fs-dates '("2026-03-03" "2026-09-09")))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:ID: cccccccc-bbbb-cccc-dddd-eeeeeeeeeeee\n:END:\n"
+                    "#+title: LM Note\n#+filetags: :alpha:\n"
+                    "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "Body.\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore)
+                      ;; never-committed: git-mtime empty.
+                      ((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                       (lambda (_) nil))
+                      ;; each run, the filesystem mtime advances (a save).
+                      ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+                       (lambda (_) (or (pop fs-dates) "2027-01-01"))))
+              (dotimes (_ 2)
+                (a3madkour-pub/begin-publish)
+                (a3madkour-pub-garden/publish-garden-file
+                 src (make-a3-pub-async-run) :on-done (lambda (_) nil))
+                (a3madkour-pub/finish-publish))
+              ;; Manifest keeps the first date, not the churned second one.
+              (let ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0)))
+                (should (equal (alist-get 'last_modified note) "2026-03-03")))
+              ;; Emitted frontmatter also stable.
+              (with-temp-buffer
+                (insert-file-contents
+                 (expand-file-name "content/garden/lm-note/index.md" site-dir))
+                (should (string-match-p "last_modified: 2026-03-03" (buffer-string)))
+                (should-not (string-match-p "2026-09-09" (buffer-string)))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (ert-deftest a3madkour-pub-garden--publish-garden-file-rewrites-links ()
   "publish-garden-file pre-rewrites [[id:UUID]] links so the emitted
 markdown has resolved HTML anchors and zero `{{< relref' shortcodes.

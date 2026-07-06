@@ -94,6 +94,37 @@ the dir on exit."
        (let ((hist (alist-get 'history note)))
          (should (or (null hist) (= 0 (length hist)))))))))
 
+(ert-deftest a3madkour-pub-history-test/record-publish-persists-last-modified ()
+  "P2.14: `:last-modified' is stored on the manifest entry and read back via
+`recorded-last-modified', so a later run can reuse it (idempotence)."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'live
+                                           :last-modified "2026-01-01")
+     (let* ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0)))
+       (should (equal "2026-01-01" (alist-get 'last_modified note))))
+     (should (equal "2026-01-01"
+                    (a3madkour-pub-history/recorded-last-modified "abc-123"))))))
+
+(ert-deftest a3madkour-pub-history-test/record-publish-preserves-last-modified ()
+  "P2.14: re-recording WITHOUT `:last-modified' must NOT wipe a previously
+stored value — the entry keeps its last_modified across a state-only update."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'live
+                                           :last-modified "2026-01-01")
+     ;; Second publish, same url, no :last-modified supplied.
+     (a3madkour-pub-history/record-publish "abc-123" "/garden/foo/" 'draft)
+     (let ((note (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0)))
+       (should (equal "2026-01-01" (alist-get 'last_modified note)))
+       (should (equal "draft" (alist-get 'state note)))))))
+
+(ert-deftest a3madkour-pub-history-test/recorded-last-modified-unknown-nil ()
+  "P2.14: recorded-last-modified for an unknown id returns nil (no error)."
+  (a3madkour-pub-history-test--with-tmp-data-dir
+   (lambda (_)
+     (should (null (a3madkour-pub-history/recorded-last-modified "no-such"))))))
+
 (ert-deftest a3madkour-pub-history-test/record-url-change-appends-history ()
   "Recording with a different URL appends the prior URL to history."
   (a3madkour-pub-history-test--with-tmp-data-dir

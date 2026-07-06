@@ -336,9 +336,11 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                ;; Step 5: inject description before normalize.
                (with-desc  (a3madkour-pub-frontmatter--inject-description
                             (plist-get exported :frontmatter) file))
-               ;; Step 6: per-type normalize.
-               (normalized (a3madkour-pub-frontmatter/normalize
-                            norm-sym with-desc file))
+               ;; Step 6: per-type normalize.  P2.14: reuse prior last_modified.
+               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
+                             (a3madkour-pub-frontmatter/normalize
+                              norm-sym with-desc file)))
                ;; Step 7 (question-only): inject parsed outputs into frontmatter.
                (final-fm   (a3madkour-pub-research--inject-outputs normalized outputs))
                (body       (plist-get exported :body)))
@@ -349,7 +351,10 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
            out-path
            (concat (a3madkour-pub-research--render-frontmatter final-fm) body))
           ;; Step 10: record publish.
-          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                :last-modified
+                                                (or (alist-get 'lastmod final-fm)
+                                                    (alist-get 'last_modified final-fm))))
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))

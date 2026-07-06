@@ -182,7 +182,7 @@ calls record-publish with the correct URL."
                     ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
                      (lambda (&rest _) nil))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
-                     (lambda (id url state)
+                     (lambda (id url state &rest _)
                        (setq recorded (list id url state))))
                     ((symbol-function 'a3madkour-pub-essays--site-root)
                      (lambda () site-root)))

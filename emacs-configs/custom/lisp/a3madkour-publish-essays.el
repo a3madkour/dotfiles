@@ -268,13 +268,19 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                             (concat src-content "\n" (or body ""))))
                (raw-fm     (cons (cons :scan-plist scan-pl)
                                  (or (plist-get exported :frontmatter) '())))
-               (normalized (a3madkour-pub-frontmatter/normalize 'essays raw-fm file)))
+               ;; P2.14: reuse the prior recorded last_modified (idempotence).
+               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
+                             (a3madkour-pub-frontmatter/normalize 'essays raw-fm file))))
           (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
           (a3madkour-pub-essays--copy-asset-dir id bundle-dir)
           (a3madkour-pub-essays--write-if-different
            out-path
            (concat (a3madkour-pub-essays--render-frontmatter normalized) (or body "")))
-          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                :last-modified
+                                                (or (alist-get 'lastmod normalized)
+                                                    (alist-get 'last_modified normalized))))
         ;; --- multi-export dispatch (async when marker present) ---
         ;; Calls `export-bundle' DIRECTLY (async with run handle + on-done
         ;; threaded through to backends so the spinner + step-line wiring
