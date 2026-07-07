@@ -21,6 +21,7 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-history)
@@ -148,29 +149,12 @@ Pure-functional: operates on a temp buffer, returns the new string."
 
 ;;; Task 9 — rendering helpers (garden-parallel; private)
 
-(defconst a3madkour-pub-research--date-re
-  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
-  "Regex for bare YYYY-MM-DD date strings.
-Emitted unquoted so PyYAML / Hugo parse them as native date objects.")
-
+;; P3.1: render stack shared via `a3madkour-publish-yaml'.  Research uses the
+;; STRICT value renderer (structured lists like outputs must go through their
+;; dedicated block-sequence path, not the scalar-list path).
 (defun a3madkour-pub-research--render-yaml-value (v)
-  "Render V as a YAML value.  Lists of strings render as [...].
-Lists must contain only strings; for structured lists (list of plists,
-e.g. outputs), use `--render-outputs-yaml' instead."
-  (cond
-   ((null v)    "false")
-   ((eq v t)    "true")
-   ((and (stringp v)
-         (string-match-p a3madkour-pub-research--date-re v))
-    v)
-   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
-   ((numberp v) (format "%s" v))
-   ((listp v)
-    (unless (cl-every #'stringp v)
-      (error "a3madkour-pub-research--render-yaml-value: list contains \
-non-string element; caller must use --render-outputs-yaml for structured lists"))
-    (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
+  "Thin wrapper over `a3madkour-pub-yaml/render-value' (strict) (P3.1)."
+  (a3madkour-pub-yaml/render-value v t))
 
 (defun a3madkour-pub-research--render-output-row (row)
   "Render a single output ROW plist as an inline YAML map.
@@ -194,51 +178,31 @@ Returns a multiline string starting with a newline (caller emits the key
                (concat "  - " (a3madkour-pub-research--render-output-row row)))
              outputs "\n"))
 
+(defun a3madkour-pub-research--outputs-key-hook (k v)
+  "A `render-frontmatter' KEY-HOOK: render `outputs' as a block sequence,
+or omit the key when empty (P3.1)."
+  (when (eq k 'outputs)
+    (if (and v (listp v))
+        (format "outputs:\n%s" (a3madkour-pub-research--render-outputs-yaml v))
+      :omit)))
+
 (defun a3madkour-pub-research--render-frontmatter (alist)
-  "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
-Returns a string with leading/trailing `---' delimiters.
-Handles the `outputs' key specially (block-sequence YAML)."
-  (let* ((sorted (sort (copy-sequence alist)
-                       (lambda (a b)
-                         (string< (symbol-name (car a)) (symbol-name (car b))))))
-         (lines (mapcar
-                 (lambda (cell)
-                   (let ((k (symbol-name (car cell)))
-                         (v (cdr cell)))
-                     (if (string= k "outputs")
-                         (if (and v (listp v))
-                             (format "outputs:\n%s" (a3madkour-pub-research--render-outputs-yaml v))
-                           ;; nil or empty outputs: omit the key entirely — handled by filtering below.
-                           nil)
-                       (format "%s: %s" k
-                               (a3madkour-pub-research--render-yaml-value v)))))
-                 sorted)))
-    (concat "---\n"
-            (mapconcat #'identity (delq nil lines) "\n")
-            "\n---\n")))
+  "Thin wrapper over `a3madkour-pub-yaml/render-frontmatter' with the
+strict value renderer + the `outputs' block-sequence key-hook (P3.1)."
+  (a3madkour-pub-yaml/render-frontmatter
+   alist
+   :key-hook #'a3madkour-pub-research--outputs-key-hook
+   :value-fn (lambda (v) (a3madkour-pub-yaml/render-value v t))))
 
 ;;; Task 9 — site-root + bundle-dir helpers
 
 (defun a3madkour-pub-research--site-root ()
-  "Derive the Hugo site root from `a3madkour-pub/site-data-dir'.
-Convention: site-data-dir is `<root>/data/'; site root is its parent."
-  (file-name-as-directory
-   (directory-file-name
-    (file-name-directory
-     (directory-file-name
-      (file-name-as-directory a3madkour-pub/site-data-dir))))))
+  "Thin wrapper over `a3madkour-pub-yaml/site-root' (P3.1)."
+  (a3madkour-pub-yaml/site-root))
 
 (defun a3madkour-pub-research--write-if-different (path content)
-  "Write CONTENT to PATH only if it differs from existing on-disk content.
-Returns t if a write happened, nil if no-op."
-  (let ((existing (when (file-exists-p path)
-                    (with-temp-buffer
-                      (insert-file-contents path)
-                      (buffer-string)))))
-    (unless (string= existing content)
-      (make-directory (file-name-directory path) t)
-      (with-temp-file path (insert content))
-      t)))
+  "Thin wrapper over `a3madkour-pub-yaml/write-if-different' (P3.1)."
+  (a3madkour-pub-yaml/write-if-different path content))
 
 (defun a3madkour-pub-research--section-to-content-subdir (section-str)
   "Map SECTION-STR (e.g. \"research/themes\") to content subdir path.

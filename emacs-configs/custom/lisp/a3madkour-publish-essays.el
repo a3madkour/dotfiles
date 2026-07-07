@@ -14,6 +14,7 @@
 
 (require 'cl-lib)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-rewrite)
@@ -116,12 +117,8 @@ else SCAN-PLIST's value passes through.  Returns a new plist."
   :group 'a3madkour-pub)
 
 (defun a3madkour-pub-essays--site-root ()
-  "Derive the Hugo site root from `a3madkour-pub/site-data-dir'."
-  (file-name-as-directory
-   (directory-file-name
-    (file-name-directory
-     (directory-file-name
-      (file-name-as-directory a3madkour-pub/site-data-dir))))))
+  "Thin wrapper over `a3madkour-pub-yaml/site-root' (P3.1)."
+  (a3madkour-pub-yaml/site-root))
 
 ;; Spot-check fix-up: per-essay asset directory copy.
 ;; `asset-validate-and-copy' only walks [[org-link]] references; this helper
@@ -146,65 +143,21 @@ basenames copied, or nil if no source dir."
             (push (file-name-nondirectory f) copied)))
         (nreverse copied)))))
 
+;; P3.1: frontmatter-render stack shared via `a3madkour-publish-yaml'.  Essays
+;; use the plain value renderer + the `tags: []' key-hook.
 (defun a3madkour-pub-essays--write-if-different (path content)
-  "Write CONTENT to PATH only if it differs from existing on-disk content.
-Returns t if a write happened, nil if no-op."
-  (let ((existing (when (file-exists-p path)
-                    (with-temp-buffer
-                      (insert-file-contents path)
-                      (buffer-string)))))
-    (unless (string= existing content)
-      (make-directory (file-name-directory path) t)
-      (with-temp-file path (insert content))
-      t)))
-
-(defconst a3madkour-pub-essays--date-re
-  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
-  "Regex for bare YYYY-MM-DD date strings (emitted unquoted in YAML).")
+  "Thin wrapper over `a3madkour-pub-yaml/write-if-different' (P3.1)."
+  (a3madkour-pub-yaml/write-if-different path content))
 
 (defun a3madkour-pub-essays--render-yaml-value (v)
-  "Render V as a YAML scalar/list value.  Same contract as garden's
-helper: strings quoted; YYYY-MM-DD dates unquoted; numbers as-is;
-t/nil → true/false; lists of strings → JSON-style array.
-
-NOTE: nil is also a list in Emacs Lisp — test null BEFORE listp."
-  (cond
-   ((null v)    "false")
-   ((eq v t)    "true")
-   ((and (stringp v)
-         (string-match-p a3madkour-pub-essays--date-re v))
-    v)
-   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
-   ((numberp v) (format "%s" v))
-   ((listp v)
-    (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
+  "Thin wrapper over `a3madkour-pub-yaml/render-value' (P3.1)."
+  (a3madkour-pub-yaml/render-value v))
 
 (defun a3madkour-pub-essays--render-frontmatter (alist)
-  "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
-Returns a string with leading/trailing `---' delimiters.
-
-Key-aware special cases applied before the generic --render-yaml-value dispatch:
-  `tags' with an empty list → `[]' (not `false').  All other nil values (e.g.
-  `draft', `has_*') render as `false' via the standard dispatch, which is
-  correct for boolean fields."
-  (let ((sorted (sort (copy-sequence alist)
-                      (lambda (a b)
-                        (string< (symbol-name (car a)) (symbol-name (car b)))))))
-    (concat "---\n"
-            (mapconcat
-             (lambda (cell)
-               (let* ((k   (car cell))
-                      (v   (cdr cell))
-                      ;; tags: [] when value is an empty list (nil).
-                      ;; Boolean fields like draft/has_* must keep the standard
-                      ;; nil → "false" path, so this special-case is key-scoped.
-                      (str (if (and (eq k 'tags) (null v))
-                               "[]"
-                             (a3madkour-pub-essays--render-yaml-value v))))
-                 (format "%s: %s" (symbol-name k) str)))
-             sorted "\n")
-            "\n---\n")))
+  "Thin wrapper over `a3madkour-pub-yaml/render-frontmatter' with the
+`tags: []' key-hook (P3.1)."
+  (a3madkour-pub-yaml/render-frontmatter
+   alist :key-hook #'a3madkour-pub-yaml/tags-empty-array-hook))
 
 ;; Task 8: pipeline entry.
 

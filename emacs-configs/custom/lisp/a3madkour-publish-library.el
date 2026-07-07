@@ -17,6 +17,7 @@
 (require 'org-element)
 (require 'ucs-normalize)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-history)
 
@@ -361,16 +362,10 @@ SOURCE-FILE is recorded in the comment header for provenance."
    "\n"))
 
 (defun a3madkour-pub-library--write-if-different (path content)
-  "Write CONTENT to PATH only if it differs from existing on-disk content.
-Returns t if a write occurred, nil if the existing content was identical."
-  (let ((existing (when (file-exists-p path)
-                    (with-temp-buffer
-                      (insert-file-contents path)
-                      (buffer-string)))))
-    (unless (string= existing content)
-      (make-directory (file-name-directory path) t)
-      (with-temp-file path (insert content))
-      t)))
+  "Thin wrapper over `a3madkour-pub-yaml/write-if-different' (P3.1).
+\(Library keeps its own `--render-scalar' — single-quote YAML semantics
+distinct from the render-value dispatch — but shares the write helper.)"
+  (a3madkour-pub-yaml/write-if-different path content))
 
 (defun a3madkour-pub-library--yaml-path (file cfg)
   "Compute the absolute output yaml path for FILE given CFG.

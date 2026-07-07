@@ -14,6 +14,7 @@
 
 (require 'cl-lib)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-rewrite)
@@ -25,68 +26,24 @@
   :type 'string
   :group 'a3madkour-pub)
 
+;; P3.1: the frontmatter-render stack is shared via `a3madkour-publish-yaml';
+;; these per-section names stay as thin wrappers so call sites + tests are
+;; unchanged.  Garden uses the plain variant (no key-hook, non-strict values).
 (defun a3madkour-pub-garden--site-root ()
-  "Derive the Hugo site root from `a3madkour-pub/site-data-dir'.
-Convention: site-data-dir is `<root>/data/'; site root is its parent."
-  (file-name-as-directory
-   (directory-file-name
-    (file-name-directory
-     (directory-file-name
-      (file-name-as-directory a3madkour-pub/site-data-dir))))))
+  "Thin wrapper over `a3madkour-pub-yaml/site-root' (P3.1)."
+  (a3madkour-pub-yaml/site-root))
 
 (defun a3madkour-pub-garden--write-if-different (path content)
-  "Write CONTENT to PATH only if it differs from existing on-disk content.
-Returns t if a write happened, nil if no-op."
-  (let ((existing (when (file-exists-p path)
-                    (with-temp-buffer
-                      (insert-file-contents path)
-                      (buffer-string)))))
-    (unless (string= existing content)
-      (make-directory (file-name-directory path) t)
-      (with-temp-file path (insert content))
-      t)))
-
-(defconst a3madkour-pub-garden--date-re
-  "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
-  "Regex for bare YYYY-MM-DD date strings.
-These must be emitted unquoted in YAML so the PyYAML / YAML 1.1 loader
-parses them as `datetime.date' objects (which is what check_garden_fixtures.py
-and the Hugo template both expect).  A quoted string like \"2026-05-25\"
-stays a string and fails `isinstance(val, datetime.date)' in the linter.")
+  "Thin wrapper over `a3madkour-pub-yaml/write-if-different' (P3.1)."
+  (a3madkour-pub-yaml/write-if-different path content))
 
 (defun a3madkour-pub-garden--render-yaml-value (v)
-  "Render V as a YAML scalar/list value.  Internal helper.
-Strings → \"...\"; YYYY-MM-DD date strings → unquoted (YAML native date);
-numbers → as-is; t → true; nil → false; lists of strings → [\"a\", \"b\"].
-
-NOTE: nil is also a list in Emacs Lisp, so the nil/false case must be
-tested before the listp case."
-  (cond
-   ((null v)    "false")
-   ((eq v t)    "true")
-   ((and (stringp v)
-         (string-match-p a3madkour-pub-garden--date-re v))
-    v)                                    ; unquoted YYYY-MM-DD → YAML date
-   ((stringp v) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))
-   ((numberp v) (format "%s" v))
-   ((listp v)
-    (format "[%s]"
-            (mapconcat (lambda (s) (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v ", ")))))
+  "Thin wrapper over `a3madkour-pub-yaml/render-value' (P3.1)."
+  (a3madkour-pub-yaml/render-value v))
 
 (defun a3madkour-pub-garden--render-frontmatter (alist)
-  "Render ALIST as YAML frontmatter (alphabetical key order; deterministic).
-Returns a string with leading/trailing `---' delimiters."
-  (let ((sorted (sort (copy-sequence alist)
-                      (lambda (a b)
-                        (string< (symbol-name (car a)) (symbol-name (car b)))))))
-    (concat "---\n"
-            (mapconcat
-             (lambda (cell)
-               (format "%s: %s"
-                       (symbol-name (car cell))
-                       (a3madkour-pub-garden--render-yaml-value (cdr cell))))
-             sorted "\n")
-            "\n---\n")))
+  "Thin wrapper over `a3madkour-pub-yaml/render-frontmatter' (P3.1)."
+  (a3madkour-pub-yaml/render-frontmatter alist))
 
 (cl-defun a3madkour-pub-garden/publish-garden-file (file run &key on-done)
   "Publish a single garden-section FILE to content/garden/<slug>/index.md.
