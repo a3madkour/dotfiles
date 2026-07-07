@@ -96,7 +96,13 @@ fi
 # in standalone mode (walks source tree), prints the dry-run plist, exits 0.
 if [ "${1:-}" = "--check-orphans" ]; then
   shift
+  # P5.5: export the resolved dir so the emacs child reads it via `getenv'
+  # rather than us splicing it raw into an --eval string literal (a path with
+  # a `"' or `\' would otherwise break the elisp string / inject code).
+  # Assign THEN export on separate lines: `export VAR="$(cmd)"' would mask the
+  # command-substitution exit status behind the export builtin's own success.
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  export SITE_DATA_DIR
   if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
     echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
     exit 2
@@ -113,7 +119,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     -l a3madkour-publish-rewrite \
     -l a3madkour-publish-assets \
     -l a3madkour-publish-unpublish \
-    --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(a3madkour-pub/begin-publish)" \
     --eval "(let ((result (a3madkour-pub/check-orphans)))
               (princ (format \"removed: %S\\n\" (plist-get result :removed)))
@@ -134,13 +140,27 @@ fi
 # `begin-publish' calls `read-manifest' which signals user-error if
 # `a3madkour-pub/site-data-dir' is nil, so the wrapper sets it before
 # invoking publish-living (no interactive config is loaded under --batch).
+#
+# P5.5: the (a3-publish-living) call is wrapped in a `condition-case' that
+# exits 1 on a thrown error (nil site-data-dir, walk failure, …), mirroring
+# --publish-deliberate so a broken invocation no longer exits 0.  Note this
+# catches only SYNCHRONOUS failures — a per-handler error is caught inside
+# living.el and rolled into finish-publish's 'err status, which this batch
+# wrapper does not observe (surfacing that would need finish-publish to
+# communicate run status back to the shell — a deeper follow-up).
 if [ "${1:-}" = "--publish-living" ]; then
   shift
   if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
     echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
     exit 2
   fi
+  # P5.5: export the resolved dir so the emacs child reads it via `getenv'
+  # rather than us splicing it raw into an --eval string literal (a path with
+  # a `"' or `\' would otherwise break the elisp string / inject code).
+  # Assign THEN export on separate lines: `export VAR="$(cmd)"' would mask the
+  # command-substitution exit status behind the export builtin's own success.
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  export SITE_DATA_DIR
   # C: source-side math validation before invoking emacs.
   a3_pub_check_math "$HOME/org/notes" || exit $?
   exec emacs --batch \
@@ -164,9 +184,12 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-research \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
-    --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
-    --eval "(a3-publish-living)" \
+    --eval "(condition-case err
+              (a3-publish-living)
+              (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
+                     (kill-emacs 1)))" \
     --eval "(kill-emacs 0)" \
     "$@"
 fi
@@ -186,15 +209,23 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     echo "a3-pub.sh --publish-deliberate: missing required <path> argument" >&2
     exit 2
   fi
-  target_path="$1"
+  # P5.5: export so the child reads it via `getenv' (see SITE_DATA_DIR note) —
+  # a source path containing `"' or `\' must not break/inject the --eval form.
+  export A3_PUB_TARGET_PATH="$1"
   shift
   if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
     echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
     exit 2
   fi
+  # P5.5: export the resolved dir so the emacs child reads it via `getenv'
+  # rather than us splicing it raw into an --eval string literal (a path with
+  # a `"' or `\' would otherwise break the elisp string / inject code).
+  # Assign THEN export on separate lines: `export VAR="$(cmd)"' would mask the
+  # command-substitution exit status behind the export builtin's own success.
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  export SITE_DATA_DIR
   # C: source-side math validation on the file's parent dir.
-  a3_pub_check_math "$(dirname "$target_path")" || exit $?
+  a3_pub_check_math "$(dirname "$A3_PUB_TARGET_PATH")" || exit $?
   # Task 26: propagate SIGTERM/SIGINT to the emacs child so its
   # `kill-emacs-hook' runs (a3-pub-async--on-kill cleans tmp-dirs).
   emacs_pid=
@@ -226,10 +257,10 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-multi-pdf \
     -l a3madkour-publish-multi-word \
     -l a3madkour-publish-multi \
-    --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
-              (a3-publish-deliberate \"$target_path\")
+              (a3-publish-deliberate (getenv \"A3_PUB_TARGET_PATH\"))
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
                      (kill-emacs 1)))" \
     --eval "(kill-emacs 0)" \
@@ -248,7 +279,13 @@ if [ "${1:-}" = "--sync-citations" ]; then
     echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
     exit 2
   fi
+  # P5.5: export the resolved dir so the emacs child reads it via `getenv'
+  # rather than us splicing it raw into an --eval string literal (a path with
+  # a `"' or `\' would otherwise break the elisp string / inject code).
+  # Assign THEN export on separate lines: `export VAR="$(cmd)"' would mask the
+  # command-substitution exit status behind the export builtin's own success.
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
+  export SITE_DATA_DIR
   # C: source-side math validation across all org dirs (sync walks the whole corpus).
   a3_pub_check_math "$HOME/org" || exit $?
   exec emacs --batch \
@@ -266,7 +303,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
     -l a3madkour-publish-history \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
-    --eval "(setq a3madkour-pub/site-data-dir \"$SITE_DATA_DIR\")" \
+    --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(a3madkour-pub/begin-publish)" \
     --eval "(a3-sync-citations)" \

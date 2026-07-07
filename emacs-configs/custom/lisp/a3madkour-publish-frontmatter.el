@@ -98,19 +98,6 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
   "Mapping from org `:PROGRESS:' property to Hugo `growth_stage'.
 Unset / unrecognized → \"seedling\" (per spec §7).")
 
-(defconst a3madkour-pub-frontmatter--media-flavors
-  '(("book" . "media") ("album" . "media") ("track" . "media")
-    ("game" . "media") ("film"  . "media") ("series" . "media")
-    ("paper" . "reference") ("video" . "reference")
-    ("article" . "reference") ("talk" . "reference"))
-  "Map garden `media_type' values to `flavor' per spec §7.")
-
-(defun a3madkour-pub-frontmatter--infer-flavor (media-type)
-  "Return flavor for MEDIA-TYPE per spec §7.
-nil/unrecognized media_type → \"concept\"."
-  (or (cdr (assoc media-type a3madkour-pub-frontmatter--media-flavors))
-      "concept"))
-
 (defun a3madkour-pub-frontmatter--coerce-slug-list (raw)
   "Coerce RAW (string or list-of-strings or nil) to a list of strings.
 Strings split on whitespace.  nil stays nil."

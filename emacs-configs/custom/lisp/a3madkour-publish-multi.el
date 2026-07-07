@@ -19,6 +19,7 @@
 
 (require 'cl-lib)
 (require 'a3madkour-publish-async)
+(require 'a3madkour-publish-yaml)   ;; P5.4: for `a3madkour-pub-yaml/site-root'
 (require 'a3madkour-publish-multi-filter)
 (require 'a3madkour-publish-multi-pdf)
 (require 'a3madkour-publish-multi-word)
@@ -26,16 +27,19 @@
 (defcustom a3madkour-pub-multi-templates-dir nil
   "Directory containing `madkour-paper.cls', `reference.docx', `d2-blocks.lua'.
 When nil, resolves to `<SITE_ROOT>/tools/templates/' via
-`a3madkour-pub-essays--site-root'."
+`a3madkour-pub-yaml/site-root'."
   :type '(choice (const :tag "Auto from site-root" nil) directory)
   :group 'a3madkour-pub-multi)
 
 (defun a3madkour-pub-multi--templates-dir ()
   "Return the templates directory absolute path with trailing slash."
+  ;; P5.4: use the shared public `yaml/site-root' rather than reaching into
+  ;; the essays module's private `--site-root' helper (which multi.el did not
+  ;; even `require', relying on a3-pub.sh load order).
   (or a3madkour-pub-multi-templates-dir
       (file-name-as-directory
        (expand-file-name "tools/templates"
-                         (a3madkour-pub-essays--site-root)))))
+                         (a3madkour-pub-yaml/site-root)))))
 
 (defun a3madkour-pub-multi--bib-path ()
   "Return the bibliography path from F.1's defcustom, or nil if missing/unreadable.

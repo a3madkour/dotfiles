@@ -28,7 +28,9 @@ Deliberately NOT done (assessed marginal / risky / behavior-changing):
 - **P3.6 (relocate works-poetry normalizer into frontmatter.el)** — restores the "frontmatter = complete registry" invariant but adds a frontmatter→poetry runtime coupling + byte-compile warnings. Marginal → flagged.
 - **P3.8 (shared test scaffolds)** — genuine dup (`--with-manifest` defined twice; ~13 `with-tmp-*` macros) but test-only churn across many files. Available as a focused follow-up (mirrors the site repo's R5.4); not done this round.
 
-P5 remains open.
+**P4 + P5 now closed too (see sections below) — the whole roadmap is closed.** The
+only outstanding non-P-tier item is P3.4 (library slug NFD-vs-NFKD), a URL-changing
+behavior decision deliberately deferred to the user.
 
 ## P4 status — 2026-07-06
 
@@ -58,7 +60,38 @@ tautologies); the `skeleton-loaded`/`featurep` smokes catch module-load failures
 Churn cost is only paid on rare glyph changes. Deleting passing tests would shrink
 coverage for no correctness gain — same call as P3.8. Left in place.
 
-P5 remains open.
+## P5 status — 2026-07-06 — TIER CLOSED (roadmap fully closed)
+
+P5.1/P5.3/P5.4/P5.5 done; P5.2 assessed + flagged. Suite 751/751 green (753 − 2
+removed redundant tests). This closes the last open tier — **the whole
+publish-pipeline audit roadmap is now closed.**
+
+- **P5.1 DONE** — `a3madkour-pub-citations--ref-notes-dir` renamed to the
+  module-scoped public convention `citations/ref-notes-dir` (matching
+  `bib/library-path` etc.), with a `define-obsolete-variable-alias` so existing
+  user config keeps working. Reader + test updated.
+- **P5.3 DONE** — removed dead `frontmatter--infer-flavor` + its only-consumer
+  `--media-flavors` defconst, and the dead `multi-pdf--log-line` wrapper + its 2
+  tests (formatting covered by `multi-backend-test/log-line-success-and-failure`).
+  `multi-word--log-line` was already dropped in P3.3.
+- **P5.4 DONE** — `multi.el` now `(require 'a3madkour-publish-yaml)` and calls the
+  shared public `yaml/site-root` instead of the essays-private `--site-root` (which
+  it never required — worked only via a3-pub.sh load order).
+- **P5.5 DONE** — `a3-pub.sh`: `--publish-living` wraps `(a3-publish-living)` in a
+  `condition-case` → `kill-emacs 1` on a thrown error (mirrors `--publish-deliberate`;
+  no longer exits 0 on a synchronous failure — per-handler async `'err` roll-up
+  still unobserved by the batch wrapper, noted inline as a deeper follow-up).
+  Resolved `SITE_DATA_DIR` + deliberate `target_path` now passed via exported env
+  read with `getenv` instead of raw `--eval` splicing (path with `"`/`\` no longer
+  breaks/injects). Assignment + `export` split across lines so the resolver's
+  `|| exit 1` isn't masked by the `export` builtin. `bash -n` clean.
+- **P5.2 — assessed, deliberately NOT done.** Unifying `a3-pub-async-*` (13 defuns +
+  the `a3-pub-async-run` struct + macros) and the interactive command prefixes
+  (`a3-publish-*` / `a3-unpublish-*` / `a3-sync-*`) to a tree-wide `a3madkour-pub-*`
+  is a large, high-churn rename across ~10 modules, every test, and the a3-pub.sh
+  flag surface — and it changes user-facing command names for a cosmetic-only gain.
+  The `a3-pub-async-*` prefix is internally consistent within its subsystem. Same
+  risk/benefit call as P2.2/P3.2/P3.4 → flagged.
 
 ## Two systemic findings
 

@@ -236,7 +236,7 @@ dir to it; run BODY."
                            (format "%s.org" key) tmp)))
                (with-temp-file path
                  (insert props))))
-           (let ((a3madkour-pub-citations--ref-notes-dir
+           (let ((a3madkour-pub-citations/ref-notes-dir
                   (file-name-as-directory tmp)))
              ,@body))
        (delete-directory tmp t))))

@@ -189,13 +189,22 @@ recorded by org-element-parse-buffer."
 ;; cite--lookup-notes-ref: manifest-backed ref-note auto-detect (Task 10)
 ;; ---------------------------------------------------------------------
 
-(defcustom a3madkour-pub-citations--ref-notes-dir
+(defcustom a3madkour-pub-citations/ref-notes-dir
   (expand-file-name "~/org/notes/ref-notes/")
   "Directory holding per-cite-key reference org notes.  For a cite key
 KEY, F probes for `<ref-notes-dir>/<KEY>.org' to auto-populate the
 :notes_ref yaml field."
   :type 'directory
   :group 'a3madkour-pub)
+
+;; P5.1: this is a user-facing defcustom, so it takes the module-scoped
+;; public `<module>/<name>' convention (matching `bib/library-path',
+;; `essays/section-dir-name', …) rather than the private `--' prefix it
+;; historically carried.  Keep the old name working for any user config.
+(define-obsolete-variable-alias
+  'a3madkour-pub-citations--ref-notes-dir
+  'a3madkour-pub-citations/ref-notes-dir
+  "2026-07-06")
 
 (defun a3madkour-pub-citations--read-keyword (file keyword)
   "Read first `#+<KEYWORD>: <VALUE>' line from FILE; return VALUE or nil."
@@ -227,7 +236,7 @@ or nil if not found."
 in the manifest snapshot, return its garden slug.  Otherwise nil."
   (let ((path (expand-file-name
                (format "%s.org" cite-key)
-               a3madkour-pub-citations--ref-notes-dir)))
+               a3madkour-pub-citations/ref-notes-dir)))
     (when (file-exists-p path)
       (let ((publish (a3madkour-pub-citations--read-keyword path "HUGO_PUBLISH"))
             (section (a3madkour-pub-citations--read-keyword path "HUGO_SECTION"))

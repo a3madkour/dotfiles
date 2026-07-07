@@ -177,11 +177,5 @@ mirroring the Word backend which always lists from the real source."
                 (when on-done
                   (funcall on-done '(:status err :err-snippet "built PDF missing"))))))))))))
 
-(defun a3madkour-pub-multi-pdf--log-line (buf successp path elapsed err-snippet)
-  "Append a single log line to BUF for the PDF backend.
-SUCCESSP is t for ✓ / nil for ✗.  PATH is target path on success.
-ELAPSED is seconds (float).  ERR-SNIPPET is the stderr tail to inline on failure."
-  (a3madkour-pub-multi-backend/log-line buf "pdf" successp path elapsed err-snippet))
-
 (provide 'a3madkour-publish-multi-pdf)
 ;;; a3madkour-publish-multi-pdf.el ends here

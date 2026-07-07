@@ -20,26 +20,12 @@
     (let ((missing (a3madkour-pub-multi-pdf--probe-tools)))
       (should (member "xelatex" missing)))))
 
-(ert-deftest a3madkour-pub-multi-pdf/log-success-line ()
-  (let ((buf (generate-new-buffer "*log-test*")))
-    (unwind-protect
-        (progn
-          (a3madkour-pub-multi-pdf--log-line buf t "/out/foo.pdf" 7.2 nil)
-          (with-current-buffer buf
-            (should (string-match-p "\\[✓\\] pdf .*foo\\.pdf .*(7.2s)"
-                                    (buffer-string)))))
-      (kill-buffer buf))))
-
-(ert-deftest a3madkour-pub-multi-pdf/log-failure-snippet ()
-  (let ((buf (generate-new-buffer "*log-test*")))
-    (unwind-protect
-        (progn
-          (a3madkour-pub-multi-pdf--log-line buf nil nil 4.0 "! Undefined control sequence.")
-          (with-current-buffer buf
-            (let ((s (buffer-string)))
-              (should (string-match-p "\\[✗\\] pdf" s))
-              (should (string-match-p "Undefined control sequence" s)))))
-      (kill-buffer buf))))
+;; P5.3: the PDF-specific `--log-line' wrapper was dead production code (its
+;; only callers were these two tests).  The formatting it delegated to —
+;; `a3madkour-pub-multi-backend/log-line' — is covered by
+;; `a3madkour-pub-multi-backend-test/log-line-success-and-failure' (✓/✗ glyph,
+;; path, elapsed, snippet), so removing the wrapper + these tests loses no
+;; coverage.
 
 (ert-deftest a3madkour-pub-multi-pdf/svg-fan-uses-barrier ()
   "N SVGs convert via run-process; barrier fires once with all results.

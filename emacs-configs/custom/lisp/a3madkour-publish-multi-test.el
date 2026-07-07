@@ -5,7 +5,8 @@
 
 (ert-deftest a3madkour-pub-multi/templates-dir-resolves ()
   "When SITE_ROOT is settable via helper, templates dir resolves under it."
-  (cl-letf (((symbol-function 'a3madkour-pub-essays--site-root)
+  ;; P5.4: multi.el now resolves via the shared `yaml/site-root'.
+  (cl-letf (((symbol-function 'a3madkour-pub-yaml/site-root)
              (lambda () "/site")))
     (let ((a3madkour-pub-multi-templates-dir nil))
       (should (string= "/site/tools/templates/"
