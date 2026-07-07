@@ -40,9 +40,8 @@
   "Required columns in the outputs table header row.")
 
 (defun a3madkour-pub-research--warn (file fmt &rest args)
-  "Emit a WARN message with FILE context."
-  (apply #'message (concat "a3madkour-pub-research WARN [%s]: " fmt)
-         (if file (file-name-nondirectory file) "unknown") args))
+  "Emit a WARN message with FILE context (P3.7: delegates to the shared core)."
+  (apply #'a3madkour-pub/warn "research" file fmt args))
 
 (defun a3madkour-pub-research--find-outputs-heading (ast)
   "Find the first headline in AST whose raw value matches 'Outputs' (case-insensitive).

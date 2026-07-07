@@ -452,8 +452,7 @@ is the hard gate.")
        ;; Float-trip avoids the octal trap.
        ((string-match-p "^[+-]?[0-9]+\\(\\.[0-9]+\\)?$" cleaned)
         (truncate (string-to-number cleaned)))
-       (t (message "a3madkour-pub-frontmatter WARN [%s]: weight=%S non-numeric"
-                   (if file (file-name-nondirectory file) "unknown") raw)
+       (t (a3madkour-pub/warn "frontmatter" file "weight=%S non-numeric" raw)
           nil))))
    (t nil)))
 
@@ -480,8 +479,7 @@ Contract:
     ;; Status enum check.
     (let ((status (alist-get 'status out)))
       (unless (member status a3madkour-pub-frontmatter--research-statuses)
-        (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
-                 (if file (file-name-nondirectory file) "unknown") status
+        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S" status
                  a3madkour-pub-frontmatter--research-statuses)))
     ;; Weight coercion — drop key if coerce returns nil (matches theme post-T5 fix).
     (when-let ((raw-w (alist-get 'weight out)))
@@ -509,8 +507,7 @@ Contract:
     ;; Status enum check (WARN-don't-fail).
     (let ((status (alist-get 'status out)))
       (unless (member status a3madkour-pub-frontmatter--research-statuses)
-        (message "a3madkour-pub-frontmatter WARN [%s]: status=%S not in %S"
-                 (if file (file-name-nondirectory file) "unknown") status
+        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S" status
                  a3madkour-pub-frontmatter--research-statuses)))
     ;; Weight coercion to int (octal-safe).  Drop the key when coercion
     ;; returns nil (non-numeric raw) rather than leaving (weight . nil)

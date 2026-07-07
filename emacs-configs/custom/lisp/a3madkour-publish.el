@@ -318,6 +318,17 @@ that reason."
              (file-directory-p org-roam-directory))
     (org-roam-db-sync)))
 
+(defun a3madkour-pub/warn (module file fmt &rest args)
+  "Emit a uniform `a3madkour-pub-MODULE WARN [FILE]: FMT' message (P3.7).
+MODULE is the short module name (e.g. \"research\", \"frontmatter\").  FILE is
+basename'd for the context bracket; nil renders as \"unknown\".  Remaining ARGS
+fill FMT.  Centralizes the per-module WARN logging that was reimplemented across
+modules so the publish log has one grep-able format."
+  (apply #'message
+         (concat "a3madkour-pub-" module " WARN [%s]: " fmt)
+         (if file (file-name-nondirectory file) "unknown")
+         args))
+
 (defun a3madkour-pub/yaml-escape-scalar (s)
   "Escape S for embedding inside a double-quoted YAML scalar.
 Backslash-escapes `\\' first, then `\"', so a title/summary/tag containing a
