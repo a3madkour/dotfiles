@@ -14,7 +14,21 @@ Row IDs are `P<tier>.<n>`. Tiers: **P1** blocking, **P2** correctness (non-block
 - **P2.14 — DONE (full wiring).** Manifest now persists `last_modified` (`record-publish :last-modified`, canonical key order extended, `recorded-last-modified` reader). The cascade gained a `prior-recorded` slot + an ambient `--prior-last-modified` dynamic var; all 4 handlers bind the note's recorded value around `normalize` and pass the resolved date back to `record-publish`. Proven idempotent by an end-to-end garden test (uncommitted note republished with a bumped fs-mtime keeps its first date). Byte-stability of the manifest preserved (key emitted only when present).
 - **P2.2 residual — assessed, deliberately NOT changed.** The manifest collision is fixed. The run-accumulator still keys id-less notes on id, BUT id-less notes are essays-only, essays register into `deliberate--handlers`, and `deliberate` scope skips Step A (the only accumulator/diff consumer for removals). Living-swept sections (garden/library/research) are all org-roam-indexed (have ids). So the collision is **unreachable in practice**. A correct fix needs an invasive real-id-vs-surrogate distinction across `diff-published-set`/`walk`/`finish-publish` (`record-publish id nil 'removed` would misfire on a URL-surrogate key) — real data-loss risk for zero practical benefit. Left as a documented limitation.
 
-P3/P4/P5 remain open (not selected this round).
+## P3 status — 2026-07-06
+
+Behavior-preserving dedup, guarded by the 744-test suite (all green). Done:
+- **P3.1 DONE** (`be2e4d1`) — extracted `a3madkour-publish-yaml.el` (site-root, write-if-different, date-re, render-value, render-frontmatter); handlers are thin wrappers passing the drift as explicit params (strict flag + key-hook + value-fn). ~180 dup LOC → one module.
+- **P3.3 DONE** (`0f6d012`) — extracted `a3madkour-publish-multi-backend.el` (probe-tools, convert-svgs-fan, log-line, run-scaffold); PDF + Word backends thin over it; dead `multi-word--log-line` dropped; self-test added.
+- **P3.7 DONE** (`c0de36e`) — shared `a3madkour-pub/warn`; research + 3 frontmatter sites delegate (library's slug variant kept distinct).
+
+Deliberately NOT done (assessed marginal / risky / behavior-changing):
+- **P3.2 (handler skeleton)** — the 4 handlers diverge substantially (essays multi-export dispatch, poetry audio + list return-value, research outputs); a shared envelope would need many hooks. High risk for a maintainability-only gain → flagged, not attempted.
+- **P3.4 (library slug → canonical)** — NOT a pure refactor. `library--title-to-slug` (NFD, punctuation→hyphen: `L'Étranger`→`l-etranger`) and `slug/slugify` (NFKD, punctuation dropped: →`letranger`) are different algorithms. Unifying changes library slugs/URLs — a behavior decision for the user (best done before real library content ships), not a silent refactor.
+- **P3.5 (lastmod call-site prep)** — the prep varies per normalizer (source `raw-alist` vs `out`, which keys to delete, emitted key `lastmod` vs `last_modified`); extractable only via a 4–5 param helper for ~30 LOC, in the P2.14-delicate normalizers. Marginal value / real risk → flagged.
+- **P3.6 (relocate works-poetry normalizer into frontmatter.el)** — restores the "frontmatter = complete registry" invariant but adds a frontmatter→poetry runtime coupling + byte-compile warnings. Marginal → flagged.
+- **P3.8 (shared test scaffolds)** — genuine dup (`--with-manifest` defined twice; ~13 `with-tmp-*` macros) but test-only churn across many files. Available as a focused follow-up (mirrors the site repo's R5.4); not done this round.
+
+P4/P5 remain open.
 
 ## Two systemic findings
 
