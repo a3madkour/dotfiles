@@ -97,6 +97,45 @@ which flows through to finish-publish."
     (should (a3-pub-async-run-p run-seen))
     (should (cl-find 'finish calls :key #'car))))
 
+;; -- P4.2: deliberate handler-error aggregation --
+
+(ert-deftest a3madkour-pub-delib-test/handler-throw-reports-err-and-logs ()
+  "A deliberate handler that SIGNALS is caught by `a3-publish-deliberate's'
+`condition-case': it logs a `handler-error' step and calls finish-publish with
+`:status 'err' — the run does NOT silently finish as `ok' (P4.2)."
+  (let ((finish-status 'unset) (logged nil))
+    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+              ((symbol-function 'a3-pub-async/finish-publish)
+               (lambda (_run &rest kw) (setq finish-status (plist-get kw :status))))
+              ((symbol-function 'a3-pub-async/log-step)
+               (lambda (_run label &rest _) (push label logged)))
+              ((symbol-function 'a3madkour-pub--resolve-file-or-id) (lambda (x) x))
+              ((symbol-function 'a3madkour-pub/note-section) (lambda (_) "essays"))
+              ((symbol-function 'a3madkour-pub-essays/publish-essay-file)
+               (lambda (&rest _) (error "handler blew up"))))
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-deliberate "/tmp/fake.org"))))
+    (should (eq finish-status 'err))
+    (should (member "handler-error" logged))))
+
+(ert-deftest a3madkour-pub-delib-test/handler-on-done-err-propagates-status ()
+  "When the handler completes but reports `err' via on-done, that status is
+passed straight through to finish-publish (P4.2 — contrast the throw path: no
+`handler-error' log, but still not `ok')."
+  (let ((finish-status 'unset))
+    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+              ((symbol-function 'a3-pub-async/finish-publish)
+               (lambda (_run &rest kw) (setq finish-status (plist-get kw :status))))
+              ((symbol-function 'a3madkour-pub--resolve-file-or-id) (lambda (x) x))
+              ((symbol-function 'a3madkour-pub/note-section) (lambda (_) "essays"))
+              ((symbol-function 'a3madkour-pub-essays/publish-essay-file)
+               (lambda (_f _r &rest rest) (funcall (plist-get rest :on-done) 'err))))
+      (let ((a3-pub-async--in-flight-run nil))
+        (with-a3-pub-async-sync
+         (a3-publish-deliberate "/tmp/fake.org"))))
+    (should (eq finish-status 'err))))
+
 ;; -- Tier 5.1: a3-unpublish-deliberate recovery command --
 
 (defmacro a3-pub-unpub-delib-test--with-fixture (vars &rest body)

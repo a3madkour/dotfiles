@@ -5,6 +5,10 @@
 
 (require 'ert)
 (require 'a3madkour-publish-living)
+;; Loading garden triggers living.el's `with-eval-after-load' handler
+;; registration, so the P4.1 end-to-end idempotency test drives a real
+;; living-section handler through the orchestrator.
+(require 'a3madkour-publish-garden)
 
 (ert-deftest a3madkour-pub-living-test/command-defined-and-interactive ()
   "B.0 — `a3-publish-living' is defined and interactive."
@@ -139,6 +143,127 @@ sections (`research/themes', `research/questions') in
         (with-a3-pub-async-sync
          (a3-publish-living))))
     (should (= 1 finish-count))))
+
+;; -- P4.2: error-aggregation roll-up (living barrier) --
+
+(defmacro a3-pub-living-test--capture-finish-status (status-var &rest body)
+  "Run BODY with `a3-pub-async/finish-publish' stubbed to capture its `:status'
+keyword into STATUS-VAR (a place set via `setq').  Also stubs begin-publish to a
+no-op and neutralizes the in-flight guard, matching the sibling barrier tests."
+  (declare (indent 1))
+  `(cl-letf* (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+              ((symbol-function 'a3-pub-async/finish-publish)
+               (lambda (_run &rest kw) (setq ,status-var (plist-get kw :status)))))
+     (let ((a3-pub-async--in-flight-run nil))
+       (with-a3-pub-async-sync ,@body))))
+
+(ert-deftest a3madkour-pub-living-test/error-aggregation-one-on-done-err-rolls-up ()
+  "If any handler reports `err' via its on-done callback, the barrier's status
+roll-up resolves to `err' even when the other handlers report `ok' (P4.2).  A
+partial-failure living run must NOT finish as `ok' (which would let the sweep
+reap off an incomplete accumulator)."
+  (let ((captured 'unset))
+    (a3-pub-living-test--capture-finish-status captured
+      (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                 (lambda ()
+                   (list (list "garden" "/a.org" 'ok-h)
+                         (list "garden" "/b.org" 'err-h)
+                         (list "garden" "/c.org" 'ok-h))))
+                ((symbol-function 'ok-h)
+                 (lambda (_f _r &rest rest) (funcall (plist-get rest :on-done) 'ok)))
+                ((symbol-function 'err-h)
+                 (lambda (_f _r &rest rest) (funcall (plist-get rest :on-done) 'err))))
+        (a3-publish-living)))
+    (should (eq captured 'err))))
+
+(ert-deftest a3madkour-pub-living-test/error-aggregation-handler-throw-rolls-up ()
+  "A handler that SIGNALS (throws before/without calling on-done) is caught by
+the dispatch `condition-case', which reports `err' to the barrier — so the run
+rolls up to `err', not `ok' (P4.2)."
+  (let ((captured 'unset))
+    (a3-pub-living-test--capture-finish-status captured
+      (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                 (lambda ()
+                   (list (list "garden" "/a.org" 'ok-h)
+                         (list "garden" "/b.org" 'throw-h))))
+                ((symbol-function 'ok-h)
+                 (lambda (_f _r &rest rest) (funcall (plist-get rest :on-done) 'ok)))
+                ((symbol-function 'throw-h)
+                 (lambda (&rest _) (error "handler blew up"))))
+        (a3-publish-living)))
+    (should (eq captured 'err))))
+
+(ert-deftest a3madkour-pub-living-test/error-aggregation-all-ok-rolls-up-ok ()
+  "Contrast to the err cases: when every handler reports `ok', the roll-up is
+`ok' (P4.2)."
+  (let ((captured 'unset))
+    (a3-pub-living-test--capture-finish-status captured
+      (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                 (lambda ()
+                   (list (list "garden" "/a.org" 'ok-h)
+                         (list "garden" "/b.org" 'ok-h))))
+                ((symbol-function 'ok-h)
+                 (lambda (_f _r &rest rest) (funcall (plist-get rest :on-done) 'ok))))
+        (a3-publish-living)))
+    (should (eq captured 'ok))))
+
+;; -- P4.1: living-publish idempotency contract (spec §11), end-to-end --
+
+(ert-deftest a3madkour-pub-living-test/idempotent-through-orchestrator ()
+  "The living-publish idempotency contract (living.el commentary / design §11):
+running `a3-publish-living' twice over an unchanged source tree emits a
+BYTE-IDENTICAL content bundle.  Drives the real orchestrator (walk → dispatch →
+barrier → finish-publish), not a handler in isolation, so it guards the wiring —
+including the P2.14 last_modified reuse that keeps the frontmatter from churning
+even when the filesystem mtime advances between runs (never-committed note)."
+  (let* ((notes-dir (make-temp-file "a3-pub-living-idem-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-living-idem-site-" t))
+         (data-dir  (file-name-as-directory (expand-file-name "data" site-dir)))
+         (src       (expand-file-name "note.org" notes-dir))
+         (bundle    (expand-file-name "content/garden/idem-note/index.md" site-dir))
+         ;; fs-mtime advances every read → proves the recorded date is reused.
+         (fs-dates  '("2026-02-02" "2026-08-08")))
+    (unwind-protect
+        (progn
+          (make-directory data-dir t)
+          (make-directory (expand-file-name "content/garden" site-dir) t)
+          (with-temp-file (expand-file-name "url-history.yaml" data-dir)
+            (insert "notes: []\n"))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:ID: dddddddd-eeee-ffff-0000-111111111111\n:END:\n"
+                    "#+title: Idem Note\n#+filetags: :alpha:\n"
+                    "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "Body prose.\n"))
+          (let ((a3madkour-pub/site-data-dir data-dir)
+                (a3madkour-pub/org-notes-dir notes-dir)
+                (a3-pub-async--in-flight-run nil))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore)
+                      ;; Step C recheck resolves live-note sources via org-roam;
+                      ;; point it at our single note so it needs no DB.
+                      ((symbol-function 'org-roam-id-find)
+                       (lambda (_id &optional _) (cons src 1)))
+                      ;; citations flush on ok is out of scope for this test.
+                      ((symbol-function 'a3madkour-pub-citations/emit-yaml) #'ignore)
+                      ;; never-committed → git-mtime empty; fs-mtime advances.
+                      ((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                       (lambda (_) nil))
+                      ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+                       (lambda (_) (or (pop fs-dates) "2027-01-01"))))
+              (with-a3-pub-async-sync (a3-publish-living))
+              (should (file-exists-p bundle))
+              (let ((first (with-temp-buffer
+                             (insert-file-contents bundle) (buffer-string))))
+                (with-a3-pub-async-sync (a3-publish-living))
+                (let ((second (with-temp-buffer
+                                (insert-file-contents bundle) (buffer-string))))
+                  ;; Whole-file byte equality — no field churns across runs.
+                  (should (equal first second))
+                  ;; And specifically the first-recorded date survived.
+                  (should (string-match-p "last_modified: 2026-02-02" second))
+                  (should-not (string-match-p "2026-08-08" second)))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
 
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

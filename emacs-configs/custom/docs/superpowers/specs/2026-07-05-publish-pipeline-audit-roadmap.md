@@ -28,7 +28,37 @@ Deliberately NOT done (assessed marginal / risky / behavior-changing):
 - **P3.6 (relocate works-poetry normalizer into frontmatter.el)** — restores the "frontmatter = complete registry" invariant but adds a frontmatter→poetry runtime coupling + byte-compile warnings. Marginal → flagged.
 - **P3.8 (shared test scaffolds)** — genuine dup (`--with-manifest` defined twice; ~13 `with-tmp-*` macros) but test-only churn across many files. Available as a focused follow-up (mirrors the site repo's R5.4); not done this round.
 
-P4/P5 remain open.
+P5 remains open.
+
+## P4 status — 2026-07-06
+
+**P4.1–P4.4 DONE via TDD (test-only, +9 tests, 744→753 green).** The four flagged
+gaps were all in orchestration wiring (the destructive primitives were already
+well-covered):
+- **P4.1** — `a3madkour-pub-living-test/idempotent-through-orchestrator`: drives
+  the real `a3-publish-living` (walk → dispatch → barrier → finish-publish) twice
+  over an unchanged garden note and asserts a **byte-identical** emitted bundle.
+  Genuinely guards the P2.14 last_modified reuse: run 2's fs-mtime advances to a
+  new date, yet the output keeps the first-recorded date.
+- **P4.2** — living: `error-aggregation-{one-on-done-err,handler-throw}-rolls-up`
+  + `all-ok-rolls-up-ok`; deliberate: `handler-throw-reports-err-and-logs`
+  + `handler-on-done-err-propagates-status`. A partial-failure publish now
+  provably rolls up to `'err` (not a silent `'ok`), and the throw path logs
+  `handler-error`.
+- **P4.3** — `finish-publish-removed-{nil,malformed}-url-does-not-converge`:
+  documents that a `:removed` entry whose `current_url` won't parse is never
+  swept (delete-bundle uncalled, manifest not advanced) and re-surfaces every run.
+- **P4.4** — `recheck-skips-self-source-being-removed`: the self-source skip in
+  `recheck-live-note-links` is exercised — a note being removed this run does not
+  emit false-positive orphan WARNs about its removed siblings.
+
+**P4.5 — assessed, deliberately NOT changed.** The flagged log-step glyph/elapsed
+assertions and modeline-format tests verify real user-facing renderer output (not
+tautologies); the `skeleton-loaded`/`featurep` smokes catch module-load failures.
+Churn cost is only paid on rare glyph changes. Deleting passing tests would shrink
+coverage for no correctness gain — same call as P3.8. Left in place.
+
+P5 remains open.
 
 ## Two systemic findings
 

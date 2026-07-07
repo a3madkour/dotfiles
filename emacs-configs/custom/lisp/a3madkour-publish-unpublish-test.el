@@ -1321,5 +1321,97 @@ status rather than preview intent."
       (when (file-exists-p manifest-path) (delete-file manifest-path))
       (delete-directory content-root t))))
 
+;; -- P4.4: recheck skips a source note that is itself removed this publish --
+
+(ert-deftest a3madkour-pub-unpublish-test/recheck-skips-self-source-being-removed ()
+  "A live-in-manifest note whose own id is in the removed-this-publish set is
+skipped by the outgoing-link recheck — its links are not scanned, so it never
+produces a self-referential orphan WARN.  Guards the `(not (gethash id ...))'
+branch (P4.4); without it, a note removed this run (still `live' in the manifest
+under dry-run) would warn about links to its removed siblings — false positives
+for content on its way out."
+  (a3-pub-unpublish-test--with-tmp-source src
+      "Body links [[id:sibling-removed][x]] here.\n"
+    (let ((removed-set (make-hash-table :test 'equal)))
+      ;; BOTH the source note AND its link target are being removed this run.
+      (puthash "self-removed" t removed-set)
+      (puthash "sibling-removed" t removed-set)
+      (cl-letf (((symbol-function 'a3madkour-pub-history/read-manifest)
+                 (lambda ()
+                   ;; Manifest still shows self-removed as live (dry-run: not
+                   ;; yet advanced to `removed').
+                   `((notes . [((id . "self-removed") (current_url . "/garden/self/")
+                                (history . []) (state . "live"))
+                               ((id . "sibling-removed") (current_url . nil)
+                                (history . [((url . "/garden/sib/") (replaced_at . "t")
+                                             (reason . "removed"))])
+                                (state . "removed"))]))))
+                ((symbol-function 'org-roam-id-find)
+                 (lambda (id &optional _)
+                   (when (equal id "self-removed") (cons src 1)))))
+        ;; self-removed is skipped → its link to sibling-removed is never seen.
+        (should (null (a3madkour-pub--unpublish-recheck-live-note-links removed-set)))))))
+
+;; -- P4.3: a :removed entry with nil/malformed URL never converges --
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-removed-nil-url-does-not-converge ()
+  "A manifest entry classified `:removed' whose `current_url' is nil cannot be
+swept: `url-to-section-slug' yields nil, so `delete-bundle' is never called and
+`record-publish ... 'removed' never fires.  The entry therefore re-appears in
+`:removed' on the NEXT run too — documented non-convergence (P4.3).  Assert both:
+delete-bundle is not invoked, and a second run still classifies the id removed."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+        (delete-calls 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path))
+                  ((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                   (lambda (&rest _) (cl-incf delete-calls) t)))
+          (a3madkour-pub-history/write-manifest
+           '((notes . [((id . "no-url") (current_url . nil)
+                        (history . []) (state . "live"))])))
+          ;; Empty accumulator → walk fallback; stub it empty so `no-url' is
+          ;; absent from the new-set and thus diffed as :removed.
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                     (lambda () (make-hash-table :test 'equal))))
+            (let ((r1 (a3madkour-pub/finish-publish)))
+              (should (member "no-url" (plist-get r1 :removed)))
+              ;; nil URL → no slug parse → delete-bundle skipped entirely.
+              (should (zerop delete-calls)))
+            ;; Manifest entry was NOT advanced to `removed' → still surfaces.
+            (let* ((note (aref (alist-get 'notes
+                                          (a3madkour-pub-history/read-manifest)) 0)))
+              (should (equal (alist-get 'state note) "live")))
+            (let ((r2 (a3madkour-pub/finish-publish)))
+              (should (member "no-url" (plist-get r2 :removed)))
+              (should (zerop delete-calls)))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-removed-malformed-url-does-not-converge ()
+  "Same non-convergence as the nil-URL case (P4.3), for a `current_url' that is
+non-nil but not of `/section/slug/' shape: `url-to-section-slug' returns nil, so
+the sweep skips it and the manifest never advances."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+        (delete-calls 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path))
+                  ((symbol-function 'a3madkour-pub--unpublish-delete-bundle)
+                   (lambda (&rest _) (cl-incf delete-calls) t)))
+          (a3madkour-pub-history/write-manifest
+           '((notes . [((id . "bad-url") (current_url . "no-leading-slash")
+                        (history . []) (state . "live"))])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (cl-letf (((symbol-function 'a3madkour-pub/walk-published-source-set)
+                     (lambda () (make-hash-table :test 'equal))))
+            (let ((r1 (a3madkour-pub/finish-publish)))
+              (should (member "bad-url" (plist-get r1 :removed)))
+              (should (zerop delete-calls)))
+            (let ((note (aref (alist-get 'notes
+                                         (a3madkour-pub-history/read-manifest)) 0)))
+              (should (equal (alist-get 'state note) "live")))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here
