@@ -9,6 +9,7 @@
 
 (require 'cl-lib)
 (require 'a3madkour-publish-multi-filter)
+(require 'a3madkour-publish-multi-backend)
 (require 'a3madkour-publish-async)
 
 (defgroup a3madkour-pub-multi nil
@@ -43,13 +44,10 @@
 
 (defun a3madkour-pub-multi-pdf--probe-tools ()
   "Return list of missing required commands (xelatex/biber/rsvg-convert), or nil if all present."
-  (let (missing)
-    (dolist (cmd (list a3madkour-pub-multi-xelatex-command
-                       a3madkour-pub-multi-biber-command
-                       a3madkour-pub-multi-rsvg-convert-command))
-      (unless (executable-find cmd)
-        (push cmd missing)))
-    (nreverse missing)))
+  (a3madkour-pub-multi-backend/probe-tools
+   (list a3madkour-pub-multi-xelatex-command
+         a3madkour-pub-multi-biber-command
+         a3madkour-pub-multi-rsvg-convert-command)))
 
 (defun a3madkour-pub-multi-pdf--list-svg-figures (source-file)
   "Return list of absolute SVG paths referenced by SOURCE-FILE via `[[file:…]]'.
@@ -60,20 +58,11 @@ Delegates to B.4's existing asset walker if available; falls back to nil."
      (a3madkour-pub-assets/list-referenced-files source-file))))
 
 (cl-defun a3madkour-pub-multi-pdf--convert-svgs-fan (pairs &key on-done)
-  "PAIRS is a list of (SRC DST).  Fan out one run-process per pair.
+  "PAIRS is a list of (SRC DST).  Fan out one run-process per pair (SVG→PDF).
 ON-DONE fires (with the list of exit codes) when all complete."
-  (let ((n (length pairs)))
-    (if (zerop n)
-        (when on-done (funcall on-done nil))
-      (let ((report (a3-pub-async/barrier n :on-all-done on-done)))
-        (dolist (pair pairs)
-          (let ((src (car pair)) (dst (cadr pair)))
-            (make-directory (file-name-directory dst) t)
-            (a3-pub-async/run-process
-             a3madkour-pub-multi-rsvg-convert-command
-             (list "-f" "pdf" src "-o" dst)
-             :name (format "rsvg-%s" (file-name-base src))
-             :on-done (lambda (rc _tail) (funcall report rc)))))))))
+  (a3madkour-pub-multi-backend/convert-svgs-fan
+   pairs a3madkour-pub-multi-rsvg-convert-command '("-f" "pdf")
+   :name-prefix "rsvg" :on-done on-done))
 
 (cl-defun a3madkour-pub-multi-pdf--compile-tex-async (tex-path &key on-done step-cb)
   "Async version of compile-tex.  Chains xelatex→biber→xelatex→xelatex.
@@ -129,45 +118,41 @@ matches SLUG), but that copy lives outside the essays tree — its relative
 it silently drops every figure (bug P2.3).  SVG-SOURCE-FILE, when non-nil,
 names the ORIGINAL source; SVG figures are resolved against it instead,
 mirroring the Word backend which always lists from the real source."
-  (let* ((work-dir (expand-file-name (format "multi-export-%s/" slug)
-                                     temporary-file-directory))
-         (fig-dir (expand-file-name "figures/" work-dir))
-         (tex-path (expand-file-name (concat slug ".tex") work-dir))
-         (svgs (a3madkour-pub-multi-pdf--list-svg-figures
-                (or svg-source-file source-file)))
-         (svg-pairs (mapcar (lambda (svg)
-                              (list svg (expand-file-name
-                                         (concat (file-name-base svg) ".pdf")
-                                         fig-dir)))
-                            svgs)))
-    (make-directory fig-dir t)
-    (copy-file (expand-file-name "madkour-paper.cls" templates-dir)
-               (expand-file-name "madkour-paper.cls" work-dir) t)
-    (when run (push work-dir (a3-pub-async-run-tmp-dirs run)))
-    ;; Phase 1: ox-latex export (sync, instrumented).
-    (let ((start (current-time)))
-      (with-current-buffer (find-file-noselect source-file)
-        (let ((org-latex-with-hyperref t)
-              (org-latex-default-class "madkour-paper")
-              (org-export-show-temporary-export-buffer nil))
-          (org-latex-export-to-latex)))
-      (when run
-        (a3-pub-async/log-step run "export" :ok :detail "org → latex"
-                               :elapsed (float-time
-                                         (time-subtract (current-time) start)))))
-    ;; Move produced .tex into work dir.
-    (let ((source-tex (expand-file-name (concat slug ".tex")
-                                        (file-name-directory source-file))))
-      (when (file-exists-p source-tex)
-        (rename-file source-tex tex-path t)))
-    ;; Phase 2: SVG fan → xelatex chain → place.
-    (a3madkour-pub-multi-pdf--convert-svgs-fan
-     svg-pairs
-     :on-done
-     (lambda (_svg-rcs)
+  (a3madkour-pub-multi-backend/run-scaffold
+   slug
+   :run run
+   ;; P2.3: resolve SVG figures against the ORIGINAL source, not the
+   ;; relocated temp copy handed as SOURCE-FILE.
+   :svg-source (or svg-source-file source-file)
+   :svg-list-fn #'a3madkour-pub-multi-pdf--list-svg-figures
+   :svg-ext "pdf"
+   :svg-fan-fn #'a3madkour-pub-multi-pdf--convert-svgs-fan
+   :svgs-step "svgs"
+   ;; Pre-fan: copy the class file, run the ox-latex export (sync,
+   ;; instrumented), then relocate the produced .tex into the work dir.
+   :pre-fan
+   (lambda (work-dir)
+     (copy-file (expand-file-name "madkour-paper.cls" templates-dir)
+                (expand-file-name "madkour-paper.cls" work-dir) t)
+     (let ((start (current-time)))
+       (with-current-buffer (find-file-noselect source-file)
+         (let ((org-latex-with-hyperref t)
+               (org-latex-default-class "madkour-paper")
+               (org-export-show-temporary-export-buffer nil))
+           (org-latex-export-to-latex)))
        (when run
-         (a3-pub-async/log-step run "svgs" :ok
-                                :detail (format "%d files" (length svg-pairs))))
+         (a3-pub-async/log-step run "export" :ok :detail "org → latex"
+                                :elapsed (float-time
+                                          (time-subtract (current-time) start)))))
+     (let ((source-tex (expand-file-name (concat slug ".tex")
+                                         (file-name-directory source-file)))
+           (tex-path (expand-file-name (concat slug ".tex") work-dir)))
+       (when (file-exists-p source-tex)
+         (rename-file source-tex tex-path t))))
+   ;; Compile: xelatex chain → place built PDF at target.
+   :compile
+   (lambda (work-dir _fig-dir _svg-pairs)
+     (let ((tex-path (expand-file-name (concat slug ".tex") work-dir)))
        (a3madkour-pub-multi-pdf--compile-tex-async
         tex-path
         :step-cb
@@ -196,13 +181,7 @@ mirroring the Word backend which always lists from the real source."
   "Append a single log line to BUF for the PDF backend.
 SUCCESSP is t for ✓ / nil for ✗.  PATH is target path on success.
 ELAPSED is seconds (float).  ERR-SNIPPET is the stderr tail to inline on failure."
-  (with-current-buffer buf
-    (goto-char (point-max))
-    (if successp
-        (insert (format "  [✓] pdf    → %s   (%.1fs)\n" path elapsed))
-      (insert (format "  [✗] pdf    → exit %.1fs\n" elapsed))
-      (when err-snippet
-        (insert (format "              %s\n" err-snippet))))))
+  (a3madkour-pub-multi-backend/log-line buf "pdf" successp path elapsed err-snippet))
 
 (provide 'a3madkour-publish-multi-pdf)
 ;;; a3madkour-publish-multi-pdf.el ends here
