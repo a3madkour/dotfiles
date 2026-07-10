@@ -51,7 +51,8 @@ Preserves order of remaining tags."
     research-themes research-questions
     works-games works-music works-poetry
     streams about
-    library-reading library-listening library-playing library-watching)
+    library-reading library-listening library-playing library-watching
+    recipes)
   "Closed set of section symbols `normalize' accepts.  Updated as new
 sections are added (none planned beyond this set).")
 
@@ -75,6 +76,8 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (a3madkour-pub-frontmatter--normalize-garden raw-alist source-file))
    ((eq section 'essays)
     (a3madkour-pub-frontmatter--normalize-essays raw-alist source-file))
+   ((eq section 'recipes)
+    (a3madkour-pub-frontmatter--normalize-recipes raw-alist source-file))
    ((eq section 'research-themes)
     (a3madkour-pub-frontmatter--normalize-research-theme raw-alist source-file))
    ((eq section 'research-questions)
@@ -334,6 +337,30 @@ Returns the normalized alist."
       (dolist (cell a3madkour-pub-essays--has-flag-keywords)
         (let ((k (intern (substring (symbol-name (car cell)) 1))))  ; :has_x → has_x
           (setf (alist-get k out) (and (plist-get merged (car cell)) t)))))
+    out))
+
+(defun a3madkour-pub-frontmatter--normalize-recipes (raw-alist source-file)
+  "Slice 2: recipes standard-field normalizer.
+Keeps only title/date/lastmod/draft/summary/tags; the handler injects the
+recipe-specific keys afterward.  draft→bool (default false); tags default [];
+summary from #+HUGO_SUMMARY:; lastmod via cascade; date defaults to lastmod."
+  (let* ((allowed '(title date lastmod draft summary tags))
+         (out (cl-remove-if-not (lambda (c) (memq (car c) allowed)) (copy-alist raw-alist))))
+    (setf (alist-get 'draft out)
+          (a3madkour-pub-frontmatter--coerce-bool (alist-get 'draft out)))
+    (unless (assq 'tags out) (push (cons 'tags '()) out))
+    (setf (alist-get 'summary out)
+          (or (a3madkour-pub-frontmatter--read-org-keyword source-file "HUGO_SUMMARY") ""))
+    (let ((drawer-lm (alist-get 'last_modified raw-alist))
+          (kw-lm (alist-get 'lastmod raw-alist)))
+      (setq out (assq-delete-all 'lastmod out))
+      (setq out (assq-delete-all 'last_modified out))
+      (setf (alist-get 'lastmod out)
+            (a3madkour-pub-frontmatter/last-modified-cascade
+             source-file :drawer drawer-lm
+             :keyword (when (and (stringp kw-lm) (>= (length kw-lm) 10)) (substring kw-lm 0 10)))))
+    (unless (and (assq 'date out) (alist-get 'date out))
+      (setf (alist-get 'date out) (alist-get 'lastmod out)))
     out))
 
 (defun a3madkour-pub-frontmatter--normalize-garden (raw-alist source-file)

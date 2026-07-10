@@ -813,5 +813,28 @@ must read it from the source file and coerce to int."
             (should (eq (alist-get 'series_order out) 3))))
       (delete-file tmp))))
 
+(ert-deftest a3madkour-pub-frontmatter--normalize-recipes-standard-fields ()
+  (let* ((f (make-temp-file "recipe-fm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert "#+TITLE: X\n#+HUGO_SUMMARY: A tasty dish.\n#+DATE: 2026-07-09\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'recipes '((title . "X") (date . "2026-07-09") (draft . "true")) f)))
+            (should (equal (alist-get 'summary out) "A tasty dish."))
+            (should (eq (alist-get 'draft out) t))
+            (should (assq 'tags out))
+            (should (alist-get 'lastmod out))
+            (should (equal (alist-get 'date out) "2026-07-09"))))
+      (delete-file f))))
+
+(ert-deftest a3madkour-pub-frontmatter--normalize-recipes-date-defaults-to-lastmod ()
+  (let* ((f (make-temp-file "recipe-fm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert "#+TITLE: X\n#+HUGO_SUMMARY: y\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize 'recipes '((title . "X")) f)))
+            (should (equal (alist-get 'date out) (alist-get 'lastmod out)))))
+      (delete-file f))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
