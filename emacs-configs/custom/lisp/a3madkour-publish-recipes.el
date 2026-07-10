@@ -156,6 +156,47 @@ The em-dash `—' or ` -- ' introduces the optional note."
                  (a3madkour-pub-recipes--item-text item)))
               (a3madkour-pub-recipes--top-level-items heading)))))
 
+(defconst a3madkour-pub-recipes--drawer-map
+  '(("SERVINGS"   servings      int)
+    ("YIELD-UNIT" yield_unit    nil)
+    ("PREP-TIME"  prep_minutes  int)
+    ("COOK-TIME"  cook_minutes  int)
+    ("TOTAL-TIME" total_minutes int)
+    ("CUISINE"    cuisine       nil)
+    ("CATEGORY"   category      nil)
+    ("VIDEO"      video         nil)
+    ("IMAGE"      image         nil))
+  "Property-drawer KEY → (frontmatter-symbol coercion).  KEY is upcased.")
+
+(defun a3madkour-pub-recipes--drawer-alist (ast)
+  "Alist of (UPCASED-KEY . VALUE-STRING) from the first property drawer in AST."
+  (let ((drawer (org-element-map ast 'property-drawer #'identity nil t)))
+    (when drawer
+      (org-element-map drawer 'node-property
+        (lambda (np)
+          (cons (upcase (org-element-property :key np))
+                (org-element-property :value np)))))))
+
+(defun a3madkour-pub-recipes--parse-metadata (ast)
+  "Extract recipe-specific frontmatter keys from AST's property drawer.
+Returns an alist; only present keys are included."
+  (let* ((drawer (a3madkour-pub-recipes--drawer-alist ast))
+         (out '()))
+    (dolist (spec a3madkour-pub-recipes--drawer-map)
+      (let* ((raw (cdr (assoc (car spec) drawer)))
+             (sym (nth 1 spec))
+             (coerce (nth 2 spec)))
+        (when (and raw (not (string-empty-p (string-trim raw))))
+          (setf (alist-get sym out)
+                (if (eq coerce 'int) (string-to-number (string-trim raw))
+                  (string-trim raw))))))
+    ;; Derive total_minutes when absent but prep+cook both present.
+    (when (and (not (assq 'total_minutes out))
+               (assq 'prep_minutes out) (assq 'cook_minutes out))
+      (setf (alist-get 'total_minutes out)
+            (+ (alist-get 'prep_minutes out) (alist-get 'cook_minutes out))))
+    out))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."

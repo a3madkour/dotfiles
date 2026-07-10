@@ -109,3 +109,39 @@
     (should (= 2 (length srcs)))
     (should (equal (plist-get (nth 0 srcs) :url) "https://x.test"))
     (should (equal (plist-get (nth 1 srcs) :name) "Grandma's notebook"))))
+
+(ert-deftest a3madkour-pub-recipes--parse-metadata ()
+  (let* ((ast (a3madkour-pub-recipes-test--parse "
+:PROPERTIES:
+:servings:   4
+:yield-unit: servings
+:prep-time:  10
+:cook-time:  25
+:cuisine:    North African
+:category:   Main
+:video:      dQw4w9WgXcQ
+:image:      hero.svg
+:END:
+Headnote.
+* R
+** Steps
+1. x
+"))
+         (md (a3madkour-pub-recipes--parse-metadata ast)))
+    (should (equal (alist-get 'servings md) 4))
+    (should (equal (alist-get 'yield_unit md) "servings"))
+    (should (equal (alist-get 'prep_minutes md) 10))
+    (should (equal (alist-get 'cook_minutes md) 25))
+    (should (equal (alist-get 'total_minutes md) 35))
+    (should (equal (alist-get 'cuisine md) "North African"))
+    (should (equal (alist-get 'category md) "Main"))
+    (should (equal (alist-get 'video md) "dQw4w9WgXcQ"))
+    (should (equal (alist-get 'image md) "hero.svg"))))
+
+(ert-deftest a3madkour-pub-recipes--parse-metadata-minimal ()
+  (let* ((ast (a3madkour-pub-recipes-test--parse
+               ":PROPERTIES:\n:servings: 2\n:END:\nx\n"))
+         (md (a3madkour-pub-recipes--parse-metadata ast)))
+    (should (equal (alist-get 'servings md) 2))
+    (should-not (assq 'total_minutes md))
+    (should-not (assq 'cuisine md))))
