@@ -122,6 +122,13 @@ WARNs on heading-without-table."
                                :note  (a3madkour-pub-recipes--cell row header "note")
                                :alt   (a3madkour-pub-recipes--cell row header "alt")))))))
 
+(defun a3madkour-pub-recipes--parse-steps (ast)
+  "Parse ** Steps ordered list in AST → list of step strings, or nil."
+  (let ((heading (a3madkour-pub-recipes--find-heading-named ast "steps")))
+    (when heading
+      (mapcar #'a3madkour-pub-recipes--item-text
+              (a3madkour-pub-recipes--top-level-items heading)))))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."

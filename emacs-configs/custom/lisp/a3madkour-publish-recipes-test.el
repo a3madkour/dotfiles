@@ -77,3 +77,13 @@
 (ert-deftest a3madkour-pub-recipes--parse-ingredients-none ()
   (let ((ast (a3madkour-pub-recipes-test--parse "* R\n** Steps\n1. x\n")))
     (should-not (a3madkour-pub-recipes--parse-ingredients ast "/tmp/x.org"))))
+
+(ert-deftest a3madkour-pub-recipes--parse-steps ()
+  (let* ((ast (a3madkour-pub-recipes-test--parse "
+* R
+** Steps
+1. Heat the oil.
+2. [02:30] Add tomatoes.
+"))
+         (steps (a3madkour-pub-recipes--parse-steps ast)))
+    (should (equal steps '("Heat the oil." "[02:30] Add tomatoes.")))))
