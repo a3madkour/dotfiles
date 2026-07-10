@@ -146,17 +146,31 @@ WARNs on heading-without-table."
 (defun a3madkour-pub-recipes--parse-source-item (text)
   "Parse a source list-item TEXT into a plist (:name :url :note).
 Forms: `[[url][name]] — note', `[[url][name]]', `name — note', `name'.
-The em-dash `—' or ` -- ' introduces the optional note."
-  (let ((body text) (note nil) (name nil) (url nil))
-    (when (string-match "[[:space:]]+\\(?:—\\|--\\)[[:space:]]+" body)
-      (setq note (string-trim (substring body (match-end 0)))
-            body (string-trim (substring body 0 (match-beginning 0)))))
+The org link is matched FIRST (its description may itself contain the em-dash
+separator), then a trailing `— note' / ` -- note' is taken from the remainder."
+  (let ((body (string-trim text)) (name nil) (url nil) (note nil) (tail nil))
     (cond
-     ((string-match "\\`\\[\\[\\(.*?\\)\\]\\[\\(.*?\\)\\]\\]\\'" body)
-      (setq url (match-string 1 body) name (match-string 2 body)))
-     ((string-match "\\`\\[\\[\\(.*?\\)\\]\\]\\'" body)
-      (setq url (match-string 1 body) name (match-string 1 body)))
-     (t (setq name body)))
+     ;; [[url][name]] ...tail
+     ((string-match "\\`\\[\\[\\([^]]*\\)\\]\\[\\(.*?\\)\\]\\]" body)
+      (setq url (match-string 1 body)
+            name (match-string 2 body)
+            tail (substring body (match-end 0))))
+     ;; [[url]] ...tail
+     ((string-match "\\`\\[\\[\\([^]]*\\)\\]\\]" body)
+      (setq url (match-string 1 body)
+            name (match-string 1 body)
+            tail (substring body (match-end 0))))
+     ;; plain text: no link
+     (t (setq tail body)))
+    (if name
+        ;; Link already gave name/url; a trailing "— note" may remain in tail.
+        (when (string-match "\\(?:—\\|--\\)[ \t]*\\(.+\\)\\'" tail)
+          (setq note (string-trim (match-string 1 tail))))
+      ;; No link: split the plain text on the first separator into name/note.
+      (if (string-match "[ \t]+\\(?:—\\|--\\)[ \t]+\\(.+\\)\\'" tail)
+          (setq name (string-trim (substring tail 0 (match-beginning 0)))
+                note (string-trim (match-string 1 tail)))
+        (setq name (string-trim tail))))
     (append (list :name name)
             (when url (list :url url))
             (when (and note (not (string-empty-p note))) (list :note note)))))

@@ -98,6 +98,15 @@
   (should (equal (a3madkour-pub-recipes--parse-source-item "Some book — p. 40")
                  '(:name "Some book" :note "p. 40"))))
 
+(ert-deftest a3madkour-pub-recipes--parse-source-item-emdash-in-link ()
+  "Regression: an em-dash INSIDE the link description must not be taken as the
+note separator (the spec's own canonical source example)."
+  (should (equal (a3madkour-pub-recipes--parse-source-item
+                  "[[https://example.com/lorem][Example Cooking — Lorem]] — adapted")
+                 '(:name "Example Cooking — Lorem" :url "https://example.com/lorem" :note "adapted")))
+  (should (equal (a3madkour-pub-recipes--parse-source-item "[[https://x][A — B]]")
+                 '(:name "A — B" :url "https://x"))))
+
 (ert-deftest a3madkour-pub-recipes--parse-sources ()
   (let* ((ast (a3madkour-pub-recipes-test--parse "
 * R
