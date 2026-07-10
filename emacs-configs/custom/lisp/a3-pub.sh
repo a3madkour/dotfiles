@@ -182,6 +182,8 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
     -l a3madkour-publish-research \
+    -l a3madkour-recipe-lint \
+    -l a3madkour-publish-recipes \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
@@ -249,6 +251,8 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
     -l a3madkour-publish-research \
+    -l a3madkour-recipe-lint \
+    -l a3madkour-publish-recipes \
     -l a3madkour-publish-essays \
     -l a3madkour-publish-poetry \
     -l a3madkour-publish-bib \

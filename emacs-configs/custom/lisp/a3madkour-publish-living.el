@@ -102,6 +102,11 @@ parallel, and calls finish-publish once after the barrier reports done."
     (add-to-list 'a3madkour-pub-living--handlers
                  (cons section 'a3madkour-pub-research/publish-research-file))))
 
+;; Slice 2: recipes handler registration.
+(with-eval-after-load 'a3madkour-publish-recipes
+  (add-to-list 'a3madkour-pub-living--handlers
+               '("recipes" . a3madkour-pub-recipes/publish-recipe-file)))
+
 (provide 'a3madkour-publish-living)
 
 ;;; a3madkour-publish-living.el ends here
