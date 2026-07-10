@@ -25,6 +25,57 @@
   "Hugo content section directory name for recipes (relative to site root)."
   :type 'string :group 'a3madkour-pub)
 
+(defun a3madkour-pub-recipes--warn (file fmt &rest args)
+  "Emit a WARN with FILE context."
+  (apply #'a3madkour-pub/warn "recipes" file fmt args))
+
+(defun a3madkour-pub-recipes--find-heading-named (ast name)
+  "First headline in AST whose raw value = NAME (case-insensitive), or nil."
+  (cl-loop for hl in (org-element-map ast 'headline #'identity)
+           for raw = (org-element-property :raw-value hl)
+           when (and raw (string-equal (downcase raw) (downcase name)))
+           return hl))
+
+(defun a3madkour-pub-recipes--find-table-under (headline)
+  "First table element under HEADLINE (one level into its section), or nil."
+  (let ((section (cl-loop for child in (org-element-contents headline)
+                          when (eq (org-element-type child) 'section) return child)))
+    (when section
+      (cl-loop for child in (org-element-contents section)
+               when (eq (org-element-type child) 'table) return child))))
+
+(defun a3madkour-pub-recipes--table-rows (table)
+  "TABLE's standard rows as list-of-list-of-cell-strings (hlines skipped)."
+  (cl-loop for row in (org-element-map table 'table-row #'identity)
+           when (eq (org-element-property :type row) 'standard)
+           collect (mapcar (lambda (cell)
+                             (let ((c (car (org-element-contents cell))))
+                               (cond ((stringp c) (string-trim c))
+                                     ((null c) "")
+                                     (t (string-trim
+                                         (substring-no-properties
+                                          (org-element-interpret-data c)))))))
+                           (org-element-contents row))))
+
+(defun a3madkour-pub-recipes--top-level-items (headline)
+  "Direct `item' elements of the first plain-list under HEADLINE, in order."
+  (let ((section (cl-loop for child in (org-element-contents headline)
+                          when (eq (org-element-type child) 'section) return child)))
+    (when section
+      (let ((plain-list (cl-loop for child in (org-element-contents section)
+                                 when (eq (org-element-type child) 'plain-list) return child)))
+        (when plain-list
+          (cl-loop for child in (org-element-contents plain-list)
+                   when (eq (org-element-type child) 'item) collect child))))))
+
+(defun a3madkour-pub-recipes--item-text (item)
+  "Text of an ITEM's paragraph, org markup preserved, nested lists dropped."
+  (string-trim
+   (substring-no-properties
+    (org-element-interpret-data
+     (cl-remove-if (lambda (c) (eq (org-element-type c) 'plain-list))
+                   (org-element-contents item))))))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."
