@@ -246,3 +246,23 @@ Headnote.
     (should (string-match-p "ingredients:\n  - { group: \"base\", qty: 2" out))
     (should (string-match-p "sources:\n  - { name: \"NYT\", url: \"https://x.test\", note: \"adapted\" }" out))
     (should (string-match-p "servings: 4" out))))
+
+(ert-deftest a3madkour-pub-recipes--copy-drawer-image-present ()
+  "Copies a beside-source image into the bundle and returns non-nil."
+  (let* ((dir (make-temp-file "recipe-img-" t))
+         (src (expand-file-name "shakshuka.org" dir))
+         (img (expand-file-name "hero.svg" dir))
+         (bundle (expand-file-name "bundle/" dir)))
+    (with-temp-file src (insert "x"))
+    (with-temp-file img (insert "<svg/>"))
+    (should (a3madkour-pub-recipes--copy-drawer-image src "hero.svg" bundle))
+    (should (file-exists-p (expand-file-name "hero.svg" bundle)))))
+
+(ert-deftest a3madkour-pub-recipes--copy-drawer-image-absent ()
+  "Returns nil when the image file does not exist beside the source (caller omits the key)."
+  (let* ((dir (make-temp-file "recipe-img-" t))
+         (src (expand-file-name "shakshuka.org" dir))
+         (bundle (expand-file-name "bundle/" dir)))
+    (with-temp-file src (insert "x"))
+    (should-not (a3madkour-pub-recipes--copy-drawer-image src "missing.svg" bundle))
+    (should-not (a3madkour-pub-recipes--copy-drawer-image src nil bundle))))

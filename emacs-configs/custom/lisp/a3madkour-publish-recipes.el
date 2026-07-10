@@ -293,6 +293,18 @@ Order: group qty unit item note alt.  qty/unit/item always; others when non-nil.
     (setf (alist-get 'sources out) (a3madkour-pub-recipes--parse-sources ast))
     out))
 
+(defun a3madkour-pub-recipes--copy-drawer-image (source-file image bundle-dir)
+  "Copy IMAGE (a bare filename from the :image: drawer) from beside SOURCE-FILE
+into BUNDLE-DIR.  Return non-nil when copied; nil when IMAGE is nil or the source
+image does not exist beside SOURCE-FILE (caller should then omit the `image' key
+so no broken reference is emitted)."
+  (when (and image (stringp image) (not (string-empty-p image)))
+    (let ((src (expand-file-name image (file-name-directory source-file))))
+      (when (file-exists-p src)
+        (make-directory bundle-dir t)
+        (copy-file src (expand-file-name (file-name-nondirectory image) bundle-dir) t)
+        t))))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Pipeline: lint → parse → strip-subtrees → ox-hugo body export →
@@ -340,6 +352,9 @@ write-if-different → record-publish."
                (final-fm   (a3madkour-pub-recipes--assemble-frontmatter src-ast normalized))
                (body       (plist-get exported :body)))
           (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          (unless (a3madkour-pub-recipes--copy-drawer-image
+                   file (alist-get 'image final-fm) bundle-dir)
+            (setq final-fm (assq-delete-all 'image final-fm)))
           (a3madkour-pub-yaml/write-if-different
            out-path
            (concat (a3madkour-pub-recipes--render-frontmatter final-fm) body))
