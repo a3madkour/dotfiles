@@ -182,14 +182,23 @@ The em-dash `—' or ` -- ' introduces the optional note."
     ("IMAGE"      image         nil))
   "Property-drawer KEY → (frontmatter-symbol coercion).  KEY is upcased.")
 
+(defun a3madkour-pub-recipes--parse-property-lines (text)
+  "Parse `:KEY: value' lines in TEXT → alist of (UPCASED-KEY . trimmed-VALUE)."
+  (let ((out '()) (start 0))
+    (while (string-match "^[ \t]*:\\([A-Za-z0-9_-]+\\):[ \t]*\\(.*?\\)[ \t]*$" text start)
+      (push (cons (upcase (match-string 1 text)) (match-string 2 text)) out)
+      (setq start (match-end 0)))
+    (nreverse out)))
+
 (defun a3madkour-pub-recipes--drawer-alist (ast)
-  "Alist of (UPCASED-KEY . VALUE-STRING) from the first property drawer in AST."
-  (let ((drawer (org-element-map ast 'property-drawer #'identity nil t)))
-    (when drawer
-      (org-element-map drawer 'node-property
-        (lambda (np)
-          (cons (upcase (org-element-property :key np))
-                (org-element-property :value np)))))))
+  "Alist of (UPCASED-KEY . VALUE) from the recipe's :PROPERTIES: drawer.
+Position-robust: org-element only tags a file-leading :PROPERTIES: block as a
+`property-drawer' when it is the buffer's first element (before #+TITLE: etc.);
+authored with keywords first, the same block parses as a generic `drawer'.  We
+extract from the interpreted org text so drawer position no longer matters."
+  (let ((text (substring-no-properties (org-element-interpret-data ast))))
+    (when (string-match ":PROPERTIES:\\(\\(?:.\\|\n\\)*?\\):END:" text)
+      (a3madkour-pub-recipes--parse-property-lines (match-string 1 text)))))
 
 (defun a3madkour-pub-recipes--parse-metadata (ast)
   "Extract recipe-specific frontmatter keys from AST's property drawer.

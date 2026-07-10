@@ -146,6 +146,26 @@ Headnote.
     (should-not (assq 'total_minutes md))
     (should-not (assq 'cuisine md))))
 
+(ert-deftest a3madkour-pub-recipes--parse-metadata-keywords-first ()
+  "Regression: drawer AFTER #+TITLE:/#+HUGO_SUMMARY: still yields metadata
+(org-element does not tag it `property-drawer'; extraction must be position-robust)."
+  (let* ((ast (a3madkour-pub-recipes-test--parse "#+TITLE: Shakshuka
+#+HUGO_SUMMARY: A dish.
+:PROPERTIES:
+:servings: 4
+:cuisine: North African
+:prep-time: 10
+:cook-time: 25
+:END:
+Headnote.
+** Steps
+1. x
+"))
+         (md (a3madkour-pub-recipes--parse-metadata ast)))
+    (should (equal (alist-get 'servings md) 4))
+    (should (equal (alist-get 'cuisine md) "North African"))
+    (should (equal (alist-get 'total_minutes md) 35))))
+
 (ert-deftest a3madkour-pub-recipes--render-ingredient ()
   (should (equal (a3madkour-pub-recipes--render-ingredient
                   '(:qty 2 :unit "tbsp" :item "olive oil" :group "base" :note nil :alt nil))
