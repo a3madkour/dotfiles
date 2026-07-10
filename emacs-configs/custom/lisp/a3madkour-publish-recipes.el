@@ -129,6 +129,33 @@ WARNs on heading-without-table."
       (mapcar #'a3madkour-pub-recipes--item-text
               (a3madkour-pub-recipes--top-level-items heading)))))
 
+(defun a3madkour-pub-recipes--parse-source-item (text)
+  "Parse a source list-item TEXT into a plist (:name :url :note).
+Forms: `[[url][name]] — note', `[[url][name]]', `name — note', `name'.
+The em-dash `—' or ` -- ' introduces the optional note."
+  (let ((body text) (note nil) (name nil) (url nil))
+    (when (string-match "[[:space:]]+\\(?:—\\|--\\)[[:space:]]+" body)
+      (setq note (string-trim (substring body (match-end 0)))
+            body (string-trim (substring body 0 (match-beginning 0)))))
+    (cond
+     ((string-match "\\`\\[\\[\\(.*?\\)\\]\\[\\(.*?\\)\\]\\]\\'" body)
+      (setq url (match-string 1 body) name (match-string 2 body)))
+     ((string-match "\\`\\[\\[\\(.*?\\)\\]\\]\\'" body)
+      (setq url (match-string 1 body) name (match-string 1 body)))
+     (t (setq name body)))
+    (append (list :name name)
+            (when url (list :url url))
+            (when (and note (not (string-empty-p note))) (list :note note)))))
+
+(defun a3madkour-pub-recipes--parse-sources (ast)
+  "Parse ** Sources list in AST → list of source plists, or nil."
+  (let ((heading (a3madkour-pub-recipes--find-heading-named ast "sources")))
+    (when heading
+      (mapcar (lambda (item)
+                (a3madkour-pub-recipes--parse-source-item
+                 (a3madkour-pub-recipes--item-text item)))
+              (a3madkour-pub-recipes--top-level-items heading)))))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."
