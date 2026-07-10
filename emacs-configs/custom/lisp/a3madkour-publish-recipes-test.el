@@ -172,3 +172,19 @@ Headnote.
     (should (string-match-p "sources:\n  - { name: \"NYT\", url: \"https://x\" }" out))
     (should (string-match-p "servings: 4" out))
     (should (string-match-p "title: \"Shakshuka\"" out))))
+
+(ert-deftest a3madkour-pub-recipes--strip-subtrees ()
+  (let ((out (a3madkour-pub-recipes--strip-data-subtrees "* R
+Headnote paragraph.
+** Ingredients
+| qty | item |
+| 1   | x    |
+** Steps
+1. Do it.
+** Sources
+- A book
+")))
+    (should (string-match-p "Headnote paragraph." out))
+    (should-not (string-match-p "Ingredients" out))
+    (should-not (string-match-p "Steps" out))
+    (should-not (string-match-p "Sources" out))))

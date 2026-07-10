@@ -36,6 +36,20 @@
            when (and raw (string-equal (downcase raw) (downcase name)))
            return hl))
 
+(defun a3madkour-pub-recipes--strip-data-subtrees (org-text)
+  "Return ORG-TEXT with the ** Ingredients / ** Steps / ** Sources subtrees removed.
+Re-parses after each deletion so element positions stay valid."
+  (with-temp-buffer
+    (insert org-text)
+    (org-mode)
+    (dolist (name '("ingredients" "steps" "sources"))
+      (let* ((ast (org-element-parse-buffer))
+             (hl (a3madkour-pub-recipes--find-heading-named ast name)))
+        (when hl
+          (delete-region (org-element-property :begin hl)
+                         (org-element-property :end hl)))))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
 (defun a3madkour-pub-recipes--find-table-under (headline)
   "First table element under HEADLINE (one level into its section), or nil."
   (let ((section (cl-loop for child in (org-element-contents headline)
