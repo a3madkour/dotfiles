@@ -76,6 +76,52 @@
      (cl-remove-if (lambda (c) (eq (org-element-type c) 'plain-list))
                    (org-element-contents item))))))
 
+(defconst a3madkour-pub-recipes--ingredient-cols
+  '("qty" "unit" "item" "group" "note" "alt")
+  "Expected ingredient-table columns (header row, any order).")
+
+(defun a3madkour-pub-recipes--coerce-qty (raw)
+  "Coerce a qty cell RAW to a number, or nil for empty/non-numeric.
+Supports integers, decimals, and `a/b' fractions."
+  (when (and raw (stringp raw))
+    (let ((s (string-trim raw)))
+      (cond
+       ((string-empty-p s) nil)
+       ((string-match "\\`\\([0-9]+\\)/\\([0-9]+\\)\\'" s)
+        (/ (float (string-to-number (match-string 1 s)))
+           (string-to-number (match-string 2 s))))
+       ((string-match-p "\\`[0-9]+\\'" s) (string-to-number s))
+       ((string-match-p "\\`[0-9]*\\.[0-9]+\\'" s) (string-to-number s))
+       (t nil)))))
+
+(defun a3madkour-pub-recipes--cell (row header col)
+  "Value of column COL in ROW per HEADER, trimmed; nil when blank/absent."
+  (let ((i (cl-position col header :test #'string-equal)))
+    (when i
+      (let ((v (nth i row)))
+        (when (and v (not (string-empty-p (string-trim v)))) (string-trim v))))))
+
+(cl-defun a3madkour-pub-recipes--parse-ingredients (ast file)
+  "Parse the ** Ingredients table in AST → list of plists, or nil.
+WARNs on heading-without-table."
+  (let ((heading (a3madkour-pub-recipes--find-heading-named ast "ingredients")))
+    (unless heading (cl-return-from a3madkour-pub-recipes--parse-ingredients nil))
+    (let ((table (a3madkour-pub-recipes--find-table-under heading)))
+      (unless table
+        (a3madkour-pub-recipes--warn file "ingredients heading present but no table")
+        (cl-return-from a3madkour-pub-recipes--parse-ingredients nil))
+      (let* ((rows (a3madkour-pub-recipes--table-rows table))
+             (header (mapcar #'downcase (car rows)))
+             (data (cdr rows)))
+        (cl-loop for row in data
+                 collect (list :qty   (a3madkour-pub-recipes--coerce-qty
+                                       (a3madkour-pub-recipes--cell row header "qty"))
+                               :unit  (a3madkour-pub-recipes--cell row header "unit")
+                               :item  (a3madkour-pub-recipes--cell row header "item")
+                               :group (a3madkour-pub-recipes--cell row header "group")
+                               :note  (a3madkour-pub-recipes--cell row header "note")
+                               :alt   (a3madkour-pub-recipes--cell row header "alt")))))))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."
