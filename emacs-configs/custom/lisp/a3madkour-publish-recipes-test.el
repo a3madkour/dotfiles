@@ -208,3 +208,32 @@ Headnote paragraph.
     (should-not (string-match-p "Ingredients" out))
     (should-not (string-match-p "Steps" out))
     (should-not (string-match-p "Sources" out))))
+
+(ert-deftest a3madkour-pub-recipes--assemble-frontmatter ()
+  (let* ((ast (a3madkour-pub-recipes-test--parse "
+:PROPERTIES:
+:servings: 4
+:cuisine: North African
+:END:
+Headnote.
+** Ingredients
+#+NAME: ingredients
+| qty | unit | item | group | note | alt |
+| 2   | tbsp | oil  | base  |      |     |
+** Steps
+1. [02:30] Add tomatoes.
+** Sources
+- [[https://x.test][NYT]] — adapted
+"))
+         (normalized '((title . "Shakshuka") (date . "2026-07-09")
+                       (lastmod . "2026-07-09") (draft . nil)
+                       (summary . "A dish.") (tags . ("example"))))
+         (fm (a3madkour-pub-recipes--assemble-frontmatter ast normalized))
+         (out (a3madkour-pub-recipes--render-frontmatter fm)))
+    (should (equal (alist-get 'servings fm) 4))
+    (should (equal (alist-get 'cuisine fm) "North African"))
+    (should (= 1 (length (alist-get 'ingredients fm))))
+    (should (equal (alist-get 'steps fm) '("[02:30] Add tomatoes.")))
+    (should (string-match-p "ingredients:\n  - { group: \"base\", qty: 2" out))
+    (should (string-match-p "sources:\n  - { name: \"NYT\", url: \"https://x.test\", note: \"adapted\" }" out))
+    (should (string-match-p "servings: 4" out))))

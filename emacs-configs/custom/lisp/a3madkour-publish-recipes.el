@@ -269,12 +269,72 @@ Order: group qty unit item note alt.  qty/unit/item always; others when non-nil.
    :key-hook #'a3madkour-pub-recipes--key-hook
    :value-fn #'a3madkour-pub-yaml/render-value))
 
+(defun a3madkour-pub-recipes--assemble-frontmatter (ast normalized)
+  "Merge NORMALIZED standard fields with recipe-specific keys parsed from AST."
+  (let ((out (copy-alist normalized)))
+    (dolist (cell (a3madkour-pub-recipes--parse-metadata ast))
+      (setf (alist-get (car cell) out) (cdr cell)))
+    (setf (alist-get 'ingredients out) (a3madkour-pub-recipes--parse-ingredients ast "recipe"))
+    (setf (alist-get 'steps out) (a3madkour-pub-recipes--parse-steps ast))
+    (setf (alist-get 'sources out) (a3madkour-pub-recipes--parse-sources ast))
+    out))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
-Stub — real pipeline lands in Task 11."
-  (ignore file run)
-  (error "a3madkour-pub-recipes: not implemented yet")
-  (when on-done (funcall on-done 'err)))
+Pipeline: lint → parse → strip-subtrees → ox-hugo body export →
+normalize standard fields → inject recipe keys → render → asset-copy →
+write-if-different → record-publish."
+  (ignore run)
+  (condition-case _err
+      (progn
+        ;; Step 1: lint gate.
+        (when a3madkour-recipe-lint-enabled
+          (let ((errs (a3madkour-recipe-lint/lint-file file)))
+            (when errs
+              (error "a3madkour-pub-recipes: lint failed for %s:\n%s"
+                     file (mapconcat #'identity errs "\n")))))
+        (let* ((md        (a3madkour-pub/note-metadata file))
+               (id        (plist-get md :id))
+               (slug      (a3madkour-pub/note-slug file))
+               (new-url   (a3madkour-pub/note-url file))
+               (site-root (a3madkour-pub-yaml/site-root))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/"
+                                    a3madkour-pub-recipes/section-dir-name slug)
+                            site-root))
+               (out-path   (expand-file-name "index.md" bundle-dir))
+               ;; Parse the structured data from the ORIGINAL source.
+               (src-ast    (with-temp-buffer
+                             (insert-file-contents file) (org-mode)
+                             (org-element-parse-buffer)))
+               ;; Body export: rewrite links → strip data subtrees → ox-hugo.
+               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file file id "a3-pub-recipes"))
+               (exported   (unwind-protect
+                               (progn
+                                 (let ((stripped (a3madkour-pub-recipes--strip-data-subtrees
+                                                  (with-temp-buffer
+                                                    (insert-file-contents tmp-src)
+                                                    (buffer-string)))))
+                                   (with-temp-file tmp-src (insert stripped)))
+                                 (a3madkour-pub-export/export-file tmp-src))
+                             (when (file-exists-p tmp-src) (delete-file tmp-src))))
+               ;; Normalize standard fields; P2.14 stable-date.
+               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
+                             (a3madkour-pub-frontmatter/normalize
+                              'recipes (plist-get exported :frontmatter) file)))
+               (final-fm   (a3madkour-pub-recipes--assemble-frontmatter src-ast normalized))
+               (body       (plist-get exported :body)))
+          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          (a3madkour-pub-yaml/write-if-different
+           out-path
+           (concat (a3madkour-pub-recipes--render-frontmatter final-fm) body))
+          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                :last-modified (alist-get 'lastmod final-fm)))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (message "%s" (error-message-string _err))
+     (when on-done (funcall on-done 'err)))))
 
 (defun a3madkour-pub-recipes/planned-steps (_file)
   "Return rough step count for the recipes handler."
