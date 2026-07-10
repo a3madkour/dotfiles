@@ -41,6 +41,7 @@
     "works/games" "works/music" "works/poetry"
     "library/reading" "library/listening" "library/playing" "library/watching"
     "streams"
+    "recipes"
     "about")
   "Permitted values for the org-side `#+HUGO_SECTION:' keyword.
 See docs/superpowers/specs/2026-05-20-phase-3-access-control-link-semantics-design.md §4.")

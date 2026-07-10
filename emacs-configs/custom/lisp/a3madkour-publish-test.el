@@ -32,7 +32,7 @@
                "research/themes" "research/questions"
                "works/games" "works/music" "works/poetry"
                "library/reading" "library/listening" "library/playing" "library/watching"
-               "streams" "about"))
+               "streams" "recipes" "about"))
     (should (a3madkour-pub/valid-section-p s))))
 
 (ert-deftest a3madkour-pub-test/sections-rejects-unknown-values ()
@@ -41,6 +41,11 @@
   (should-not (a3madkour-pub/valid-section-p "garden/topic"))
   (should-not (a3madkour-pub/valid-section-p ""))
   (should-not (a3madkour-pub/valid-section-p nil)))
+
+(ert-deftest a3madkour-pub-test/recipes-is-a-valid-section ()
+  "Regression: recipes must be an accepted #+HUGO_SECTION value, else the
+living publish aborts on the first recipe file."
+  (should (a3madkour-pub/valid-section-p "recipes")))
 
 ;; -- published-p --
 
