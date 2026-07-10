@@ -37,8 +37,13 @@
            return hl))
 
 (defun a3madkour-pub-recipes--strip-data-subtrees (org-text)
-  "Return ORG-TEXT with the ** Ingredients / ** Steps / ** Sources subtrees removed.
-Re-parses after each deletion so element positions stay valid."
+  "Return ORG-TEXT with the ** Ingredients / ** Steps / ** Sources subtrees AND
+the file-level :PROPERTIES: drawer removed, so only the headnote reaches
+ox-hugo.  The property drawer is stripped textually: when it follows #+TITLE:
+keywords org-element tags it as a generic `drawer' that ox-hugo would otherwise
+render into the page body (its contents already live in the emitted frontmatter,
+parsed from the original AST).  Re-parses after each heading deletion so element
+positions stay valid."
   (with-temp-buffer
     (insert org-text)
     (org-mode)
@@ -48,6 +53,12 @@ Re-parses after each deletion so element positions stay valid."
         (when hl
           (delete-region (org-element-property :begin hl)
                          (org-element-property :end hl)))))
+    ;; Remove the leading file-level :PROPERTIES:...:END: block (see docstring).
+    (goto-char (point-min))
+    (when (re-search-forward
+           "^[ \t]*:PROPERTIES:[ \t]*\n\\(?:[ \t]*:[^\n]*\n\\)*?[ \t]*:END:[ \t]*\n?"
+           nil t)
+      (replace-match ""))
     (buffer-substring-no-properties (point-min) (point-max))))
 
 (defun a3madkour-pub-recipes--find-table-under (headline)

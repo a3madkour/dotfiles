@@ -218,6 +218,31 @@ Headnote paragraph.
     (should-not (string-match-p "Steps" out))
     (should-not (string-match-p "Sources" out))))
 
+(ert-deftest a3madkour-pub-recipes--strip-drawer-keywords-first ()
+  "Regression: the file-level :PROPERTIES: drawer (generic when keywords precede
+it) must be stripped before ox-hugo export, so its lines don't leak into the body."
+  (let ((out (a3madkour-pub-recipes--strip-data-subtrees "#+TITLE: R
+#+HUGO_SUMMARY: y
+:PROPERTIES:
+:servings: 4
+:cuisine: Example North
+:END:
+Headnote text here.
+** Ingredients
+#+NAME: ingredients
+| qty | item |
+| 1   | x    |
+** Steps
+1. do it
+** Sources
+- A book
+")))
+    (should (string-match-p "Headnote text here." out))
+    (should-not (string-match-p ":servings:" out))
+    (should-not (string-match-p ":PROPERTIES:" out))
+    (should-not (string-match-p ":cuisine:" out))
+    (should-not (string-match-p "Ingredients" out))))
+
 (ert-deftest a3madkour-pub-recipes--assemble-frontmatter ()
   (let* ((ast (a3madkour-pub-recipes-test--parse "
 :PROPERTIES:
