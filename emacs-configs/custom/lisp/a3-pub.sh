@@ -49,6 +49,14 @@ a3_pub_resolve_site_data_dir() {
 # (parsed below before any intercept) flips this to skip the check.
 A3_PUB_SKIP_MATH_CHECK="${A3_PUB_SKIP_MATH_CHECK:-0}"
 
+# Task 12: --skip-recipe-check flag init.  Default is on (run the recipe
+# linter); the flag (parsed below before any intercept) flips this to skip
+# it.  Unlike A3_PUB_SKIP_MATH_CHECK (a shell-side check), the recipe lint
+# gate runs INSIDE the emacs batch subprocess, so this must be exported for
+# the child process to read it via `getenv'.
+A3_PUB_SKIP_RECIPE_CHECK="${A3_PUB_SKIP_RECIPE_CHECK:-0}"
+export A3_PUB_SKIP_RECIPE_CHECK
+
 # C: invoke `org-math-lint check --root <dir>' against the org source
 # directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.  Exits
 # non-zero on validator failure or missing install (distinct exit codes
@@ -83,6 +91,7 @@ parsed_args=()
 for a in "$@"; do
   case "$a" in
     --skip-math-check) A3_PUB_SKIP_MATH_CHECK=1 ;;
+    --skip-recipe-check) A3_PUB_SKIP_RECIPE_CHECK=1 ;;
     *) parsed_args+=("$a") ;;
   esac
 done
@@ -186,6 +195,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-recipes \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
+    --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
@@ -261,6 +271,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-multi-pdf \
     -l a3madkour-publish-multi-word \
     -l a3madkour-publish-multi \
+    --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
@@ -341,6 +352,8 @@ exec emacs --batch \
   -l a3madkour-publish-garden \
   -l a3madkour-publish-library \
   -l a3madkour-publish-research \
+  -l a3madkour-recipe-lint \
+  -l a3madkour-publish-recipes \
   -l a3madkour-publish-essays \
   -l a3madkour-publish-multi-filter \
   -l a3madkour-publish-multi-pdf \
