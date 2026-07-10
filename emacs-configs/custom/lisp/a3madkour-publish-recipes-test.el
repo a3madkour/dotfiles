@@ -145,3 +145,30 @@ Headnote.
     (should (equal (alist-get 'servings md) 2))
     (should-not (assq 'total_minutes md))
     (should-not (assq 'cuisine md))))
+
+(ert-deftest a3madkour-pub-recipes--render-ingredient ()
+  (should (equal (a3madkour-pub-recipes--render-ingredient
+                  '(:qty 2 :unit "tbsp" :item "olive oil" :group "base" :note nil :alt nil))
+                 "{ group: \"base\", qty: 2, unit: \"tbsp\", item: \"olive oil\" }"))
+  (should (equal (a3madkour-pub-recipes--render-ingredient
+                  '(:qty nil :unit nil :item "salt" :group nil :note "to taste" :alt nil))
+                 "{ qty: null, unit: null, item: \"salt\", note: \"to taste\" }")))
+
+(ert-deftest a3madkour-pub-recipes--render-source ()
+  (should (equal (a3madkour-pub-recipes--render-source '(:name "NYT" :url "https://x" :note "adapted"))
+                 "{ name: \"NYT\", url: \"https://x\", note: \"adapted\" }"))
+  (should (equal (a3madkour-pub-recipes--render-source '(:name "Book"))
+                 "{ name: \"Book\" }")))
+
+(ert-deftest a3madkour-pub-recipes--render-frontmatter-blocks ()
+  (let ((out (a3madkour-pub-recipes--render-frontmatter
+              '((title . "Shakshuka")
+                (servings . 4)
+                (steps . ("Heat oil." "[02:30] Add tomatoes."))
+                (ingredients . ((:qty 2 :unit "tbsp" :item "oil" :group nil :note nil :alt nil)))
+                (sources . ((:name "NYT" :url "https://x" :note nil)))))))
+    (should (string-match-p "steps:\n  - \"Heat oil.\"\n  - \"\\[02:30\\] Add tomatoes.\"" out))
+    (should (string-match-p "ingredients:\n  - { qty: 2, unit: \"tbsp\", item: \"oil\" }" out))
+    (should (string-match-p "sources:\n  - { name: \"NYT\", url: \"https://x\" }" out))
+    (should (string-match-p "servings: 4" out))
+    (should (string-match-p "title: \"Shakshuka\"" out))))

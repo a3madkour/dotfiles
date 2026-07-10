@@ -197,6 +197,55 @@ Returns an alist; only present keys are included."
             (+ (alist-get 'prep_minutes out) (alist-get 'cook_minutes out))))
     out))
 
+(defun a3madkour-pub-recipes--scalar (v)
+  "Render V as a flow-map value: number bare, nil → null, string quoted."
+  (cond ((null v) "null")
+        ((numberp v) (format "%s" v))
+        (t (format "\"%s\"" (a3madkour-pub/yaml-escape-scalar v)))))
+
+(defun a3madkour-pub-recipes--render-ingredient (ing)
+  "Render an ingredient plist ING as an inline YAML map.
+Order: group qty unit item note alt.  qty/unit/item always; others when non-nil."
+  (let ((parts '()))
+    (when (plist-get ing :group) (push (format "group: %s" (a3madkour-pub-recipes--scalar (plist-get ing :group))) parts))
+    (push (format "qty: %s"  (a3madkour-pub-recipes--scalar (plist-get ing :qty))) parts)
+    (push (format "unit: %s" (a3madkour-pub-recipes--scalar (plist-get ing :unit))) parts)
+    (push (format "item: %s" (a3madkour-pub-recipes--scalar (plist-get ing :item))) parts)
+    (when (plist-get ing :note) (push (format "note: %s" (a3madkour-pub-recipes--scalar (plist-get ing :note))) parts))
+    (when (plist-get ing :alt)  (push (format "alt: %s"  (a3madkour-pub-recipes--scalar (plist-get ing :alt))) parts))
+    (format "{ %s }" (mapconcat #'identity (nreverse parts) ", "))))
+
+(defun a3madkour-pub-recipes--render-source (src)
+  "Render a source plist SRC as an inline YAML map.  name always; url/note when non-nil."
+  (let ((parts (list (format "name: %s" (a3madkour-pub-recipes--scalar (plist-get src :name))))))
+    (when (plist-get src :url)  (setq parts (append parts (list (format "url: %s" (a3madkour-pub-recipes--scalar (plist-get src :url)))))))
+    (when (plist-get src :note) (setq parts (append parts (list (format "note: %s" (a3madkour-pub-recipes--scalar (plist-get src :note)))))))
+    (format "{ %s }" (mapconcat #'identity parts ", "))))
+
+(defun a3madkour-pub-recipes--render-block (label render-fn items)
+  "Render `LABEL:' + a block sequence of ITEMS via RENDER-FN."
+  (format "%s:\n%s" label
+          (mapconcat (lambda (it) (concat "  - " (funcall render-fn it))) items "\n")))
+
+(defun a3madkour-pub-recipes--key-hook (k v)
+  "render-frontmatter KEY-HOOK for the three structured recipe keys."
+  (cond
+   ((eq k 'ingredients)
+    (if (and v (listp v)) (a3madkour-pub-recipes--render-block "ingredients" #'a3madkour-pub-recipes--render-ingredient v) :omit))
+   ((eq k 'sources)
+    (if (and v (listp v)) (a3madkour-pub-recipes--render-block "sources" #'a3madkour-pub-recipes--render-source v) :omit))
+   ((eq k 'steps)
+    (if (and v (listp v))
+        (format "steps:\n%s" (mapconcat (lambda (s) (format "  - \"%s\"" (a3madkour-pub/yaml-escape-scalar s))) v "\n"))
+      :omit))))
+
+(defun a3madkour-pub-recipes--render-frontmatter (alist)
+  "Render ALIST as recipe frontmatter (structured keys via the key-hook)."
+  (a3madkour-pub-yaml/render-frontmatter
+   alist
+   :key-hook #'a3madkour-pub-recipes--key-hook
+   :value-fn #'a3madkour-pub-yaml/render-value))
+
 (cl-defun a3madkour-pub-recipes/publish-recipe-file (file run &key on-done)
   "Publish a single recipe FILE to content/recipes/<slug>/index.md.
 Stub — real pipeline lands in Task 11."
