@@ -105,6 +105,17 @@ Sourced from [[https://gitlab.com/koral/gcmh][gcmh by Andrea Corallo]]; tuning v
 					 gcs-done)))
 
 #+end_src
+** Exec path from shell
+GUI Emacs launched from the dock/Finder does not inherit the login shell
+=$PATH=, so binaries installed under =~/.local/bin= (e.g. =uv tool install=d
+CLIs like [[https://github.com/a3madkour/org-math-lint][org-math-lint]]) are invisible. Copy =PATH= (and friends) from the
+login shell so =exec-path= matches the terminal.
+#+begin_src emacs-lisp
+(use-package exec-path-from-shell
+  :config
+  (when (memq window-system '(mac ns x))
+    (exec-path-from-shell-initialize)))
+#+end_src
 
 * General configuration
 #+begin_src emacs-lisp
@@ -1181,6 +1192,18 @@ Adapted from the [[https://github.com/minad/jinx][Jinx README]] by Daniel Mendle
   (setq langtool-default-language "en-US")
   (setq langtool-bin "languagetool")
   )
+#+end_src
+** Org Math Lint
+Flymake backend that lints math syntax in Org buffers via the
+[[https://github.com/a3madkour/org-math-lint][org-math-lint]] CLI. Straight pulls just the elisp from the repo over SSH
+(the repo is private, so =:protocol ssh=); the CLI is expected on
+=exec-path= (install with =uv tool install org-math-lint=, picked up via
+[[*Exec path from shell][exec-path-from-shell]]).
+#+begin_src emacs-lisp
+(use-package org-math-lint
+  :straight (org-math-lint :type git :host github :repo "a3madkour/org-math-lint"
+                           :protocol ssh :files ("emacs/*.el"))
+  :hook (org-mode . org-math-lint-flymake-setup))
 #+end_src
 ** Lexic
 #+begin_src emacs-lisp
@@ -3352,7 +3375,12 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
 
 (with-eval-after-load 'eat
   (evil-define-key 'insert eat-semi-char-mode-map
-    (kbd "C-c <escape>") #'a3madkour/eat-send-escape))
+    (kbd "C-c <escape>") #'a3madkour/eat-send-escape
+    ;; evil insert state shadows eat's C-y -> eat-yank with
+    ;; evil-copy-from-above, so re-bind the paste commands here.
+    (kbd "C-y") #'eat-yank
+    (kbd "M-y") #'eat-yank-from-kill-ring
+    (kbd "s-v") #'eat-yank))
 #+end_src
 ** Agent shell
 #+begin_src emacs-lisp
