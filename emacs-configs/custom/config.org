@@ -1226,7 +1226,9 @@ Flymake backend that lints math syntax in Org buffers via the
   :config (eglot-booster-mode))
 (use-package eglot
   :ensure t
-  :hook (prog-mode . eglot-ensure)
+  :hook ((prog-mode . eglot-ensure)
+         (org-mode . eglot-ensure)
+         (markdown-mode . eglot-ensure))
   :config
   (setq eglot-events-buffer-size 0)
   (setq eglot-sync-connect nil)
