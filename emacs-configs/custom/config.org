@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-06-28 Sun]
+:LAST_MODIFIED: [2026-08-02 Sun]
 :END:
 
 * Bootstrap
@@ -2731,6 +2731,7 @@ The =setq= block comments (=use native major-mode indentation=, =we do this ours
 (use-package org-roam
   :defer nil
   :config
+  (require 'org-roam-dailies)
   (org-roam-db-autosync-mode))
 
 ;; ---- Browsing helpers ----
