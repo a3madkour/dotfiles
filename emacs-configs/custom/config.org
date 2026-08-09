@@ -2037,6 +2037,83 @@ key stays stable across future runs."
       (when dirty (save-buffer))
       (nreverse entries))))
 #+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox--pushed-filename (entry)
+  "Filename ENTRY should have inside `a3madkour/boox-reading-directory'."
+  (format "%s%s%s.%s"
+          (plist-get entry :key)
+          a3madkour/boox-key-separator
+          (a3madkour/boox--slug (plist-get entry :title))
+          (file-name-extension (plist-get entry :source))))
+
+(defun a3madkour/boox--pushed-files ()
+  "Files in the reading directory that this command created.
+Export artifacts written by NeoReader do not match this pattern and are
+left alone; only `a3madkour/boox-import' consumes those."
+  (let ((dir (file-name-as-directory a3madkour/boox-reading-directory)))
+    (when (file-directory-p dir)
+      (seq-filter
+       (lambda (f)
+         (and (a3madkour/boox--key-from-filename f)
+              (member (downcase (or (file-name-extension f) ""))
+                      a3madkour/boox-supported-extensions)
+              (not (string-match-p "sync-conflict" f))))
+       (directory-files dir nil "\\`[^.]" t)))))
+
+(defun a3madkour/boox-push-queue ()
+  "Stage every :active: queue entry into the Boox reading directory.
+Files whose queue entry is no longer active are removed, which removes them
+from the tablet too.  Only files this command created are ever removed."
+  (interactive)
+  (let* ((dir (file-name-as-directory a3madkour/boox-reading-directory))
+         (entries (a3madkour/boox--queue-entries))
+         copied skipped removed missing unsupported)
+    (unless (file-directory-p dir) (make-directory dir t))
+    (dolist (entry entries)
+      (let ((src (plist-get entry :source)))
+        (cond
+         ((or (null src) (not (file-readable-p src)))
+          (push (plist-get entry :key) missing))
+         ((not (member (downcase (or (file-name-extension src) ""))
+                       a3madkour/boox-supported-extensions))
+          (push (cons (plist-get entry :key) (file-name-nondirectory src)) unsupported))
+         (t
+          (let* ((name (a3madkour/boox--pushed-filename entry))
+                 (dest (expand-file-name name dir)))
+            (if (file-exists-p dest)
+                (push (cons (plist-get entry :key) name) skipped)
+              (copy-file src dest)
+              (push (cons (plist-get entry :key) name) copied)))))))
+    (let ((wanted (mapcar #'a3madkour/boox--pushed-filename
+                          (seq-filter (lambda (e) (plist-get e :source)) entries))))
+      (dolist (f (a3madkour/boox--pushed-files))
+        (unless (member f wanted)
+          (delete-file (expand-file-name f dir))
+          (push f removed))))
+    (with-current-buffer (get-buffer-create "*Boox Sync*")
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "Boox reading directory: %s\n\n" dir))
+        (insert (format "Copied: %d   Skipped: %d   Removed: %d   Missing: %d   Unsupported: %d\n\n"
+                        (length copied) (length skipped) (length removed)
+                        (length missing) (length unsupported)))
+        (dolist (pair (list (cons "Copied" copied)
+                            (cons "Skipped (already present)" skipped)
+                            (cons "Removed (no longer active)" removed)
+                            (cons "Missing source" missing)
+                            (cons "Unsupported format" unsupported)))
+          (when (cdr pair)
+            (insert (car pair) ":\n")
+            (dolist (it (nreverse (cdr pair)))
+              (insert (format "  %s\n" (if (consp it) (format "%s  (%s)" (cdr it) (car it)) it))))
+            (insert "\n"))))
+      (special-mode))
+    (display-buffer "*Boox Sync*")
+    (message "Boox: %d copied, %d skipped, %d removed, %d missing, %d unsupported"
+             (length copied) (length skipped) (length removed)
+             (length missing) (length unsupported))))
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
