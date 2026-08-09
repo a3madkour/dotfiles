@@ -2353,6 +2353,133 @@ Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
     (a3madkour/boox--render))
   (pop-to-buffer "*Boox Import*"))
 #+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox--source-for-key (key)
+  "Return the original source file for KEY, paper or book."
+  (or (when-let ((entry (ignore-errors (citar-get-entry key))))
+        (when-let* ((file (alist-get "file" entry nil nil #'string=))
+                    (raw (car (seq-filter
+                               (lambda (p) (string-match-p "\\.\\(pdf\\|epub\\)\\'"
+                                                           (string-trim p)))
+                               (split-string file ";")))))
+          (or (a3madkour/normalize-library-path raw) (string-trim raw))))
+      (plist-get (seq-find (lambda (e) (equal (plist-get e :key) key))
+                           (a3madkour/boox--queue-entries))
+                 :source)))
+
+(defun a3madkour/boox--ensure-book-note (key source)
+  "Return the ref-note file for book KEY, creating it against SOURCE if absent."
+  (let ((file (expand-file-name (concat key ".org") org-ref-notes)))
+    (unless (file-exists-p file)
+      (with-current-buffer (find-file-noselect file)
+        (insert (format ":PROPERTIES:\n:ID: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
+                        (org-id-new)
+                        source source
+                        (format-time-string "[%Y-%m-%d %a]")
+                        (format-time-string "[%Y-%m-%d %a]")
+                        (file-name-base source)))
+        (save-buffer)))
+    file))
+
+(defun a3madkour/boox--note-for-key (key)
+  "Return the ref-note file for KEY, creating it if necessary."
+  (let ((citar-note (expand-file-name (concat key ".org") org-ref-notes)))
+    (cond
+     ((file-exists-p citar-note) citar-note)
+     ((ignore-errors (citar-get-entry key))
+      (citar-create-note key)
+      citar-note)
+     (t (a3madkour/boox--ensure-book-note key (a3madkour/boox--source-for-key key))))))
+
+(defun a3madkour/boox--annotated-destination (source)
+  "Path the annotated copy of SOURCE should occupy."
+  (expand-file-name
+   (format "%s%s.%s"
+           (file-name-base source)
+           a3madkour/boox-annotated-suffix
+           (file-name-extension source))
+   (file-name-directory source)))
+
+(defun a3madkour/boox--file-annotated-pdf (key file)
+  "Copy annotated export FILE beside KEY's source and record the properties.
+Returns the destination path, or nil when the source cannot be resolved."
+  (when-let* ((source (a3madkour/boox--source-for-key key))
+              (dest (a3madkour/boox--annotated-destination source)))
+    (when (or (not (file-exists-p dest))
+              (y-or-n-p (format "Overwrite existing %s? "
+                                (file-name-nondirectory dest))))
+      (copy-file file dest t)
+      (with-current-buffer (find-file-noselect (a3madkour/boox--note-for-key key))
+        (goto-char (point-min))
+        (org-entry-put nil "ORIGINAL_DOCUMENT" source)
+        (org-entry-put nil "ANNOTATED_DOCUMENT" dest)
+        (org-entry-put nil "NOTER_DOCUMENT" dest)
+        (org-entry-put nil "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
+        (save-buffer))
+      dest)))
+
+(defun a3madkour/boox--insert-highlights (key highlights)
+  "Insert HIGHLIGHTS into KEY's ref note under a `Tablet Highlights' heading.
+Existing content under that heading is replaced, so re-importing a longer
+export supersedes the shorter one instead of duplicating it."
+  (with-current-buffer (find-file-noselect (a3madkour/boox--note-for-key key))
+    (org-with-wide-buffer
+     (goto-char (point-min))
+     (if (re-search-forward "^\\* Tablet Highlights[ \t]*$" nil t)
+         (let ((start (line-beginning-position)))
+           (org-end-of-subtree t t)
+           (delete-region start (point))
+           (goto-char start))
+       (goto-char (point-max))
+       (unless (bolp) (insert "\n")))
+     (insert "* Tablet Highlights\n")
+     (dolist (h highlights)
+       (insert (format "** %s\n" (truncate-string-to-width
+                                 (plist-get h :text) 70 nil nil "…")))
+       (when (plist-get h :page)
+         (insert (format ":PROPERTIES:\n:NOTER_PAGE: %d\n:END:\n" (plist-get h :page))))
+       (insert (format "%s\n" (plist-get h :text)))
+       (when (plist-get h :note)
+         (insert (format "\n%s\n" (plist-get h :note))))
+       (insert "\n"))
+     (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
+     (save-buffer))))
+
+(defun a3madkour/boox-import-execute ()
+  "File every selected candidate, then archive the consumed exports."
+  (interactive)
+  (unless (file-directory-p a3madkour/boox-archive-directory)
+    (make-directory a3madkour/boox-archive-directory t))
+  (let ((selected (seq-filter (lambda (c) (plist-get c :selected))
+                              a3madkour/boox--candidates))
+        (results nil))
+    (dolist (c selected)
+      (let ((key (plist-get c :key))
+            (file (plist-get c :file)))
+        (pcase (plist-get c :kind)
+          ('pdf
+           (if-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
+               (progn (push (format "%s → %s" key (abbreviate-file-name dest)) results)
+                      (rename-file file (expand-file-name
+                                         (file-name-nondirectory file)
+                                         a3madkour/boox-archive-directory)
+                                   t))
+             (push (format "%s → SKIPPED, source unresolved" key) results)))
+          ('text
+           (let ((highlights (a3madkour/boox--parse-highlights
+                              (a3madkour/boox--file-contents file))))
+             (if (null highlights)
+                 (push (format "%s → 0 highlights parsed, NOT imported" key) results)
+               (a3madkour/boox--insert-highlights key highlights)
+               (push (format "%s → %d highlights" key (length highlights)) results)
+               (rename-file file (expand-file-name
+                                  (file-name-nondirectory file)
+                                  a3madkour/boox-archive-directory)
+                            t)))))))
+    (message "Boox import: %s" (string-join (nreverse results) "; "))
+    (a3madkour/boox-import)))
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
