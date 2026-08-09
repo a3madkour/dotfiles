@@ -2234,6 +2234,125 @@ from the tablet too.  Only files this command created are ever removed."
              (length copied) (length skipped) (length removed)
              (length missing) (length unsupported))))
 #+end_src
+** Import
+#+begin_src emacs-lisp
+(defvar a3madkour/boox-annotated-marker-regexp "(annot\\|_annot\\|-annot"
+  "Regexp identifying NeoReader's annotated-PDF exports by filename.
+Set from the actual export filename recorded during device verification.")
+
+(defun a3madkour/boox--annotated-p (file)
+  "Non-nil when FILE looks like a NeoReader annotated-PDF export."
+  (string-match-p a3madkour/boox-annotated-marker-regexp
+                  (file-name-nondirectory file)))
+
+(defun a3madkour/boox--already-imported-p (file)
+  "Non-nil when FILE has already been consumed, matched by name and size."
+  (let ((archived (expand-file-name (file-name-nondirectory file)
+                                    a3madkour/boox-archive-directory)))
+    (and (file-exists-p archived)
+         (= (file-attribute-size (file-attributes archived))
+            (file-attribute-size (file-attributes file))))))
+
+(defun a3madkour/boox--file-contents (file)
+  "Return the contents of FILE as a string."
+  (with-temp-buffer (insert-file-contents file) (buffer-string)))
+
+(defun a3madkour/boox--scan-inbox ()
+  "Return a list of candidate plists for every importable file found.
+Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
+  (let (candidates)
+    (dolist (dir a3madkour/boox-inbox-directories)
+      (when (file-directory-p dir)
+        (dolist (f (directory-files dir t "\\`[^.]" t))
+          (let* ((name (file-name-nondirectory f))
+                 (ext (downcase (or (file-name-extension f) "")))
+                 (key (a3madkour/boox--key-from-filename f)))
+            (cond
+             ((string-match-p "sync-conflict" name) nil)
+             ((file-directory-p f) nil)
+             ((and (string= ext "pdf") (not (a3madkour/boox--annotated-p f))) nil)
+             ((not (member ext '("pdf" "txt" "html" "md"))) nil)
+             ((a3madkour/boox--already-imported-p f)
+              (push (list :file f :key key :kind (if (string= ext "pdf") 'pdf 'text)
+                          :status 'already-imported :selected nil)
+                    candidates))
+             ((null key)
+              (push (list :file f :key nil :kind (if (string= ext "pdf") 'pdf 'text)
+                          :status 'no-key :selected nil)
+                    candidates))
+             (t
+              (push (list :file f :key key
+                          :kind (if (string= ext "pdf") 'pdf 'text)
+                          :status 'ready :selected t)
+                    candidates)))))))
+    (nreverse candidates)))
+
+(defvar a3madkour/boox--candidates nil
+  "Candidate list backing the current *Boox Import* buffer.")
+
+(defvar a3madkour/boox-import-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'a3madkour/boox-import-toggle)
+    (define-key map (kbd "x")   #'a3madkour/boox-import-execute)
+    (define-key map (kbd "g")   #'a3madkour/boox-import)
+    (define-key map (kbd "q")   #'quit-window)
+    map)
+  "Keymap for `a3madkour/boox-import-mode'.")
+
+(define-derived-mode a3madkour/boox-import-mode special-mode "Boox-Import"
+  "Review buffer for pending Boox imports.")
+
+(defun a3madkour/boox--status-line (candidate)
+  "One display line for CANDIDATE."
+  (pcase (plist-get candidate :status)
+    ('ready (format "→ key: %s  %s"
+                    (plist-get candidate :key)
+                    (if (eq (plist-get candidate :kind) 'pdf)
+                        "annotated PDF"
+                      (format "%d highlights parsed"
+                              (length (a3madkour/boox--parse-highlights
+                                       (a3madkour/boox--file-contents
+                                        (plist-get candidate :file))))))))
+    ('no-key "→ no key in filename  (left in place)")
+    ('already-imported "→ already imported  (left in place)")))
+
+(defun a3madkour/boox--render ()
+  "Redraw the *Boox Import* buffer from `a3madkour/boox--candidates'."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (insert (format "Boox Import — %d files\n\n"
+                    (length a3madkour/boox--candidates)))
+    (cl-loop for c in a3madkour/boox--candidates
+             for i from 0
+             do (insert (format " [%s] %s\n     %s\n"
+                                (if (plist-get c :selected) "x" " ")
+                                (file-name-nondirectory (plist-get c :file))
+                                (a3madkour/boox--status-line c)))
+             (put-text-property (line-beginning-position -1) (point) 'boox-index i))
+    (insert "\n RET toggle   x execute   g refresh   q abort\n")
+    (goto-char (point-min))))
+
+(defun a3madkour/boox-import-toggle ()
+  "Toggle selection of the candidate at point."
+  (interactive)
+  (when-let ((i (get-text-property (point) 'boox-index)))
+    (let ((c (nth i a3madkour/boox--candidates)))
+      (when (eq (plist-get c :status) 'ready)
+        (setf (nth i a3madkour/boox--candidates)
+              (plist-put c :selected (not (plist-get c :selected))))
+        (let ((pos (point)))
+          (a3madkour/boox--render)
+          (goto-char (min pos (point-max))))))))
+
+(defun a3madkour/boox-import ()
+  "Scan the Boox inbox and present pending imports for review."
+  (interactive)
+  (setq a3madkour/boox--candidates (a3madkour/boox--scan-inbox))
+  (with-current-buffer (get-buffer-create "*Boox Import*")
+    (a3madkour/boox-import-mode)
+    (a3madkour/boox--render))
+  (pop-to-buffer "*Boox Import*"))
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
