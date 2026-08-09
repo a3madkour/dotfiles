@@ -1850,6 +1850,71 @@ get a numeric suffix."
             key (format "%s-%d" root n)))
     key))
 #+end_src
+
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defvar a3madkour/boox-export-separator-regexp "^[-=_]\\{5,\\}[ \t]*$"
+  "Regexp matching the line NeoReader writes between annotation blocks.
+Retune against a real capture; see tests/fixtures/.")
+
+(defvar a3madkour/boox-export-page-regexp "\\(?:[Pp]age\\|P\\.\\)[ \t]*\\([0-9]+\\)"
+  "Regexp whose first group captures the page number within a block.")
+
+(defvar a3madkour/boox-export-note-regexp
+  "^[ \t]*\\(?:Annotations?\\|Notes?\\|Comment\\)[：:][ \t]*"
+  "Regexp matching the label that introduces a typed note within a block.")
+
+(defvar a3madkour/boox-export-text-regexp
+  "^[ \t]*\\(?:Original Text\\|Highlight\\|Text\\)[：:][ \t]*"
+  "Regexp matching the label that introduces highlighted text within a block.")
+
+(defun a3madkour/boox--parse-block (block)
+  "Parse one BLOCK of a NeoReader export into a plist, or nil.
+The plist has :page, :text and :note.  A block without a page number or
+without highlighted text is discarded, which is what removes the document
+header block that precedes the first separator."
+  (let ((page (when (string-match a3madkour/boox-export-page-regexp block)
+                (string-to-number (match-string 1 block))))
+        text note)
+    (when page
+      (let* ((lines (split-string block "\n"))
+             (state 'text)
+             (text-lines nil)
+             (note-lines nil))
+        (dolist (line lines)
+          (cond
+           ((string-match-p a3madkour/boox-export-note-regexp line)
+            (setq state 'note)
+            (let ((rest (replace-regexp-in-string
+                         a3madkour/boox-export-note-regexp "" line)))
+              (unless (string-empty-p (string-trim rest))
+                (push rest note-lines))))
+           ((string-match-p a3madkour/boox-export-text-regexp line)
+            (setq state 'text)
+            (let ((rest (replace-regexp-in-string
+                         a3madkour/boox-export-text-regexp "" line)))
+              (unless (string-empty-p (string-trim rest))
+                (push rest text-lines))))
+           ((string-match-p a3madkour/boox-export-page-regexp line) nil)
+           ((string-empty-p (string-trim line)) nil)
+           ((eq state 'note) (push line note-lines))
+           (t (push line text-lines))))
+        (setq text (string-trim (mapconcat #'identity (nreverse text-lines) " "))
+              note (string-trim (mapconcat #'identity (nreverse note-lines) " "))))
+      (unless (string-empty-p text)
+        (list :page page
+              :text text
+              :note (unless (string-empty-p note) note))))))
+
+(defun a3madkour/boox--parse-highlights (content)
+  "Parse NeoReader export CONTENT into a list of (:page :text :note) plists.
+Returns nil when nothing parses, which callers must report rather than
+writing an empty highlight section."
+  (when (and content (stringp content))
+    (delq nil (mapcar #'a3madkour/boox--parse-block
+                      (split-string content
+                                    a3madkour/boox-export-separator-regexp
+                                    t)))))
+#+end_src
 ** Tests
 #+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes :comments no
 ;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
@@ -2025,70 +2090,6 @@ Replaced in practice by a real capture; see neoreader-export.txt.")
 (ert-deftest boox-parse-drops-blocks-without-text ()
   (should (null (a3madkour/boox--parse-highlights
                  "Page 5\n\n--------------------\n\nPage 9\n\n"))))
-#+end_src
-#+begin_src emacs-lisp :tangle "./boox-core.el"
-(defvar a3madkour/boox-export-separator-regexp "^[-=_]\\{5,\\}[ \t]*$"
-  "Regexp matching the line NeoReader writes between annotation blocks.
-Retune against a real capture; see tests/fixtures/.")
-
-(defvar a3madkour/boox-export-page-regexp "\\(?:[Pp]age\\|P\\.\\)[ \t]*\\([0-9]+\\)"
-  "Regexp whose first group captures the page number within a block.")
-
-(defvar a3madkour/boox-export-note-regexp
-  "^[ \t]*\\(?:Annotations?\\|Notes?\\|Comment\\)[：:][ \t]*"
-  "Regexp matching the label that introduces a typed note within a block.")
-
-(defvar a3madkour/boox-export-text-regexp
-  "^[ \t]*\\(?:Original Text\\|Highlight\\|Text\\)[：:][ \t]*"
-  "Regexp matching the label that introduces highlighted text within a block.")
-
-(defun a3madkour/boox--parse-block (block)
-  "Parse one BLOCK of a NeoReader export into a plist, or nil.
-The plist has :page, :text and :note.  A block without a page number or
-without highlighted text is discarded, which is what removes the document
-header block that precedes the first separator."
-  (let ((page (when (string-match a3madkour/boox-export-page-regexp block)
-                (string-to-number (match-string 1 block))))
-        text note)
-    (when page
-      (let* ((lines (split-string block "\n"))
-             (state 'text)
-             (text-lines nil)
-             (note-lines nil))
-        (dolist (line lines)
-          (cond
-           ((string-match-p a3madkour/boox-export-note-regexp line)
-            (setq state 'note)
-            (let ((rest (replace-regexp-in-string
-                         a3madkour/boox-export-note-regexp "" line)))
-              (unless (string-empty-p (string-trim rest))
-                (push rest note-lines))))
-           ((string-match-p a3madkour/boox-export-text-regexp line)
-            (setq state 'text)
-            (let ((rest (replace-regexp-in-string
-                         a3madkour/boox-export-text-regexp "" line)))
-              (unless (string-empty-p (string-trim rest))
-                (push rest text-lines))))
-           ((string-match-p a3madkour/boox-export-page-regexp line) nil)
-           ((string-empty-p (string-trim line)) nil)
-           ((eq state 'note) (push line note-lines))
-           (t (push line text-lines))))
-        (setq text (string-trim (mapconcat #'identity (nreverse text-lines) " "))
-              note (string-trim (mapconcat #'identity (nreverse note-lines) " "))))
-      (unless (string-empty-p text)
-        (list :page page
-              :text text
-              :note (unless (string-empty-p note) note))))))
-
-(defun a3madkour/boox--parse-highlights (content)
-  "Parse NeoReader export CONTENT into a list of (:page :text :note) plists.
-Returns nil when nothing parses, which callers must report rather than
-writing an empty highlight section."
-  (when (and content (stringp content))
-    (delq nil (mapcar #'a3madkour/boox--parse-block
-                      (split-string content
-                                    a3madkour/boox-export-separator-regexp
-                                    t)))))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
