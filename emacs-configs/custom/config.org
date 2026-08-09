@@ -1733,6 +1733,82 @@ missing items."
 #+begin_src emacs-lisp
 (use-package citeproc)
 #+end_src
+* Boox
+Round trip between the reading queue, the Boox Note Max, and the org-roam ref
+notes.  Pure helpers tangle to =boox-core.el= so the ERT suite can load them
+without the rest of the config; commands tangle to =config.el= as usual.
+** Configuration
+#+begin_src emacs-lisp
+(defcustom a3madkour/boox-reading-directory (expand-file-name "~/Boox/reading/")
+  "Syncthing folder shared with the Boox Note Max.
+Files pushed here appear on the tablet; removing a file here removes it
+from the tablet."
+  :type 'directory
+  :group 'a3madkour)
+
+(defcustom a3madkour/boox-archive-directory (expand-file-name "~/Boox/archive/")
+  "Local, unsynced directory where consumed exports are parked.
+Used to make `a3madkour/boox-import' idempotent."
+  :type 'directory
+  :group 'a3madkour)
+
+(defcustom a3madkour/boox-inbox-directories
+  (list (expand-file-name "~/Boox/reading/"))
+  "Directories scanned by `a3madkour/boox-import' for NeoReader exports.
+If NeoReader writes exports beside the source document this stays as the
+single reading directory.  If it writes to a fixed device directory, add a
+second Syncthing folder for it and append that path here."
+  :type '(repeat directory)
+  :group 'a3madkour)
+
+(defcustom a3madkour/boox-annotated-suffix "-annotated"
+  "Suffix appended to the basename of an annotated copy."
+  :type 'string
+  :group 'a3madkour)
+
+(defcustom a3madkour/boox-supported-extensions '("pdf" "epub")
+  "Extensions NeoReader is known to open.  Others are reported, not pushed."
+  :type '(repeat string)
+  :group 'a3madkour)
+
+(add-to-list 'load-path (expand-file-name "~/emacs-configs/custom"))
+(require 'boox-core)
+#+end_src
+** Core helpers
+These tangle to =boox-core.el= rather than =config.el= so the test suite can
+load them standalone.
+#+begin_src emacs-lisp :tangle "./boox-core.el" :mkdirp yes
+;;; boox-core.el --- Pure helpers for the Boox reading round trip -*- lexical-binding: t; -*-
+;;; Commentary:
+;; Generated from config.org.  Do not edit directly.
+;;; Code:
+
+(require 'subr-x)
+(require 'seq)
+(require 'cl-lib)
+
+(defconst a3madkour/boox-key-separator "--"
+  "Separator between the key and the title half of a pushed filename.")
+#+end_src
+** Tests
+#+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes
+;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
+;;; Commentary:
+;; Generated from config.org.  Do not edit directly.
+;; Run: emacs -Q --batch -L ~/emacs-configs/custom -l ert \
+;;        -l ~/emacs-configs/custom/boox-core.el \
+;;        -l ~/emacs-configs/custom/tests/boox-tests.el \
+;;        -f ert-run-tests-batch-and-exit
+;;; Code:
+
+(require 'ert)
+(require 'boox-core)
+#+end_src
+** Core footer
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(provide 'boox-core)
+;;; boox-core.el ends here
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
