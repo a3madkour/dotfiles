@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-08-02 Sun]
+:LAST_MODIFIED: [2026-08-08 Sat]
 :END:
 
 * Bootstrap
@@ -571,28 +571,6 @@ Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config
 #+begin_src emacs-lisp
 (require 'uniquify)
 (setq uniquify-buffer-name-style 'forward)
-#+end_src
-** Centered-cursor-mode
-#+begin_src emacs-lisp
-(use-package centered-cursor-mode :diminish centered-cursor-mode)
-#+end_src
-** Insert file path
-Verbatim from [[https://github.com/doomemacs/doomemacs/blob/master/modules/config/default/autoload/text.el][Doom Emacs's =modules/config/default/autoload/text.el=]].
-#+begin_src emacs-lisp
-;;;###autoload
-(defun +default/insert-file-path (arg)
-  "Insert the file name (absolute path if prefix ARG).
-	If `buffer-file-name' isn't set, uses `default-directory'."
-  (interactive "P")
-  (let ((path (or buffer-file-name default-directory)))
-	(insert
-	 (if arg
-		 (abbreviate-file-name path)
-	   (file-name-nondirectory path)))))
-;;;###autoload
-(defun +default/insert-all-path (arg)
-  (interactive "P")
-  (+default/insert-file-path 1))
 #+end_src
 ** Misc utilities
 #+begin_src emacs-lisp
@@ -1289,6 +1267,23 @@ Standard activation from the [[https://github.com/lassik/emacs-format-all-the-co
 #+begin_src emacs-lisp
 (use-package gdscript-mode
   :ensure t)
+#+end_src
+Snippets for GDScript 2.0, verified to compile against the installed Godot binary. Straight pulls the elisp and the snippet tables from the
+[[https://github.com/a3madkour/gdscript-yasnippets][gdscript-yasnippets]] repo over SSH (the repo is private, so =:protocol ssh=). The
+loader appends its directory to =yas-snippet-dirs=, so anything in
+[[file:snippets/gdscript-mode/][my personal snippet directory]] overrides the packaged version.
+
+=:demand t= is load-bearing here. [[*General configuration][=use-package-always-defer=]] is on, and unlike
+[[*Org Math Lint][org-math-lint]] this package has no =:hook= or =:commands= to autoload it into
+existence — =:after= alone only *delays* a load, it never *causes* one, so the
+snippets would silently never register.
+#+begin_src emacs-lisp
+(use-package gdscript-yasnippets
+  :straight (gdscript-yasnippets :type git :host github :repo "a3madkour/gdscript-yasnippets"
+                                 :protocol ssh :files ("*.el" "snippets"))
+  :after (yasnippet gdscript-mode)
+  :demand t
+  :config (gdscript-yasnippets-initialize))
 #+end_src
 *** Haskell
 #+begin_src emacs-lisp

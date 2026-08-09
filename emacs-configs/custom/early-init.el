@@ -1,11 +1,17 @@
 ;; [[file:config.org::*Early Init][Early Init:1]]
+;;Phone config
+(when (eq system-type 'android)
+  (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin" (getenv "PATH")))
+  (push "/data/data/com.termux/files/usr/bin" exec-path)
+  (setq touch-screen-display-keyboard t)
+  (set-fontset-font t 'emoji '("Noto Emoji" . "iso10646-1") nil 'prepend)
+  (setq overriding-text-conversion-style nil))
 ;; Ensure Emacs loads the most recent byte-compiled files.
 (setq load-prefer-newer t)
 
 ;; Make Emacs Native-compile .elc files asynchronously by setting
 ;; `native-comp-jit-compilation' to t.
 (setq native-comp-jit-compilation t)
-(setq native-comp-deferred-compilation native-comp-jit-compilation)  ; Deprecated
 (setq gc-cons-percentage 0.6)
 (setq gc-cons-threshold most-positive-fixnum)
 (push '(menu-bar-lines . 0) default-frame-alist)
