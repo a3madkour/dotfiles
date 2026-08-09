@@ -1976,6 +1976,67 @@ get a numeric suffix."
 (provide 'boox-core)
 ;;; boox-core.el ends here
 #+end_src
+** Push
+#+begin_src emacs-lisp
+(defun a3madkour/boox--all-known-keys ()
+  "Every key already in use: bibliography citekeys plus assigned book keys.
+Uses the public `citar-get-entries' rather than citar internals, whose
+signatures have shifted between releases."
+  (append (hash-table-keys (citar-get-entries))
+          (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
+            (delq nil (org-map-entries
+                       (lambda () (org-entry-get nil "BOOX_KEY")) nil 'file)))))
+
+(defun a3madkour/boox--queue-entries ()
+  "Return a list of plists describing every :active: entry in queue.org.
+Each plist has :key, :source, :title and :kind (either `paper' or `book').
+Book entries without a :BOOX_KEY: get one assigned and written back, so the
+key stays stable across future runs."
+  (require 'citar)
+  (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
+    (let ((known (a3madkour/boox--all-known-keys))
+          (dirty nil)
+          (entries nil))
+      (org-map-entries
+       (lambda ()
+         (let ((citekey (org-entry-get nil "CITEKEY"))
+               (reading-file (org-entry-get nil "READING_FILE")))
+           (cond
+            (citekey
+             ;; Always push exactly one record.  A key with no bib entry, or a
+             ;; bib entry with no PDF/EPUB attachment, yields :source nil and is
+             ;; reported as missing rather than silently vanishing.
+             (let* ((entry (ignore-errors (citar-get-entry citekey)))
+                    (file (and entry (alist-get "file" entry nil nil #'string=)))
+                    (raw (and file
+                              (car (seq-filter
+                                    (lambda (p) (string-match-p "\\.\\(pdf\\|epub\\)\\'"
+                                                                (string-trim p)))
+                                    (split-string file ";")))))
+                    (source (and raw (or (a3madkour/normalize-library-path raw)
+                                         (string-trim raw)))))
+               (push (list :key citekey
+                           :kind 'paper
+                           :source source
+                           :title (or (and entry (alist-get "title" entry nil nil #'string=))
+                                      citekey))
+                     entries)))
+            (reading-file
+             (let* ((source (expand-file-name reading-file))
+                    (key (or (org-entry-get nil "BOOX_KEY")
+                             (let ((k (a3madkour/boox--book-key source known)))
+                               (org-entry-put nil "BOOX_KEY" k)
+                               (setq known (cons k known) dirty t)
+                               k))))
+               (push (list :key key
+                           :kind 'book
+                           :source source
+                           :title (file-name-base source))
+                     entries))))))
+       "+active" 'file)
+      (when dirty (save-buffer))
+      (nreverse entries))))
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
