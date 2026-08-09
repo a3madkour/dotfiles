@@ -1566,11 +1566,15 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
 	  (goto-char (point-min))
 	  (when (search-forward ":END:" nil t)
 		(beginning-of-line)
-		(insert ":NOTER_DOCUMENT: ")
-		(when note-path-clean
-		  (insert (or (a3madkour/normalize-library-path note-path-clean)
-					  note-path-clean)))
-		(insert "\n")	
+		(let ((doc (and note-path-clean
+						(or (a3madkour/normalize-library-path note-path-clean)
+							note-path-clean))))
+		  (insert ":NOTER_DOCUMENT: ")
+		  (when doc (insert doc))
+		  (insert "\n")
+		  (insert ":ORIGINAL_DOCUMENT: ")
+		  (when doc (insert doc))
+		  (insert "\n"))
 		(insert ":DATE_CREATED: ")
 		(insert (format-time-string "[%Y-%m-%d %a]"))
 		(insert "\n")
@@ -2479,6 +2483,23 @@ export supersedes the shorter one instead of duplicating it."
                             t)))))))
     (message "Boox import: %s" (string-join (nreverse results) "; "))
     (a3madkour/boox-import)))
+#+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox-toggle-noter-document ()
+  "Swap :NOTER_DOCUMENT: between the original and the annotated copy."
+  (interactive)
+  (let* ((current (org-entry-get (point-min) "NOTER_DOCUMENT"))
+         (original (org-entry-get (point-min) "ORIGINAL_DOCUMENT"))
+         (annotated (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
+    (cond
+     ((null annotated) (user-error "No annotated copy recorded for this note"))
+     ((null original) (user-error "No original document recorded for this note"))
+     (t (let ((next (if (equal current annotated) original annotated)))
+          (org-entry-put (point-min) "NOTER_DOCUMENT" next)
+          (save-buffer)
+          (message "NOTER_DOCUMENT → %s"
+                   (if (equal next annotated) "annotated" "original")))))))
 #+end_src
 * Org
 ** Org-super-agenda
@@ -3793,6 +3814,13 @@ Prompts for the link type interactively."
     )
   )
 #+end_src
+
+Imported EPUB highlights stay non-positional because reflow makes exported page
+numbers meaningless; =nov.el= only enables manual noting against EPUBs.
+#+begin_src emacs-lisp
+(use-package nov
+  :mode ("\\.epub\\'" . nov-mode))
+#+end_src
 *** Org-pomodoro
 #+begin_src emacs-lisp
 (use-package org-pomodoro)
@@ -4671,6 +4699,14 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3madkour/citar-add-to-reading-queue :which-key "add to reading list")
  "zd"
  '(citar-dwim :which-key "citar-dwim")
+ "zb"
+ '(nil :which-key "boox")
+ "zbp"
+ '(a3madkour/boox-push-queue :which-key "push reading queue")
+ "zbi"
+ '(a3madkour/boox-import :which-key "import annotations")
+ "zbt"
+ '(a3madkour/boox-toggle-noter-document :which-key "toggle annotated/original")
 
  ;;notes stuff 'n'
  "n"

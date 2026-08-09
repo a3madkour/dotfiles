@@ -6,14 +6,15 @@
 set -e
 cd "$(dirname "$0")/.."
 
-LOAD_ARGS=(-L tests)
+LOAD_ARGS=(-L tests -L .)
 for f in tests/test-helpers.el \
          tests/test-pure.el \
          tests/test-project-lifecycle.el \
          tests/test-tasks-scheduling.el \
          tests/test-inbox.el \
          tests/test-agenda-seasons.el \
-         tests/test-helpers-extracted.el; do
+         tests/test-helpers-extracted.el \
+         tests/boox-tests.el; do
   LOAD_ARGS+=(-l "$f")
 done
 
