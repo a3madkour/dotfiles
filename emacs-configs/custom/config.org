@@ -1753,7 +1753,7 @@ Used to make `a3madkour/boox-import' idempotent."
   :group 'a3madkour)
 
 (defcustom a3madkour/boox-inbox-directories
-  (list (expand-file-name "~/Boox/reading/"))
+  (list a3madkour/boox-reading-directory)
   "Directories scanned by `a3madkour/boox-import' for NeoReader exports.
 If NeoReader writes exports beside the source document this stays as the
 single reading directory.  If it writes to a fixed device directory, add a
@@ -1777,7 +1777,7 @@ second Syncthing folder for it and append that path here."
 ** Core helpers
 These tangle to =boox-core.el= rather than =config.el= so the test suite can
 load them standalone.
-#+begin_src emacs-lisp :tangle "./boox-core.el" :mkdirp yes
+#+begin_src emacs-lisp :tangle "./boox-core.el" :mkdirp yes :comments no
 ;;; boox-core.el --- Pure helpers for the Boox reading round trip -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;; Generated from config.org.  Do not edit directly.
@@ -1796,15 +1796,18 @@ load them standalone.
   "Re-anchor PATH from a bib `file' field onto this machine's home directory.
 The bibliography was written on macOS, so entries carry
 /Users/a3madkour/Sync/... prefixes that do not resolve elsewhere.  Take
-everything from the first `Sync/' segment onward and expand it under `~'.
-Return nil when PATH is empty or contains no `Sync/' segment."
+everything from the first `Sync/' path segment onward and expand it under
+`~'.  Matching is case-sensitive and requires a whole segment, so a
+directory such as `ResilioSync/' is not treated as a match.  Return nil
+when PATH is empty or contains no `Sync/' segment."
   (when (and path (stringp path))
-    (let ((trimmed (string-trim path)))
-      (when (string-match "\\`.*?\\(Sync/.*\\)\\'" trimmed)
+    (let ((trimmed (string-trim path))
+          (case-fold-search nil))
+      (when (string-match "\\`\\(?:.*?/\\)?\\(Sync/.*\\)\\'" trimmed)
         (expand-file-name (match-string 1 trimmed) "~")))))
 #+end_src
 ** Tests
-#+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes
+#+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes :comments no
 ;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;; Generated from config.org.  Do not edit directly.
@@ -1843,6 +1846,24 @@ Return nil when PATH is empty or contains no `Sync/' segment."
 
 (ert-deftest boox-normalize-ignores-sync-without-trailing-slash ()
   (should (null (a3madkour/normalize-library-path "/tmp/Syncthing-notes.pdf"))))
+
+(ert-deftest boox-normalize-rejects-lookalike-directories ()
+  (should (null (a3madkour/normalize-library-path
+                 "/Users/a3madkour/MySync/Books/x.pdf")))
+  (should (null (a3madkour/normalize-library-path
+                 "/Users/a3madkour/ResilioSync/paper.pdf"))))
+
+(ert-deftest boox-normalize-is-case-sensitive ()
+  (should (null (a3madkour/normalize-library-path "/tmp/websync/file.pdf")))
+  (should (null (a3madkour/normalize-library-path "/tmp/SYNC/file.pdf"))))
+
+(ert-deftest boox-normalize-ignores-caller-case-fold-setting ()
+  (let ((case-fold-search t))
+    (should (null (a3madkour/normalize-library-path "/tmp/websync/file.pdf"))))
+  (let ((case-fold-search nil))
+    (should (equal (a3madkour/normalize-library-path
+                    "/Users/a3madkour/Sync/Books/b.pdf")
+                   (expand-file-name "Sync/Books/b.pdf" "~")))))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
