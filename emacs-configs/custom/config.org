@@ -120,6 +120,8 @@ login shell so =exec-path= matches the terminal.
 * General configuration
 #+begin_src emacs-lisp
 (require 'bibtex)
+(add-to-list 'load-path (expand-file-name "~/emacs-configs/custom"))
+(require 'boox-core)
 (defvar a3madkour/org-base-dir
   (if (eq system-type 'android)
       "/sdcard/org"
@@ -1566,7 +1568,8 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
 		(beginning-of-line)
 		(insert ":NOTER_DOCUMENT: ")
 		(when note-path-clean
-		  (insert (concat "~/" (replace-regexp-in-string ".*Sync/" "Sync/" note-path-clean))))
+		  (insert (or (a3madkour/normalize-library-path note-path-clean)
+					  note-path-clean)))
 		(insert "\n")	
 		(insert ":DATE_CREATED: ")
 		(insert (format-time-string "[%Y-%m-%d %a]"))
@@ -1668,11 +1671,12 @@ Uses `open' on darwin and `xdg-open' on gnu/linux."
            "+active" 'file))))
 
 (defun a3madkour/supernote--pdf-for-key (key)
-  "Return the first .pdf path attached to KEY in Citar, or nil."
+  "Return the first .pdf path attached to KEY in Citar, normalized, or nil."
   (when-let* ((entry (citar-get-entry key))
-              (file (alist-get "file" entry nil nil #'string=)))
-    (car (seq-filter (lambda (p) (string-match-p "\\.pdf\\'" (string-trim p)))
-                     (split-string file ";")))))
+              (file (alist-get "file" entry nil nil #'string=))
+              (raw (car (seq-filter (lambda (p) (string-match-p "\\.pdf\\'" (string-trim p)))
+                                    (split-string file ";")))))
+    (or (a3madkour/normalize-library-path raw) (string-trim raw))))
 
 (defun a3madkour/supernote-sync-active-queue ()
   "Stage PDFs for every :active: entry in queue.org into the Supernote outbox.
@@ -1770,9 +1774,6 @@ second Syncthing folder for it and append that path here."
   "Extensions NeoReader is known to open.  Others are reported, not pushed."
   :type '(repeat string)
   :group 'a3madkour)
-
-(add-to-list 'load-path (expand-file-name "~/emacs-configs/custom"))
-(require 'boox-core)
 #+end_src
 ** Core helpers
 These tangle to =boox-core.el= rather than =config.el= so the test suite can
