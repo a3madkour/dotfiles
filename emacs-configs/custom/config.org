@@ -1807,6 +1807,23 @@ when PATH is empty or contains no `Sync/' segment."
       (when (string-match "\\`\\(?:.*?/\\)?\\(Sync/.*\\)\\'" trimmed)
         (expand-file-name (match-string 1 trimmed) "~")))))
 #+end_src
+
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defun a3madkour/boox--slug (title &optional max-length)
+  "Turn TITLE into a filename-safe slug of at most MAX-LENGTH characters.
+MAX-LENGTH defaults to 40.  Characters illegal on Android/FAT are replaced
+with hyphens, runs of hyphens are collapsed so the result can never contain
+`a3madkour/boox-key-separator', and leading/trailing hyphens are trimmed.
+Returns \"untitled\" when nothing usable remains."
+  (let* ((max (or max-length 40))
+         (s (or title ""))
+         (s (replace-regexp-in-string "[/\\\\:*?\"<>|]" "-" s))
+         (s (replace-regexp-in-string "[[:space:]]+" "-" (string-trim s)))
+         (s (replace-regexp-in-string "-+" "-" s))
+         (s (if (> (length s) max) (substring s 0 max) s))
+         (s (replace-regexp-in-string "\\`-+\\|-+\\'" "" s)))
+    (if (string-empty-p s) "untitled" s)))
+#+end_src
 ** Tests
 #+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes :comments no
 ;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
@@ -1865,6 +1882,34 @@ when PATH is empty or contains no `Sync/' segment."
     (should (equal (a3madkour/normalize-library-path
                     "/Users/a3madkour/Sync/Books/b.pdf")
                    (expand-file-name "Sync/Books/b.pdf" "~")))))
+
+(ert-deftest boox-slug-replaces-illegal-characters ()
+  (should (equal (a3madkour/boox--slug "A/B:C*D?E\"F<G>H|I") "A-B-C-D-E-F-G-H-I")))
+
+(ert-deftest boox-slug-collapses-whitespace ()
+  (should (equal (a3madkour/boox--slug "  Procedural   Content  Generation ")
+                 "Procedural-Content-Generation")))
+
+(ert-deftest boox-slug-truncates-to-max-length ()
+  (should (equal (length (a3madkour/boox--slug (make-string 100 ?a))) 40))
+  (should (equal (length (a3madkour/boox--slug (make-string 100 ?a) 10)) 10)))
+
+(ert-deftest boox-slug-never-emits-the-key-separator ()
+  (should-not (string-match-p "--" (a3madkour/boox--slug "Games -- And Play")))
+  (should-not (string-match-p "--" (a3madkour/boox--slug "A -  - B"))))
+
+(ert-deftest boox-slug-trims-leading-and-trailing-hyphens ()
+  (should (equal (a3madkour/boox--slug "--Hello--") "Hello"))
+  (should (equal (a3madkour/boox--slug (concat (make-string 39 ?a) " bbb"))
+                 (make-string 39 ?a))))
+
+(ert-deftest boox-slug-falls-back-for-empty-input ()
+  (should (equal (a3madkour/boox--slug "") "untitled"))
+  (should (equal (a3madkour/boox--slug nil) "untitled"))
+  (should (equal (a3madkour/boox--slug "///") "untitled")))
+
+(ert-deftest boox-slug-preserves-unicode ()
+  (should (equal (a3madkour/boox--slug "Réflexions sur جيم") "Réflexions-sur-جيم")))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
