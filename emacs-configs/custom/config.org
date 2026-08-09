@@ -1824,6 +1824,32 @@ Returns \"untitled\" when nothing usable remains."
          (s (replace-regexp-in-string "\\`-+\\|-+\\'" "" s)))
     (if (string-empty-p s) "untitled" s)))
 #+end_src
+
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defun a3madkour/boox--key-from-filename (filename)
+  "Extract the pushed key from FILENAME, or nil if it carries none.
+Files are pushed as KEY--TITLE.EXT.  NeoReader appends suffixes to the
+title half on export, which is why only the half before the first
+separator is trusted."
+  (let ((base (file-name-nondirectory (or filename ""))))
+    (when (string-match (concat "\\`\\([^/]+?\\)"
+                                (regexp-quote a3madkour/boox-key-separator))
+                        base)
+      (match-string 1 base))))
+
+(defun a3madkour/boox--book-key (file existing-keys)
+  "Return a key for book FILE that does not collide with EXISTING-KEYS.
+EXISTING-KEYS should include every key already in use, both book keys and
+bibliography citekeys, so a book can never shadow a citekey.  Collisions
+get a numeric suffix."
+  (let* ((root (a3madkour/boox--slug (file-name-base file) 32))
+         (key root)
+         (n 1))
+    (while (member key existing-keys)
+      (setq n (1+ n)
+            key (format "%s-%d" root n)))
+    key))
+#+end_src
 ** Tests
 #+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes :comments no
 ;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
@@ -1882,6 +1908,40 @@ Returns \"untitled\" when nothing usable remains."
     (should (equal (a3madkour/normalize-library-path
                     "/Users/a3madkour/Sync/Books/b.pdf")
                    (expand-file-name "Sync/Books/b.pdf" "~")))))
+
+(ert-deftest boox-key-from-filename-extracts-prefix ()
+  (should (equal (a3madkour/boox--key-from-filename
+                  "madkour2021pcg--Procedural-Content-Gen.pdf")
+                 "madkour2021pcg")))
+
+(ert-deftest boox-key-from-filename-ignores-mangled-title-half ()
+  (should (equal (a3madkour/boox--key-from-filename
+                  "/some/dir/madkour2021pcg--Procedural-Content(annot).pdf")
+                 "madkour2021pcg")))
+
+(ert-deftest boox-key-from-filename-uses-first-separator ()
+  (should (equal (a3madkour/boox--key-from-filename "key--a--b.pdf") "key")))
+
+(ert-deftest boox-key-from-filename-allows-hyphens-in-key ()
+  (should (equal (a3madkour/boox--key-from-filename "madkour-2021-pcg--Title.pdf")
+                 "madkour-2021-pcg")))
+
+(ert-deftest boox-key-from-filename-returns-nil-without-separator ()
+  (should (null (a3madkour/boox--key-from-filename "Screenshot_20260809.png")))
+  (should (null (a3madkour/boox--key-from-filename "--LeadingSeparator.pdf"))))
+
+(ert-deftest boox-book-key-slugs-the-basename ()
+  (should (equal (a3madkour/boox--book-key
+                  "/home/a3madkour/Sync/Books/1-rules-of-play-game-design.pdf" nil)
+                 "1-rules-of-play-game-design")))
+
+(ert-deftest boox-book-key-avoids-collisions ()
+  (should (equal (a3madkour/boox--book-key "/x/rules.pdf" '("rules")) "rules-2"))
+  (should (equal (a3madkour/boox--book-key "/x/rules.pdf" '("rules" "rules-2"))
+                 "rules-3")))
+
+(ert-deftest boox-book-key-never-contains-the-separator ()
+  (should-not (string-match-p "--" (a3madkour/boox--book-key "/x/a -- b.pdf" nil))))
 
 (ert-deftest boox-slug-replaces-illegal-characters ()
   (should (equal (a3madkour/boox--slug "A/B:C*D?E\"F<G>H|I") "A-B-C-D-E-F-G-H-I")))
