@@ -2094,6 +2094,40 @@ Replaced in practice by a real capture; see neoreader-export.txt.")
 (ert-deftest boox-parse-drops-blocks-without-text ()
   (should (null (a3madkour/boox--parse-highlights
                  "Page 5\n\n--------------------\n\nPage 9\n\n"))))
+
+(ert-deftest boox-annotated-p-recognises-export-markers ()
+  (should (a3madkour/boox--annotated-p "smith2020--A-Paper(annot).pdf"))
+  (should (a3madkour/boox--annotated-p "smith2020--A-Paper_annot.pdf"))
+  (should (a3madkour/boox--annotated-p "smith2020--A-Paper-annotated.pdf"))
+  (should (a3madkour/boox--annotated-p "/full/path/smith2020--A(annot).pdf")))
+
+(ert-deftest boox-annotated-p-rejects-pushed-originals ()
+  "A pushed file must never be mistaken for an export, or import would
+treat push output as an annotated copy."
+  (should-not (a3madkour/boox--annotated-p "smith2020--A-Paper.pdf"))
+  (should-not (a3madkour/boox--annotated-p "smith2020--Annotation-Theory.pdf"))
+  (should-not (a3madkour/boox--annotated-p "notes.txt")))
+#+end_src
+** Annotated-export recognition
+Lives in =boox-core.el= because both halves of the round trip depend on it, and
+because getting it wrong destroys annotations: [[*Push][push]] deletes reading-directory
+files it believes it created, and a NeoReader annotated export carries both a
+key separator and a =.pdf= extension, so without this predicate push would treat
+an un-imported export as its own stale output and delete it.
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defvar a3madkour/boox-annotated-marker-regexp
+  "\\(?:([Aa]nnot[^)]*)\\|[_-][Aa]nnot\\(?:ated\\)?\\)\\'"
+  "Regexp identifying NeoReader's annotated-PDF exports by filename.
+Matched against the basename with the extension stripped, and anchored to
+its end: the marker is a suffix NeoReader appends, not an arbitrary
+substring.  An unanchored match would misread a pushed paper titled
+\"Annotation Theory\" as an export.  Retune against a real device capture.")
+
+(defun a3madkour/boox--annotated-p (file)
+  "Non-nil when FILE looks like a NeoReader annotated-PDF export."
+  (let ((case-fold-search nil))
+    (string-match-p a3madkour/boox-annotated-marker-regexp
+                    (file-name-base file))))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
@@ -2173,8 +2207,11 @@ key stays stable across future runs."
 
 (defun a3madkour/boox--pushed-files ()
   "Files in the reading directory that this command created.
-Export artifacts written by NeoReader do not match this pattern and are
-left alone; only `a3madkour/boox-import' consumes those."
+Deliberately excludes NeoReader's annotated exports: they carry a key
+separator and a .pdf extension, so they would otherwise look like stale
+push output and be deleted before `a3madkour/boox-import' ever consumed
+them, destroying the annotations.  Annotation text exports are excluded
+already by the extension check."
   (let ((dir (file-name-as-directory a3madkour/boox-reading-directory)))
     (when (file-directory-p dir)
       (seq-filter
@@ -2182,6 +2219,7 @@ left alone; only `a3madkour/boox-import' consumes those."
          (and (a3madkour/boox--key-from-filename f)
               (member (downcase (or (file-name-extension f) ""))
                       a3madkour/boox-supported-extensions)
+              (not (a3madkour/boox--annotated-p f))
               (not (string-match-p "sync-conflict" f))))
        (directory-files dir nil "\\`[^.]" t)))))
 
@@ -2240,15 +2278,6 @@ from the tablet too.  Only files this command created are ever removed."
 #+end_src
 ** Import
 #+begin_src emacs-lisp
-(defvar a3madkour/boox-annotated-marker-regexp "(annot\\|_annot\\|-annot"
-  "Regexp identifying NeoReader's annotated-PDF exports by filename.
-Set from the actual export filename recorded during device verification.")
-
-(defun a3madkour/boox--annotated-p (file)
-  "Non-nil when FILE looks like a NeoReader annotated-PDF export."
-  (string-match-p a3madkour/boox-annotated-marker-regexp
-                  (file-name-nondirectory file)))
-
 (defun a3madkour/boox--already-imported-p (file)
   "Non-nil when FILE has already been consumed, matched by name and size."
   (let ((archived (expand-file-name (file-name-nondirectory file)
