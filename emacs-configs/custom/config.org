@@ -1790,6 +1790,19 @@ load them standalone.
 (defconst a3madkour/boox-key-separator "--"
   "Separator between the key and the title half of a pushed filename.")
 #+end_src
+
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defun a3madkour/normalize-library-path (path)
+  "Re-anchor PATH from a bib `file' field onto this machine's home directory.
+The bibliography was written on macOS, so entries carry
+/Users/a3madkour/Sync/... prefixes that do not resolve elsewhere.  Take
+everything from the first `Sync/' segment onward and expand it under `~'.
+Return nil when PATH is empty or contains no `Sync/' segment."
+  (when (and path (stringp path))
+    (let ((trimmed (string-trim path)))
+      (when (string-match "\\`.*?\\(Sync/.*\\)\\'" trimmed)
+        (expand-file-name (match-string 1 trimmed) "~")))))
+#+end_src
 ** Tests
 #+begin_src emacs-lisp :tangle "./tests/boox-tests.el" :mkdirp yes
 ;;; boox-tests.el --- ERT suite for boox-core -*- lexical-binding: t; -*-
@@ -1803,6 +1816,33 @@ load them standalone.
 
 (require 'ert)
 (require 'boox-core)
+
+(ert-deftest boox-normalize-macos-path ()
+  (should (equal (a3madkour/normalize-library-path
+                  "/Users/a3madkour/Sync/Zotero/storage/AB12/paper.pdf")
+                 (expand-file-name "Sync/Zotero/storage/AB12/paper.pdf" "~"))))
+
+(ert-deftest boox-normalize-linux-path-is-idempotent ()
+  (let ((p (expand-file-name "Sync/Books/book.pdf" "~")))
+    (should (equal (a3madkour/normalize-library-path p) p))))
+
+(ert-deftest boox-normalize-returns-nil-without-sync-segment ()
+  (should (null (a3madkour/normalize-library-path "/tmp/elsewhere/paper.pdf")))
+  (should (null (a3madkour/normalize-library-path nil)))
+  (should (null (a3madkour/normalize-library-path ""))))
+
+(ert-deftest boox-normalize-uses-first-sync-segment ()
+  (should (equal (a3madkour/normalize-library-path
+                  "/Users/a3madkour/Sync/Books/Sync/nested.pdf")
+                 (expand-file-name "Sync/Books/Sync/nested.pdf" "~"))))
+
+(ert-deftest boox-normalize-trims-surrounding-whitespace ()
+  (should (equal (a3madkour/normalize-library-path
+                  "  /Users/a3madkour/Sync/Books/b.pdf  ")
+                 (expand-file-name "Sync/Books/b.pdf" "~"))))
+
+(ert-deftest boox-normalize-ignores-sync-without-trailing-slash ()
+  (should (null (a3madkour/normalize-library-path "/tmp/Syncthing-notes.pdf"))))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
