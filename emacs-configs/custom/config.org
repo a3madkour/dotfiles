@@ -2095,39 +2095,78 @@ Replaced in practice by a real capture; see neoreader-export.txt.")
   (should (null (a3madkour/boox--parse-highlights
                  "Page 5\n\n--------------------\n\nPage 9\n\n"))))
 
-(ert-deftest boox-annotated-p-recognises-export-markers ()
-  (should (a3madkour/boox--annotated-p "smith2020--A-Paper(annot).pdf"))
-  (should (a3madkour/boox--annotated-p "smith2020--A-Paper_annot.pdf"))
-  (should (a3madkour/boox--annotated-p "smith2020--A-Paper-annotated.pdf"))
-  (should (a3madkour/boox--annotated-p "/full/path/smith2020--A(annot).pdf")))
+(defmacro boox-test--with-files (specs &rest body)
+  "Create temp files per SPECS ((SYM . CONTENT) ...), run BODY, then clean up."
+  (declare (indent 1))
+  `(let ,(mapcar (lambda (s) `(,(car s) (make-temp-file "boox-test-"))) specs)
+     (unwind-protect
+         (progn
+           ,@(mapcar (lambda (s)
+                       `(with-temp-file ,(car s) (insert ,(cdr s))))
+                     specs)
+           ,@body)
+       ,@(mapcar (lambda (s) `(ignore-errors (delete-file ,(car s)))) specs))))
 
-(ert-deftest boox-annotated-p-rejects-pushed-originals ()
-  "A pushed file must never be mistaken for an export, or import would
-treat push output as an annotated copy."
-  (should-not (a3madkour/boox--annotated-p "smith2020--A-Paper.pdf"))
-  (should-not (a3madkour/boox--annotated-p "smith2020--Annotation-Theory.pdf"))
-  (should-not (a3madkour/boox--annotated-p "notes.txt")))
+(ert-deftest boox-annotated-p-detects-differing-size ()
+  (boox-test--with-files ((src . "original contents")
+                          (ann . "original contents plus embedded annotations"))
+    (should (a3madkour/boox--annotated-p ann src))))
+
+(ert-deftest boox-annotated-p-detects-same-size-different-content ()
+  "Length-preserving edits must still register, which is why the hash runs."
+  (boox-test--with-files ((src . "aaaaaaaaaa") (ann . "aaaaabaaaa"))
+    (should (a3madkour/boox--annotated-p ann src))))
+
+(ert-deftest boox-annotated-p-rejects-untouched-pushed-file ()
+  "A freshly pushed, unannotated copy must never look annotated, or import
+would file pristine push output as an annotated version."
+  (boox-test--with-files ((src . "identical bytes") (ann . "identical bytes"))
+    (should-not (a3madkour/boox--annotated-p ann src))))
+
+(ert-deftest boox-annotated-p-nil-when-either-side-missing ()
+  (boox-test--with-files ((src . "x"))
+    (should-not (a3madkour/boox--annotated-p "/nonexistent/file.pdf" src))
+    (should-not (a3madkour/boox--annotated-p src "/nonexistent/file.pdf"))
+    (should-not (a3madkour/boox--annotated-p nil src))
+    (should-not (a3madkour/boox--annotated-p src nil))))
+
+(ert-deftest boox-file-sha256-matches-for-identical-content ()
+  (boox-test--with-files ((a . "same") (b . "same") (c . "different"))
+    (should (equal (a3madkour/boox--file-sha256 a)
+                   (a3madkour/boox--file-sha256 b)))
+    (should-not (equal (a3madkour/boox--file-sha256 a)
+                       (a3madkour/boox--file-sha256 c)))
+    (should (null (a3madkour/boox--file-sha256 "/nonexistent/x")))))
 #+end_src
-** Annotated-export recognition
-Lives in =boox-core.el= because both halves of the round trip depend on it, and
-because getting it wrong destroys annotations: [[*Push][push]] deletes reading-directory
-files it believes it created, and a NeoReader annotated export carries both a
-key separator and a =.pdf= extension, so without this predicate push would treat
-an un-imported export as its own stale output and delete it.
-#+begin_src emacs-lisp :tangle "./boox-core.el"
-(defvar a3madkour/boox-annotated-marker-regexp
-  "\\(?:([Aa]nnot[^)]*)\\|[_-][Aa]nnot\\(?:ated\\)?\\)\\'"
-  "Regexp identifying NeoReader's annotated-PDF exports by filename.
-Matched against the basename with the extension stripped, and anchored to
-its end: the marker is a suffix NeoReader appends, not an arbitrary
-substring.  An unanchored match would misread a pushed paper titled
-\"Annotation Theory\" as an export.  Retune against a real device capture.")
+** Annotated-file recognition
+NeoReader's "Embed to PDF" writes annotations *into the pushed file itself* —
+same directory, same filename, larger.  There is no separately-named export, so
+a file is recognised as annotated by comparing it against the library original
+it was pushed from.
 
-(defun a3madkour/boox--annotated-p (file)
-  "Non-nil when FILE looks like a NeoReader annotated-PDF export."
-  (let ((case-fold-search nil))
-    (string-match-p a3madkour/boox-annotated-marker-regexp
-                    (file-name-base file))))
+Both halves depend on this and getting it wrong destroys work: [[*Push][push]] deletes
+reading-directory files it believes are its own stale output, and an annotated
+file is byte-different but name-identical to what push put there.
+#+begin_src emacs-lisp :tangle "./boox-core.el"
+(defun a3madkour/boox--file-sha256 (file)
+  "Return the SHA-256 of FILE's contents, or nil when unreadable."
+  (when (and file (file-readable-p file))
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (insert-file-contents-literally file)
+      (secure-hash 'sha256 (current-buffer)))))
+
+(defun a3madkour/boox--annotated-p (file source)
+  "Non-nil when FILE differs from the library SOURCE it was pushed from.
+Size is checked first because it settles the common case without reading
+either file; the hash only runs when sizes match, which catches an edit
+that happens to preserve length."
+  (when (and file source (file-readable-p file) (file-readable-p source))
+    (let ((sf (file-attribute-size (file-attributes file)))
+          (ss (file-attribute-size (file-attributes source))))
+      (or (/= sf ss)
+          (not (equal (a3madkour/boox--file-sha256 file)
+                      (a3madkour/boox--file-sha256 source)))))))
 #+end_src
 ** Core footer
 #+begin_src emacs-lisp :tangle "./boox-core.el"
@@ -2205,13 +2244,19 @@ key stays stable across future runs."
           (a3madkour/boox--slug (plist-get entry :title))
           (file-name-extension (plist-get entry :source))))
 
+(defun a3madkour/boox--reading-file-source (file)
+  "Return the library original FILE in the reading directory was pushed from.
+FILE may be a bare name or a full path; only its key half is used."
+  (when-let ((key (a3madkour/boox--key-from-filename file)))
+    (a3madkour/boox--source-for-key key)))
+
 (defun a3madkour/boox--pushed-files ()
-  "Files in the reading directory that this command created.
-Deliberately excludes NeoReader's annotated exports: they carry a key
-separator and a .pdf extension, so they would otherwise look like stale
-push output and be deleted before `a3madkour/boox-import' ever consumed
-them, destroying the annotations.  Annotation text exports are excluded
-already by the extension check."
+  "Files in the reading directory that push may safely delete.
+Excludes any file that differs from the library original it was pushed
+from.  NeoReader embeds annotations into the pushed file in place, keeping
+the same name, so a name-only test would let push delete work that has not
+been imported yet.  Annotation text exports are excluded already by the
+extension check."
   (let ((dir (file-name-as-directory a3madkour/boox-reading-directory)))
     (when (file-directory-p dir)
       (seq-filter
@@ -2219,8 +2264,10 @@ already by the extension check."
          (and (a3madkour/boox--key-from-filename f)
               (member (downcase (or (file-name-extension f) ""))
                       a3madkour/boox-supported-extensions)
-              (not (a3madkour/boox--annotated-p f))
-              (not (string-match-p "sync-conflict" f))))
+              (not (string-match-p "sync-conflict" f))
+              (not (a3madkour/boox--annotated-p
+                    (expand-file-name f dir)
+                    (a3madkour/boox--reading-file-source f)))))
        (directory-files dir nil "\\`[^.]" t)))))
 
 (defun a3madkour/boox-push-queue ()
@@ -2279,12 +2326,24 @@ from the tablet too.  Only files this command created are ever removed."
 ** Import
 #+begin_src emacs-lisp
 (defun a3madkour/boox--already-imported-p (file)
-  "Non-nil when FILE has already been consumed, matched by name and size."
-  (let ((archived (expand-file-name (file-name-nondirectory file)
-                                    a3madkour/boox-archive-directory)))
-    (and (file-exists-p archived)
-         (= (file-attribute-size (file-attributes archived))
-            (file-attribute-size (file-attributes file))))))
+  "Non-nil when FILE's exact contents have already been imported.
+Annotated PDFs stay in the reading directory after import, so presence is
+no signal.  The ref note records the hash that was imported; embedding
+more annotations changes the hash and makes the file importable again.
+Text exports, which are still moved aside, fall back to the archive check."
+  (let* ((key (a3madkour/boox--key-from-filename file))
+         (note (and key (expand-file-name (concat key ".org") org-ref-notes)))
+         (recorded
+          (when (and note (file-exists-p note))
+            (with-current-buffer (find-file-noselect note)
+              (org-entry-get (point-min) "BOOX_IMPORTED_SHA")))))
+    (or (and recorded
+             (equal recorded (a3madkour/boox--file-sha256 file)))
+        (let ((archived (expand-file-name (file-name-nondirectory file)
+                                          a3madkour/boox-archive-directory)))
+          (and (file-exists-p archived)
+               (= (file-attribute-size (file-attributes archived))
+                  (file-attribute-size (file-attributes file))))))))
 
 (defun a3madkour/boox--file-contents (file)
   "Return the contents of FILE as a string."
@@ -2303,7 +2362,13 @@ Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
             (cond
              ((string-match-p "sync-conflict" name) nil)
              ((file-directory-p f) nil)
-             ((and (string= ext "pdf") (not (a3madkour/boox--annotated-p f))) nil)
+             ;; A pushed PDF only becomes a candidate once it differs from the
+             ;; library original, i.e. once NeoReader has embedded annotations
+             ;; into it.  Untouched pushed files are still being read.
+             ((and (string= ext "pdf")
+                   (not (a3madkour/boox--annotated-p
+                         f (a3madkour/boox--reading-file-source f))))
+              nil)
              ((not (member ext '("pdf" "txt" "html" "md"))) nil)
              ((a3madkour/boox--already-imported-p f)
               (push (list :file f :key key :kind (if (string= ext "pdf") 'pdf 'text)
@@ -2335,13 +2400,57 @@ Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
 (define-derived-mode a3madkour/boox-import-mode special-mode "Boox-Import"
   "Review buffer for pending Boox imports.")
 
+(defun a3madkour/boox--pdf-annotations (file)
+  "Return the user's annotations in FILE as a page-ordered list of plists.
+Each plist has :page, :type, :text and :note.  Highlight-family annotations
+carry their underlying text, recovered from the PDF's own text layer via the
+annotation's markup edges — NeoReader leaves /Contents empty, so the text is
+not in the annotation itself.  Ink strokes carry no text and are collapsed to
+one entry per page.  The document's own link annotations are ignored."
+  (require 'pdf-info)
+  (let (marks ink-pages)
+    (dolist (a (pdf-info-getannots nil file))
+      (let* ((type (cdr (assq 'type a)))
+             (page (cdr (assq 'page a)))
+             (edges (cdr (assq 'markup-edges a)))
+             (contents (cdr (assq 'contents a)))
+             (note (unless (string-empty-p (string-trim (or contents "")))
+                     (string-trim contents))))
+        (cond
+         ((memq type '(highlight underline squiggly strike-out))
+          (push (list :page page :type type :note note
+                      :text (string-trim
+                             (replace-regexp-in-string
+                              "[ \t\n\r]+" " "
+                              (mapconcat (lambda (e) (pdf-info-gettext page e nil file))
+                                         edges " "))))
+                marks))
+         ((eq type 'ink)
+          (unless (assq page ink-pages)
+            (push (cons page note) ink-pages))))))
+    (dolist (p ink-pages)
+      (push (list :page (car p) :type 'ink :text nil :note (cdr p)) marks))
+    (sort (nreverse marks)
+          (lambda (x y) (< (plist-get x :page) (plist-get y :page))))))
+
+(defun a3madkour/boox--annotation-summary (marks)
+  "Human-readable count of MARKS, split by kind."
+  (let ((h (seq-count (lambda (m) (plist-get m :text)) marks))
+        (i (seq-count (lambda (m) (eq (plist-get m :type) 'ink)) marks)))
+    (cond ((and (zerop h) (zerop i)) "no annotations found")
+          ((zerop i) (format "%d highlight%s" h (if (= h 1) "" "s")))
+          ((zerop h) (format "handwriting on %d page%s" i (if (= i 1) "" "s")))
+          (t (format "%d highlight%s + handwriting on %d page%s"
+                     h (if (= h 1) "" "s") i (if (= i 1) "" "s"))))))
+
 (defun a3madkour/boox--status-line (candidate)
   "One display line for CANDIDATE."
   (pcase (plist-get candidate :status)
     ('ready (format "→ key: %s  %s"
                     (plist-get candidate :key)
                     (if (eq (plist-get candidate :kind) 'pdf)
-                        "annotated PDF"
+                        (a3madkour/boox--annotation-summary
+                         (a3madkour/boox--pdf-annotations (plist-get candidate :file)))
                       (format "%d highlights parsed"
                               (length (a3madkour/boox--parse-highlights
                                        (a3madkour/boox--file-contents
@@ -2454,8 +2563,10 @@ Returns the destination path, or nil when the source cannot be resolved."
 
 (defun a3madkour/boox--insert-highlights (key highlights)
   "Insert HIGHLIGHTS into KEY's ref note under a `Tablet Highlights' heading.
-Existing content under that heading is replaced, so re-importing a longer
-export supersedes the shorter one instead of duplicating it."
+Existing content under that heading is replaced, so re-importing after more
+reading supersedes the earlier pass instead of duplicating it.  Entries
+without text are handwriting: they get a heading and a `NOTER_PAGE' so they
+are still clickable, but no quoted body."
   (with-current-buffer (find-file-noselect (a3madkour/boox--note-for-key key))
     (org-with-wide-buffer
      (goto-char (point-min))
@@ -2468,19 +2579,28 @@ export supersedes the shorter one instead of duplicating it."
        (unless (bolp) (insert "\n")))
      (insert "* Tablet Highlights\n")
      (dolist (h highlights)
-       (insert (format "** %s\n" (truncate-string-to-width
-                                 (plist-get h :text) 70 nil nil "…")))
-       (when (plist-get h :page)
-         (insert (format ":PROPERTIES:\n:NOTER_PAGE: %d\n:END:\n" (plist-get h :page))))
-       (insert (format "%s\n" (plist-get h :text)))
-       (when (plist-get h :note)
-         (insert (format "\n%s\n" (plist-get h :note))))
-       (insert "\n"))
+       (let ((text (plist-get h :text))
+             (page (plist-get h :page)))
+         (insert (format "** %s\n"
+                         (if text
+                             (truncate-string-to-width text 70 nil nil "…")
+                           (format "Handwritten note — page %s" page))))
+         (when page
+           (insert (format ":PROPERTIES:\n:NOTER_PAGE: %d\n:END:\n" page)))
+         (when text (insert (format "%s\n" text)))
+         (when (plist-get h :note)
+           (insert (format "\n%s\n" (plist-get h :note))))
+         (insert "\n")))
      (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
      (save-buffer))))
 
 (defun a3madkour/boox-import-execute ()
-  "File every selected candidate, then archive the consumed exports."
+  "File every selected candidate and record what was imported.
+Annotated PDFs are copied into the library beside their original but are
+deliberately left in the reading directory: that file is the live copy on
+the tablet, and moving it would delete the paper mid-read.  Re-import is
+prevented instead by recording the imported content hash on the ref note,
+so embedding more annotations later makes the file importable again."
   (interactive)
   (unless (file-directory-p a3madkour/boox-archive-directory)
     (make-directory a3madkour/boox-archive-directory t))
@@ -2493,11 +2613,16 @@ export supersedes the shorter one instead of duplicating it."
         (pcase (plist-get c :kind)
           ('pdf
            (if-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
-               (progn (push (format "%s → %s" key (abbreviate-file-name dest)) results)
-                      (rename-file file (expand-file-name
-                                         (file-name-nondirectory file)
-                                         a3madkour/boox-archive-directory)
-                                   t))
+               (let ((marks (a3madkour/boox--pdf-annotations file)))
+                 (when marks (a3madkour/boox--insert-highlights key marks))
+                 (with-current-buffer (find-file-noselect
+                                       (a3madkour/boox--note-for-key key))
+                   (org-entry-put (point-min) "BOOX_IMPORTED_SHA"
+                                  (a3madkour/boox--file-sha256 file))
+                   (save-buffer))
+                 (push (format "%s → %s, %s" key (abbreviate-file-name dest)
+                               (a3madkour/boox--annotation-summary marks))
+                       results))
              (push (format "%s → SKIPPED, source unresolved" key) results)))
           ('text
            (let ((highlights (a3madkour/boox--parse-highlights

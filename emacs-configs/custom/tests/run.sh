@@ -6,6 +6,10 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# boox-core.el is tangled from config.org. A stale .elc silently shadows it,
+# because `require' prefers byte-code even when it is older than the source.
+rm -f boox-core.elc
+
 LOAD_ARGS=(-L tests -L .)
 for f in tests/test-helpers.el \
          tests/test-pure.el \
