@@ -2362,6 +2362,17 @@ Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
             (cond
              ((string-match-p "sync-conflict" name) nil)
              ((file-directory-p f) nil)
+             ;; A pushed PDF whose library original cannot be resolved is
+             ;; reported rather than skipped: silently dropping it looks
+             ;; identical to "nothing to import" and hides the real fault,
+             ;; which is usually that citar has not parsed the bibliography
+             ;; yet in this session.
+             ((and (string= ext "pdf")
+                   key
+                   (null (a3madkour/boox--reading-file-source f)))
+              (push (list :file f :key key :kind 'pdf
+                          :status 'source-unresolved :selected nil)
+                    candidates))
              ;; A pushed PDF only becomes a candidate once it differs from the
              ;; library original, i.e. once NeoReader has embedded annotations
              ;; into it.  Untouched pushed files are still being read.
@@ -2392,13 +2403,28 @@ Each plist has :file, :key, :kind (`pdf' or `text'), :status and :selected."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'a3madkour/boox-import-toggle)
     (define-key map (kbd "x")   #'a3madkour/boox-import-execute)
-    (define-key map (kbd "g")   #'a3madkour/boox-import)
+    (define-key map (kbd "r")   #'a3madkour/boox-import)
     (define-key map (kbd "q")   #'quit-window)
     map)
   "Keymap for `a3madkour/boox-import-mode'.")
 
 (define-derived-mode a3madkour/boox-import-mode special-mode "Boox-Import"
   "Review buffer for pending Boox imports.")
+
+;; `special-mode' derivatives start in motion state under evil-collection, and
+;; motion state shadows the plain bindings above.  Refresh is on `r' rather
+;; than `g' because `g' is a prefix in motion state (gg, gj, ...).
+(with-eval-after-load 'evil
+  (evil-define-key 'motion a3madkour/boox-import-mode-map
+    (kbd "RET") #'a3madkour/boox-import-toggle
+    (kbd "x")   #'a3madkour/boox-import-execute
+    (kbd "r")   #'a3madkour/boox-import
+    (kbd "q")   #'quit-window)
+  (evil-define-key 'normal a3madkour/boox-import-mode-map
+    (kbd "RET") #'a3madkour/boox-import-toggle
+    (kbd "x")   #'a3madkour/boox-import-execute
+    (kbd "r")   #'a3madkour/boox-import
+    (kbd "q")   #'quit-window))
 
 (defun a3madkour/boox--pdf-annotations (file)
   "Return the user's annotations in FILE as a page-ordered list of plists.
@@ -2456,7 +2482,10 @@ one entry per page.  The document's own link annotations are ignored."
                                        (a3madkour/boox--file-contents
                                         (plist-get candidate :file))))))))
     ('no-key "→ no key in filename  (left in place)")
-    ('already-imported "→ already imported  (left in place)")))
+    ('already-imported "→ already imported  (left in place)")
+    ('source-unresolved
+     (format "→ key: %s  CANNOT RESOLVE LIBRARY FILE (is citar loaded?)"
+             (plist-get candidate :key)))))
 
 (defun a3madkour/boox--render ()
   "Redraw the *Boox Import* buffer from `a3madkour/boox--candidates'."
@@ -2471,7 +2500,7 @@ one entry per page.  The document's own link annotations are ignored."
                                 (file-name-nondirectory (plist-get c :file))
                                 (a3madkour/boox--status-line c)))
              (put-text-property (line-beginning-position -1) (point) 'boox-index i))
-    (insert "\n RET toggle   x execute   g refresh   q abort\n")
+    (insert "\n RET toggle   x execute   r refresh   q abort\n")
     (goto-char (point-min))))
 
 (defun a3madkour/boox-import-toggle ()
