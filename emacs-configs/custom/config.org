@@ -2689,6 +2689,42 @@ so embedding more annotations later makes the file importable again."
 #+end_src
 
 #+begin_src emacs-lisp
+(defun a3madkour/boox--reading-file-for-key (key)
+  "Return the reading-directory file pushed for KEY, or nil."
+  (let ((dir (file-name-as-directory a3madkour/boox-reading-directory)))
+    (when (file-directory-p dir)
+      (when-let ((name (seq-find
+                        (lambda (f) (equal (a3madkour/boox--key-from-filename f) key))
+                        (directory-files dir nil "\\`[^.]" t))))
+        (expand-file-name name dir)))))
+
+(defun a3madkour/boox-refresh-document ()
+  "Re-copy this note's annotated PDF from the tablet, without importing.
+Use after embedding more handwriting on the Boox when you do not want the
+highlights re-extracted.  `BOOX_IMPORTED_SHA' is deliberately left alone,
+so the file still appears in `a3madkour/boox-import' if you later decide
+you do want its highlights."
+  (interactive)
+  (let* ((key (or (org-entry-get (point-min) "BOOX_KEY")
+                  (and (buffer-file-name) (file-name-base (buffer-file-name)))))
+         (dest (org-entry-get (point-min) "ANNOTATED_DOCUMENT"))
+         (src (and key (a3madkour/boox--reading-file-for-key key))))
+    (cond
+     ((null key) (user-error "Cannot determine the citekey for this note"))
+     ((null dest) (user-error "No :ANNOTATED_DOCUMENT: yet — run boox-import first"))
+     ((null src) (user-error "No file for %s in %s — has it been pushed?"
+                             key a3madkour/boox-reading-directory))
+     ((not (a3madkour/boox--annotated-p src dest))
+      (message "Already current: %s" (file-name-nondirectory dest)))
+     (t
+      (copy-file src dest t)
+      (when-let ((buf (find-buffer-visiting dest)))
+        (with-current-buffer buf (revert-buffer t t t)))
+      (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
+      (save-buffer)
+      (message "Refreshed %s from tablet (highlights unchanged; still importable)"
+               (file-name-nondirectory dest))))))
+
 (defun a3madkour/boox-toggle-noter-document ()
   "Swap :NOTER_DOCUMENT: between the original and the annotated copy."
   (interactive)
@@ -4910,6 +4946,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3madkour/boox-import :which-key "import annotations")
  "zbt"
  '(a3madkour/boox-toggle-noter-document :which-key "toggle annotated/original")
+ "zbr"
+ '(a3madkour/boox-refresh-document :which-key "refresh doc from tablet")
 
  ;;notes stuff 'n'
  "n"
