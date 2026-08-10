@@ -2573,22 +2573,41 @@ one entry per page.  The document's own link annotations are ignored."
    (file-name-directory source)))
 
 (defun a3madkour/boox--file-annotated-pdf (key file)
-  "Copy annotated export FILE beside KEY's source and record the properties.
-Returns the destination path, or nil when the source cannot be resolved."
+  "Copy annotated FILE into the library beside KEY's original.
+Returns the destination path, or nil when the source cannot be resolved.
+Deliberately writes no properties: creating the ref note can rewrite it
+wholesale (`a3madkour/citar-org-format-note' erases the buffer), so every
+property is written in one final pass by `a3madkour/boox--record-documents'
+after the note is settled."
   (when-let* ((source (a3madkour/boox--source-for-key key))
               (dest (a3madkour/boox--annotated-destination source)))
     (when (or (not (file-exists-p dest))
               (y-or-n-p (format "Overwrite existing %s? "
                                 (file-name-nondirectory dest))))
       (copy-file file dest t)
-      (with-current-buffer (find-file-noselect (a3madkour/boox--note-for-key key))
-        (goto-char (point-min))
-        (org-entry-put nil "ORIGINAL_DOCUMENT" source)
-        (org-entry-put nil "ANNOTATED_DOCUMENT" dest)
-        (org-entry-put nil "NOTER_DOCUMENT" dest)
-        (org-entry-put nil "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
-        (save-buffer))
       dest)))
+
+(defun a3madkour/boox--record-documents (key source dest sha)
+  "Point KEY's ref note at DEST, remembering SOURCE and SHA.
+Run last, so nothing downstream can rewrite the note over these values.
+Signals a `user-error' if the properties do not survive the save, rather
+than reporting a success that did not happen."
+  (let ((note (a3madkour/boox--note-for-key key)))
+    (with-current-buffer (find-file-noselect note)
+      (org-entry-put (point-min) "ORIGINAL_DOCUMENT" source)
+      (org-entry-put (point-min) "ANNOTATED_DOCUMENT" dest)
+      (org-entry-put (point-min) "NOTER_DOCUMENT" dest)
+      (org-entry-put (point-min) "BOOX_IMPORTED_SHA" sha)
+      (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
+      (save-buffer))
+    ;; Re-read from disk: a stale buffer elsewhere can silently win the write.
+    (with-temp-buffer
+      (insert-file-contents note)
+      (goto-char (point-min))
+      (unless (search-forward (concat ":NOTER_DOCUMENT: " dest) nil t)
+        (user-error "Boox: wrote %s but NOTER_DOCUMENT did not stick in %s"
+                    (file-name-nondirectory dest) (file-name-nondirectory note))))
+    note))
 
 (defun a3madkour/boox--insert-highlights (key highlights)
   "Insert HIGHLIGHTS into KEY's ref note under a `Tablet Highlights' heading.
@@ -2643,12 +2662,13 @@ so embedding more annotations later makes the file importable again."
           ('pdf
            (if-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
                (let ((marks (a3madkour/boox--pdf-annotations file)))
+                 ;; Highlights first: inserting them may create the ref note,
+                 ;; and note creation rewrites the file wholesale.  Properties
+                 ;; go last so nothing can clobber them.
                  (when marks (a3madkour/boox--insert-highlights key marks))
-                 (with-current-buffer (find-file-noselect
-                                       (a3madkour/boox--note-for-key key))
-                   (org-entry-put (point-min) "BOOX_IMPORTED_SHA"
-                                  (a3madkour/boox--file-sha256 file))
-                   (save-buffer))
+                 (a3madkour/boox--record-documents
+                  key (a3madkour/boox--source-for-key key) dest
+                  (a3madkour/boox--file-sha256 file))
                  (push (format "%s → %s, %s" key (abbreviate-file-name dest)
                                (a3madkour/boox--annotation-summary marks))
                        results))
