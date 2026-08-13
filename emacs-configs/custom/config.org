@@ -2666,6 +2666,25 @@ are still clickable, but no quoted body."
      (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
      (save-buffer))))
 
+(defun a3madkour/boox--import-pdf (key file)
+  "Import annotated FILE for KEY into the library and the ref note.
+Returns a summary string, or nil when the copy was declined — either
+because the source could not be resolved or because the annotation-loss
+guard was refused.  Shared by `a3madkour/boox-import-execute' and
+`a3madkour/boox-retire-document' so there is one implementation of what
+importing a PDF means."
+  (when-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
+    (let ((marks (a3madkour/boox--pdf-annotations file)))
+      ;; Highlights first: inserting them may create the ref note, and note
+      ;; creation rewrites the file wholesale.  Properties go last so nothing
+      ;; can clobber them.
+      (when marks (a3madkour/boox--insert-highlights key marks))
+      (a3madkour/boox--record-documents
+       key (a3madkour/boox--source-for-key key) dest
+       (a3madkour/boox--file-sha256 file))
+      (format "%s → %s, %s" key (abbreviate-file-name dest)
+              (a3madkour/boox--annotation-summary marks)))))
+
 (defun a3madkour/boox-import-execute ()
   "File every selected candidate and record what was imported.
 Annotated PDFs are copied into the library beside their original but are
@@ -2684,19 +2703,9 @@ so embedding more annotations later makes the file importable again."
             (file (plist-get c :file)))
         (pcase (plist-get c :kind)
           ('pdf
-           (if-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
-               (let ((marks (a3madkour/boox--pdf-annotations file)))
-                 ;; Highlights first: inserting them may create the ref note,
-                 ;; and note creation rewrites the file wholesale.  Properties
-                 ;; go last so nothing can clobber them.
-                 (when marks (a3madkour/boox--insert-highlights key marks))
-                 (a3madkour/boox--record-documents
-                  key (a3madkour/boox--source-for-key key) dest
-                  (a3madkour/boox--file-sha256 file))
-                 (push (format "%s → %s, %s" key (abbreviate-file-name dest)
-                               (a3madkour/boox--annotation-summary marks))
-                       results))
-             (push (format "%s → SKIPPED, source unresolved" key) results)))
+           (push (or (a3madkour/boox--import-pdf key file)
+                     (format "%s → SKIPPED, source unresolved" key))
+                 results))
           ('text
            (let ((highlights (a3madkour/boox--parse-highlights
                               (a3madkour/boox--file-contents file))))
