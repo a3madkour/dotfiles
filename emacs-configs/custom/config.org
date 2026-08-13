@@ -1933,6 +1933,22 @@ writing an empty highlight section."
 (require 'ert)
 (require 'boox-core)
 
+;; Config-side Boox functions live in the generated config.el, which cannot be
+;; loaded wholesale in batch.  Evaluate just the boox forms out of it.
+(let ((cfg (expand-file-name "~/emacs-configs/custom/config.el")))
+  (when (file-readable-p cfg)
+    (with-temp-buffer
+      (insert-file-contents cfg)
+      (goto-char (point-min))
+      (condition-case nil
+          (while t
+            (let ((form (read (current-buffer))))
+              (when (and (consp form)
+                         (memq (car form) '(defun defvar defcustom defconst))
+                         (string-match-p "boox" (format "%s" (cadr form))))
+                (ignore-errors (eval form t)))))
+        (end-of-file nil)))))
+
 (ert-deftest boox-normalize-macos-path ()
   (should (equal (a3madkour/normalize-library-path
                   "/Users/a3madkour/Sync/Zotero/storage/AB12/paper.pdf")
@@ -2137,6 +2153,31 @@ would file pristine push output as an annotated version."
     (should-not (equal (a3madkour/boox--file-sha256 a)
                        (a3madkour/boox--file-sha256 c)))
     (should (null (a3madkour/boox--file-sha256 "/nonexistent/x")))))
+
+(ert-deftest boox-note-key-prefers-boox-key-property ()
+  (let ((f (make-temp-file "boox-note-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f
+            (insert ":PROPERTIES:\n:BOOX_KEY: rules-of-play\n:END:\n#+title: X\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (equal (a3madkour/boox--note-key) "rules-of-play"))))
+      (ignore-errors (delete-file f)))))
+
+(ert-deftest boox-note-key-falls-back-to-filename ()
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (f (expand-file-name "smith2020.org" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert "#+title: X\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (equal (a3madkour/boox--note-key) "smith2020"))))
+      (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-note-key-nil-without-a-file ()
+  (with-temp-buffer
+    (org-mode)
+    (should (null (a3madkour/boox--note-key)))))
 #+end_src
 ** Annotated-file recognition
 NeoReader's "Embed to PDF" writes annotations *into the pushed file itself* —
@@ -2731,6 +2772,14 @@ so embedding more annotations later makes the file importable again."
                         (directory-files dir nil "\\`[^.]" t))))
         (expand-file-name name dir)))))
 
+(defun a3madkour/boox--note-key ()
+  "Return the Boox key for the current ref note, or nil.
+Books carry an explicit `:BOOX_KEY:'; papers are named after their citekey,
+so the filename base is the key."
+  (or (org-entry-get (point-min) "BOOX_KEY")
+      (when (buffer-file-name)
+        (file-name-base (buffer-file-name)))))
+
 (defun a3madkour/boox-refresh-document ()
   "Re-copy this note's annotated PDF from the tablet, without importing.
 Use after embedding more handwriting on the Boox when you do not want the
@@ -2738,8 +2787,7 @@ highlights re-extracted.  `BOOX_IMPORTED_SHA' is deliberately left alone,
 so the file still appears in `a3madkour/boox-import' if you later decide
 you do want its highlights."
   (interactive)
-  (let* ((key (or (org-entry-get (point-min) "BOOX_KEY")
-                  (and (buffer-file-name) (file-name-base (buffer-file-name)))))
+  (let* ((key (a3madkour/boox--note-key))
          (dest (org-entry-get (point-min) "ANNOTATED_DOCUMENT"))
          (src (and key (a3madkour/boox--reading-file-for-key key))))
     (cond
