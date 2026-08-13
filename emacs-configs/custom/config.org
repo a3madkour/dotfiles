@@ -4065,6 +4065,19 @@ The =setq= block comments (=use native major-mode indentation=, =we do this ours
                                candidates)))
       (message "No in-progress notes found"))))
 
+(defun a3madkour/boox--pipeline-advanced (from to)
+  "Retire the tablet copy when leaving the highlighting stage.
+Policy only: FROM and TO decide *whether* to retire, while
+`a3madkour/boox-retire-document' decides *how*.  Failures are reported but
+never re-signalled — the pipeline stage is a statement about your own
+workflow, and a sleeping tablet or an unreachable file should not stop you
+advancing a note."
+  (when (and (equal from "highlighting") (equal to "ref-notes"))
+    (condition-case err
+        (a3madkour/boox-retire-document)
+      (error (message "Boox retire failed (PROGRESS still advanced): %s"
+                      (error-message-string err))))))
+
 (defun a3madkour/org-roam-advance-pipeline ()
   "Advance the PROGRESS property to the next stage."
   (interactive)
@@ -4077,6 +4090,7 @@ The =setq= block comments (=use native major-mode indentation=, =we do this ours
     (save-excursion
       (goto-char (point-min))
       (org-set-property "PROGRESS" next))
+    (a3madkour/boox--pipeline-advanced current next)
     (message "Progress: %s → %s" current next)))
 
 (defun a3madkour/org-roam-insert-heading-link ()
@@ -5239,6 +5253,8 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3madkour/boox-toggle-noter-document :which-key "toggle annotated/original")
  "zbr"
  '(a3madkour/boox-refresh-document :which-key "refresh doc from tablet")
+ "zbd"
+ '(a3madkour/boox-retire-document :which-key "done — remove from tablet")
 
  ;;notes stuff 'n'
  "n"
