@@ -2178,6 +2178,68 @@ would file pristine push output as an annotated version."
   (with-temp-buffer
     (org-mode)
     (should (null (a3madkour/boox--note-key)))))
+
+(ert-deftest boox-archive-path-returns-readable-annotated-document ()
+  (let* ((pdf (make-temp-file "boox-ann-" nil ".pdf"))
+         (f (make-temp-file "boox-note-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file pdf (insert "pdf"))
+          (with-temp-file f
+            (insert (format ":PROPERTIES:\n:ANNOTATED_DOCUMENT: %s\n:END:\n" pdf)))
+          (with-current-buffer (find-file-noselect f)
+            (should (equal (a3madkour/boox--archive-path) pdf))))
+      (ignore-errors (delete-file pdf))
+      (ignore-errors (delete-file f)))))
+
+(ert-deftest boox-archive-path-nil-when-file-missing ()
+  (let ((f (make-temp-file "boox-note-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f
+            (insert ":PROPERTIES:\n:ANNOTATED_DOCUMENT: /nonexistent/x.pdf\n:END:\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (null (a3madkour/boox--archive-path)))))
+      (ignore-errors (delete-file f)))))
+
+(ert-deftest boox-archive-path-nil-when-property-absent ()
+  (let ((f (make-temp-file "boox-note-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert "#+title: X\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (null (a3madkour/boox--archive-path)))))
+      (ignore-errors (delete-file f)))))
+
+(ert-deftest boox-stale-p-compares-against-recorded-hash ()
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (note (expand-file-name "k1.org" dir))
+         (pdf (make-temp-file "boox-pdf-" nil ".pdf"))
+         (org-ref-notes dir))
+    (unwind-protect
+        (progn
+          (with-temp-file pdf (insert "content"))
+          (let ((sha (a3madkour/boox--file-sha256 pdf)))
+            (with-temp-file note
+              (insert (format ":PROPERTIES:\n:BOOX_IMPORTED_SHA: %s\n:END:\n" sha)))
+            (should-not (a3madkour/boox--stale-p "k1" pdf))
+            (with-temp-file pdf (insert "different content"))
+            (should (a3madkour/boox--stale-p "k1" pdf))))
+      (ignore-errors (delete-file pdf))
+      (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-stale-p-true-when-never-imported ()
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (note (expand-file-name "k2.org" dir))
+         (pdf (make-temp-file "boox-pdf-" nil ".pdf"))
+         (org-ref-notes dir))
+    (unwind-protect
+        (progn
+          (with-temp-file pdf (insert "content"))
+          (with-temp-file note (insert "#+title: X\n"))
+          (should (a3madkour/boox--stale-p "k2" pdf)))
+      (ignore-errors (delete-file pdf))
+      (ignore-errors (delete-directory dir t)))))
 #+end_src
 ** Annotated-file recognition
 NeoReader's "Embed to PDF" writes annotations *into the pushed file itself* —
@@ -2830,6 +2892,26 @@ you do want its highlights."
           (save-buffer)
           (message "NOTER_DOCUMENT → %s"
                    (if (equal next annotated) "annotated" "original")))))))
+#+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox--archive-path ()
+  "Return the current note's `:ANNOTATED_DOCUMENT:' if it is readable.
+Nil means no archive exists, which is the condition retirement refuses on:
+deleting the tablet copy would then destroy the only annotated version."
+  (when-let ((p (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
+    (and (file-readable-p p) p)))
+
+(defun a3madkour/boox--stale-p (key file)
+  "Non-nil when FILE has not been imported into KEY's ref note.
+Compares FILE's hash against the note's `:BOOX_IMPORTED_SHA:'.  A note with
+no recorded hash counts as stale, since nothing has been imported from it."
+  (let* ((note (expand-file-name (concat key ".org") org-ref-notes))
+         (recorded (when (file-exists-p note)
+                     (with-current-buffer (find-file-noselect note)
+                       (org-entry-get (point-min) "BOOX_IMPORTED_SHA")))))
+    (not (and recorded
+              (equal recorded (a3madkour/boox--file-sha256 file))))))
 #+end_src
 * Org
 ** Org-super-agenda
