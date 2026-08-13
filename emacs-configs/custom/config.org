@@ -2240,6 +2240,57 @@ would file pristine push output as an annotated version."
           (should (a3madkour/boox--stale-p "k2" pdf)))
       (ignore-errors (delete-file pdf))
       (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-delete-from-tablet-removes-the-file ()
+  (let ((f (make-temp-file "boox-del-" nil ".pdf")))
+    (with-temp-file f (insert "x"))
+    (should (file-exists-p f))
+    (a3madkour/boox--delete-from-tablet f)
+    (should-not (file-exists-p f))))
+
+(defmacro boox-test--with-queue (content &rest body)
+  "Run BODY with a temp queue.org containing CONTENT, bound via `a3madkour/org-file'."
+  (declare (indent 1))
+  `(let* ((dir (make-temp-file "boox-queue-" t))
+          (qf (expand-file-name "queue.org" dir)))
+     (unwind-protect
+         (progn
+           (with-temp-file qf (insert ,content))
+           (cl-letf (((symbol-function 'a3madkour/org-file)
+                      (lambda (p) (expand-file-name p dir))))
+             ,@body))
+       (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-close-queue-entry-matches-citekey ()
+  (boox-test--with-queue
+      "* TODO Read A :active:toread:\n:PROPERTIES:\n:CITEKEY: smith2020\n:END:\n"
+    (should (= (a3madkour/boox--close-queue-entry "smith2020") 1))
+    (with-temp-buffer
+      (insert-file-contents (a3madkour/org-file "queue.org"))
+      (should (string-match-p "^\\* DONE Read A" (buffer-string)))
+      (should-not (string-match-p ":active:" (buffer-string))))))
+
+(ert-deftest boox-close-queue-entry-matches-boox-key ()
+  (boox-test--with-queue
+      "* TODO Read B :active:toread:\n:PROPERTIES:\n:BOOX_KEY: rules-of-play\n:END:\n"
+    (should (= (a3madkour/boox--close-queue-entry "rules-of-play") 1))))
+
+(ert-deftest boox-close-queue-entry-closes-every-duplicate ()
+  "A leftover :active: duplicate would keep a WIP slot and make push re-stage."
+  (boox-test--with-queue
+      (concat "* TODO Read A :active:toread:\n:PROPERTIES:\n:CITEKEY: smith2020\n:END:\n"
+              "* TODO Read A again :active:toread:\n:PROPERTIES:\n:CITEKEY: smith2020\n:END:\n")
+    (should (= (a3madkour/boox--close-queue-entry "smith2020") 2))))
+
+(ert-deftest boox-close-queue-entry-is-idempotent ()
+  (boox-test--with-queue
+      "* DONE Read A :toread:\n:PROPERTIES:\n:CITEKEY: smith2020\n:END:\n"
+    (should (= (a3madkour/boox--close-queue-entry "smith2020") 0))))
+
+(ert-deftest boox-close-queue-entry-reports-no-match ()
+  (boox-test--with-queue
+      "* TODO Read A :active:toread:\n:PROPERTIES:\n:CITEKEY: other\n:END:\n"
+    (should (= (a3madkour/boox--close-queue-entry "smith2020") 0))))
 #+end_src
 ** Annotated-file recognition
 NeoReader's "Embed to PDF" writes annotations *into the pushed file itself* —
@@ -2912,6 +2963,36 @@ no recorded hash counts as stale, since nothing has been imported from it."
                        (org-entry-get (point-min) "BOOX_IMPORTED_SHA")))))
     (not (and recorded
               (equal recorded (a3madkour/boox--file-sha256 file))))))
+#+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox--delete-from-tablet (file)
+  "Delete FILE from the reading directory, which removes it from the tablet.
+Isolated so the destructive step has a name, happens in exactly one place,
+and can be stubbed in tests.  Syncthing's file versioning on that folder
+retains a local copy."
+  (delete-file file)
+  t)
+
+(defun a3madkour/boox--close-queue-entry (key)
+  "Mark every queue.org entry for KEY as DONE and drop its `:active:' tag.
+Returns the number of entries closed.  Entries already DONE are left alone,
+so this is idempotent.  Every match is closed rather than just the first: a
+duplicate left `:active:' would keep consuming a WIP slot and cause
+`a3madkour/boox-push-queue' to re-stage the file."
+  (let ((closed 0))
+    (with-current-buffer (find-file-noselect (a3madkour/org-file "queue.org"))
+      (org-map-entries
+       (lambda ()
+         (when (and (member key (list (org-entry-get nil "CITEKEY")
+                                      (org-entry-get nil "BOOX_KEY")))
+                    (not (equal (org-get-todo-state) "DONE")))
+           (org-todo "DONE")
+           (org-set-tags (delete "active" (org-get-tags nil t)))
+           (setq closed (1+ closed))))
+       nil 'file)
+      (when (> closed 0) (save-buffer)))
+    closed))
 #+end_src
 * Org
 ** Org-super-agenda
