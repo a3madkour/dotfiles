@@ -3023,7 +3023,7 @@ file in the reading directory it reports and returns."
             (message "%s: import declined — file left on the tablet" key)
           (a3madkour/boox--delete-from-tablet file)
           (let ((closed (a3madkour/boox--close-queue-entry key)))
-            (message "%s: %s removed from tablet%s"
+            (message "%s: %sremoved from tablet%s"
                      key
                      (if imported "imported and " "")
                      (if (> closed 0)
