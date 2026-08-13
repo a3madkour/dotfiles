@@ -1270,6 +1270,47 @@ Standard activation from the [[https://github.com/lassik/emacs-format-all-the-co
 (use-package gdscript-mode
   :ensure t)
 #+end_src
+**** Signal navigation
+[[file:/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals][godot-signals]] answers "who handles this signal?" by asking a headless Godot
+process rather than by parsing. Godot's wiring lives in two places no single
+tool reports — =[connection]= blocks the editor bakes into =.tscn= files, and
+=.connect()= calls made in GDScript at runtime — and the LSP can see neither
+reliably: it has no =workspace/symbol=, drops references whose receiver type is
+not locally inferable, and reports connections by name rather than by node
+instance.
+
+=:demand t= for the same reason [[*GDScript][gdscript-yasnippets]] needs it. With
+=use-package-always-defer= on and no =:hook= or =:commands=, nothing would ever
+cause this to load — and it must load, because loading is what installs
+=gdscript-mode-hook=.
+
+Demanded at startup rather than =:after gdscript-mode=, deliberately. The
+=:after= form would be a bet that =eval-after-load= fires before the first
+=.gd= buffer runs its mode hook, and if that bet is ever wrong the symptom is
+the feature silently not working in the first file you open — the hardest kind
+of bug to notice, since every later file works. The bet is not worth making:
+=godot-signals.el= is the package's bottom layer, requires nothing but
+=subr-x=, and reaches the client, the xref backend and the view through
+=autoload=, so demanding it costs one small file at startup and nothing else.
+
+Local checkout rather than a remote recipe, since this is unreleased. Opening
+any =.gd= file in a Godot project starts a daemon for that project half a
+second later, on an idle timer so the open never blocks; =M-x
+godot-signals-shutdown-all= stops them, and they die with Emacs.
+
+Worth knowing before pointing this at your own work: **every scan instantiates
+the affected scenes and runs their =_ready()=**, which is the only way to
+observe code-made connections. Game code therefore executes in the background
+when you save. =godot-signals-scan-exclude= prunes scenes you would rather it
+left alone.
+
+Under evil, =gd= reaches this and =M-.= does not — evil binds =M-.= to
+=evil-repeat-pop-next= in normal state.
+#+begin_src emacs-lisp
+(use-package godot-signals
+  :load-path "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp"
+  :demand t)
+#+end_src
 Snippets for GDScript 2.0, verified to compile against the installed Godot binary. Straight pulls the elisp and the snippet tables from the
 [[https://github.com/a3madkour/gdscript-yasnippets][gdscript-yasnippets]] repo over SSH (the repo is private, so =:protocol ssh=). The
 loader appends its directory to =yas-snippet-dirs=, so anything in
@@ -1777,6 +1818,15 @@ second Syncthing folder for it and append that path here."
 (defcustom a3madkour/boox-supported-extensions '("pdf" "epub")
   "Extensions NeoReader is known to open.  Others are reported, not pushed."
   :type '(repeat string)
+  :group 'a3madkour)
+
+(defcustom a3madkour/boox-confirm-retire t
+  "When non-nil, ask before deleting a document from the Boox.
+Retirement is recoverable — the annotated copy lives in the library and
+Syncthing keeps versions of the reading folder — but the deletion lands on
+a device you are probably not looking at, so it asks by default.  Set to
+nil once the workflow is habitual."
+  :type 'boolean
   :group 'a3madkour)
 #+end_src
 ** Core helpers
@@ -2974,6 +3024,16 @@ retains a local copy."
   (delete-file file)
   t)
 
+(defun a3madkour/boox--confirm-retire-p (file archive)
+  "Ask before deleting FILE from the tablet, naming the ARCHIVE that survives.
+Returns t immediately when `a3madkour/boox-confirm-retire' is nil.  The
+prompt names the archive because the question worth answering is not
+\"delete?\" but \"delete, given this copy remains?\"."
+  (or (not a3madkour/boox-confirm-retire)
+      (y-or-n-p (format "Remove %s from the Boox?  (keeping %s) "
+                        (file-name-nondirectory file)
+                        (file-name-nondirectory archive)))))
+
 (defun a3madkour/boox--close-queue-entry (key)
   "Mark every queue.org entry for KEY as DONE and drop its `:active:' tag.
 Returns the number of entries closed.  Entries already DONE are left alone,
@@ -3017,10 +3077,18 @@ file in the reading directory it reports and returns."
      (t
       ;; Staleness is captured once: importing rewrites the recorded hash, so a
       ;; second call would answer a different question than the first.
-      (let* ((stale (a3madkour/boox--stale-p key file))
+      (let* ((archive (a3madkour/boox--archive-path))
+             (stale (a3madkour/boox--stale-p key file))
              (imported (when stale (a3madkour/boox--import-pdf key file))))
-        (if (and stale (null imported))
-            (message "%s: import declined — file left on the tablet" key)
+        (cond
+         ((and stale (null imported))
+          (message "%s: import declined — file left on the tablet" key))
+         ;; Asked after any import, so declining still keeps the annotations
+         ;; that were just pulled in; only the deletion is refused.
+         ((not (a3madkour/boox--confirm-retire-p file archive))
+          (message "%s: kept on the tablet%s" key
+                   (if imported " (annotations imported)" "")))
+         (t
           (a3madkour/boox--delete-from-tablet file)
           (let ((closed (a3madkour/boox--close-queue-entry key)))
             (message "%s: %sremoved from tablet%s"
@@ -3029,7 +3097,7 @@ file in the reading directory it reports and returns."
                      (if (> closed 0)
                          (format ", %d queue entr%s closed" closed
                                  (if (= closed 1) "y" "ies"))
-                       " (no queue entry found)")))))))))
+                       " (no queue entry found)"))))))))))
 #+end_src
 * Org
 ** Org-super-agenda
