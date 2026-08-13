@@ -2994,6 +2994,43 @@ duplicate left `:active:' would keep consuming a WIP slot and cause
       (when (> closed 0) (save-buffer)))
     closed))
 #+end_src
+
+#+begin_src emacs-lisp
+(defun a3madkour/boox-retire-document ()
+  "Finish with this note's paper on the tablet: import, delete, close queue.
+Imports any annotations embedded since the last import, deletes the file
+from the reading directory (which removes it from the Boox), and marks the
+reading-queue entry DONE.
+
+Refuses when no readable `:ANNOTATED_DOCUMENT:' exists, because the tablet
+copy would then be the only annotated version.  Safe to run twice: with no
+file in the reading directory it reports and returns."
+  (interactive)
+  (let* ((key (or (a3madkour/boox--note-key)
+                  (user-error "Not in a ref note — cannot determine the key")))
+         (file (a3madkour/boox--reading-file-for-key key)))
+    (cond
+     ((null file)
+      (message "%s: nothing on the tablet (already retired)" key))
+     ((null (a3madkour/boox--archive-path))
+      (user-error "%s has no readable :ANNOTATED_DOCUMENT: — import before retiring" key))
+     (t
+      ;; Staleness is captured once: importing rewrites the recorded hash, so a
+      ;; second call would answer a different question than the first.
+      (let* ((stale (a3madkour/boox--stale-p key file))
+             (imported (when stale (a3madkour/boox--import-pdf key file))))
+        (if (and stale (null imported))
+            (message "%s: import declined — file left on the tablet" key)
+          (a3madkour/boox--delete-from-tablet file)
+          (let ((closed (a3madkour/boox--close-queue-entry key)))
+            (message "%s: %s removed from tablet%s"
+                     key
+                     (if imported "imported and " "")
+                     (if (> closed 0)
+                         (format ", %d queue entr%s closed" closed
+                                 (if (= closed 1) "y" "ies"))
+                       " (no queue entry found)")))))))))
+#+end_src
 * Org
 ** Org-super-agenda
 #+begin_src emacs-lisp
