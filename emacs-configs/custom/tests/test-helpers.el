@@ -31,6 +31,13 @@
 (defvar org-state nil)
 (defvar org-note-abort nil)
 
+;; org-ref-notes is set with `setq' in config.org and never defvar'd, so it is
+;; not a special variable. Without this declaration a test `let' binding
+;; creates a plain lexical binding rather than a dynamic one, invisible to the
+;; boox functions that read it as a free variable -- same class of issue as
+;; org-state above.
+(defvar org-ref-notes nil)
+
 ;; ---- Loader: extract a3madkour defs from config.org ----
 (defvar a3madkour-test/config-org-path
   (expand-file-name "../config.org"
