@@ -2715,7 +2715,15 @@ you do want its highlights."
      ((null src) (user-error "No file for %s in %s — has it been pushed?"
                              key a3madkour/boox-reading-directory))
      ((not (a3madkour/boox--annotated-p src dest))
-      (message "Already current: %s" (file-name-nondirectory dest)))
+      ;; The tablet's copy is byte-identical, which almost always means the
+      ;; annotations are still only in NeoReader's database.  Say so: "already
+      ;; current" reads as "nothing changed on the tablet", which is wrong and
+      ;; sends you looking at sync instead of at the missing embed step.
+      (message "%s is identical to the tablet copy (last written %s). Run \"Embed to PDF\" on the Boox — annotations stay in its database until you do."
+               (file-name-nondirectory dest)
+               (format-time-string
+                "%b %e %H:%M"
+                (file-attribute-modification-time (file-attributes src)))))
      (t
       (copy-file src dest t)
       (when-let ((buf (find-buffer-visiting dest)))
