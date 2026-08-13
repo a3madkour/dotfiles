@@ -2459,6 +2459,29 @@ one entry per page.  The document's own link annotations are ignored."
     (sort (nreverse marks)
           (lambda (x y) (< (plist-get x :page) (plist-get y :page))))))
 
+(defun a3madkour/boox--user-annotation-count (file)
+  "Number of user annotations in FILE, ignoring the document's own links."
+  (require 'pdf-info)
+  (condition-case nil
+      (seq-count (lambda (a) (not (eq (cdr (assq 'type a)) 'link)))
+                 (pdf-info-getannots nil file))
+    (error 0)))
+
+(defun a3madkour/boox--confirm-annotation-loss (src dest)
+  "Return non-nil if SRC may overwrite DEST, asking when SRC has fewer marks.
+Boox can strip every annotation from a document: re-embedding after deleting
+one in NeoReader has been observed to write an update that unlinks them all.
+Overwriting the library copy with such a file silently destroys the record,
+so a reduction is never applied without asking."
+  (let ((new (a3madkour/boox--user-annotation-count src))
+        (old (and (file-exists-p dest)
+                  (a3madkour/boox--user-annotation-count dest))))
+    (or (null old)
+        (>= new old)
+        (yes-or-no-p
+         (format "WARNING: tablet copy has %d annotation(s), current copy has %d. Overwrite and lose %d? "
+                 new old (- old new))))))
+
 (defun a3madkour/boox--annotation-summary (marks)
   "Human-readable count of MARKS, split by kind."
   (let ((h (seq-count (lambda (m) (plist-get m :text)) marks))
@@ -2581,9 +2604,10 @@ property is written in one final pass by `a3madkour/boox--record-documents'
 after the note is settled."
   (when-let* ((source (a3madkour/boox--source-for-key key))
               (dest (a3madkour/boox--annotated-destination source)))
-    (when (or (not (file-exists-p dest))
-              (y-or-n-p (format "Overwrite existing %s? "
-                                (file-name-nondirectory dest))))
+    (when (and (a3madkour/boox--confirm-annotation-loss file dest)
+               (or (not (file-exists-p dest))
+                   (y-or-n-p (format "Overwrite existing %s? "
+                                     (file-name-nondirectory dest)))))
       (copy-file file dest t)
       dest)))
 
@@ -2724,6 +2748,8 @@ you do want its highlights."
                (format-time-string
                 "%b %e %H:%M"
                 (file-attribute-modification-time (file-attributes src)))))
+     ((not (a3madkour/boox--confirm-annotation-loss src dest))
+      (message "Refresh cancelled — library copy left intact"))
      (t
       (copy-file src dest t)
       (when-let ((buf (find-buffer-visiting dest)))
