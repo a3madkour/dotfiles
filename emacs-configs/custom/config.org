@@ -1293,6 +1293,12 @@ of bug to notice, since every later file works. The bet is not worth making:
 =subr-x=, and reaches the client, the xref backend and the view through
 =autoload=, so demanding it costs one small file at startup and nothing else.
 
+=:straight nil= is not optional here. [[file:init.el::straight-use-package-by-default][=straight-use-package-by-default= is =t=]],
+so without it =use-package= hands the name to straight, straight looks for a
+recipe called =godot-signals= in MELPA and friends, finds nothing, and Emacs
+fails to start — which is exactly what happened the first time this block was
+written. =:load-path= alone does not opt out; the package manager still runs.
+
 Local checkout rather than a remote recipe, since this is unreleased. Opening
 any =.gd= file in a Godot project starts a daemon for that project half a
 second later, on an idle timer so the open never blocks; =M-x
@@ -1306,10 +1312,25 @@ left alone.
 
 Under evil, =gd= reaches this and =M-.= does not — evil binds =M-.= to
 =evil-repeat-pop-next= in normal state.
+
+Each =signal= declaration in a =.gd= buffer also gets a gutter marker: Godot's
+own accent blue where something is connected to it, and the pink Godot paints
+the =signal= keyword itself where nothing is. =godot-signals-markers-idle-delay=
+is how long after your last keystroke the markers are re-placed, and =0= means
+after every keystroke burst. Affordable rather than reckless — measured, one
+full re-placement is 0.05 ms on a 68-line script and 0.35 ms on an implausible
+2000-line one, against a ~16 ms frame. The delay only ever existed to coalesce
+continuous typing, never to control cost.
+
+The markers are the one part of this package that changes how your own file
+looks; =godot-signals-markers= to =nil= turns them off without giving up
+navigation.
 #+begin_src emacs-lisp
 (use-package godot-signals
+  :straight nil
   :load-path "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp"
-  :demand t)
+  :demand t
+  :custom (godot-signals-markers-idle-delay 0))
 #+end_src
 Snippets for GDScript 2.0, verified to compile against the installed Godot binary. Straight pulls the elisp and the snippet tables from the
 [[https://github.com/a3madkour/gdscript-yasnippets][gdscript-yasnippets]] repo over SSH (the repo is private, so =:protocol ssh=). The
