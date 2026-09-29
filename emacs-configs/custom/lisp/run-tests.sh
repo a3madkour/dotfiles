@@ -25,6 +25,12 @@ fi
 # to load-path, so any package the user has installed via straight (yaml.el
 # for the publish library, etc.) is loadable in this batch session.
 exec emacs --batch \
+  `# Emacs 31.1 on this macOS cannot native-compile subr trampolines:`\
+  `# clang rejects -mmacosx-version-min=18.0, so libgccjit fails and EVERY`\
+  `# test that mocks call-process/make-process dies with native-compiler-error.`\
+  `# That was 54 of 55 failures before this line. Trampolines are pointless`\
+  `# in a batch test run regardless.`\
+  --eval "(setq native-comp-enable-subr-trampolines nil)" \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \
