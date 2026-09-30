@@ -836,5 +836,72 @@ must read it from the source file and coerce to int."
             (should (equal (alist-get 'date out) (alist-get 'lastmod out)))))
       (delete-file f))))
 
+(ert-deftest a3madkour-pub-frontmatter--works-games-comma-vs-whitespace ()
+  "Review Focus: free-text lists split on comma, slug lists on whitespace."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026")
+                (collaborators . "Alice Example, Bob Example")
+                (tech_stack . "Godot, GDScript")
+                (research_questions . "example-question-one example-question-two"))
+              "/tmp/g.org")))
+    (should (equal (alist-get 'collaborators out) '("Alice Example" "Bob Example")))
+    (should (equal (alist-get 'tech_stack out) '("Godot" "GDScript")))
+    (should (equal (alist-get 'research_questions out)
+                   '("/research/questions/example-question-one/"
+                     "/research/questions/example-question-two/")))
+    (should (equal (alist-get 'year out) 2026))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-bool-coercion ()
+  "hero and featured must emit real booleans, not strings."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (hero . "t") (featured . "t"))
+              "/tmp/m.org")))
+    (should (eq (alist-get 'hero out) t))
+    (should (eq (alist-get 'featured out) t))))
+
+;; Review Focus #1 — every optional absent must produce no keys at all.
+(ert-deftest a3madkour-pub-frontmatter--works-games-minimal-emits-no-empty-keys ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (status . "playable")
+                (game_kind . "jam") (tagline . "T"))
+              "/tmp/g.org")))
+    (dolist (k '(screenshots collaborators tech_stack hero featured
+                 research_questions related_essays related_notes))
+      (should-not (assq k out)))))
+
+;; Review Focus #1, present-but-false variant: `--coerce-bool' maps a false
+;; VALUE to nil the same way it maps an absent key to nil, so a naive
+;; `(setf (alist-get k out) (coerce-bool v))' would leave `(k . nil)' in the
+;; alist when the author explicitly wrote "false" — a leaked empty key that
+;; `works-games-minimal-emits-no-empty-keys' (whose input omits the keys
+;; entirely) cannot catch.
+(ert-deftest a3madkour-pub-frontmatter--works-music-false-bool-deletes-key ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (hero . "false") (featured . "nil"))
+              "/tmp/m.org")))
+    (should-not (assq 'hero out))
+    (should-not (assq 'featured out))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-false-featured-deletes-key ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (featured . "false"))
+              "/tmp/g.org")))
+    (should-not (assq 'featured out))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-screenshots-stay-filenames ()
+  "screenshots split on whitespace but are NOT expanded to site paths."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (screenshots . "a.png b.png"))
+              "/tmp/g.org")))
+    (should (equal (alist-get 'screenshots out) '("a.png" "b.png")))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

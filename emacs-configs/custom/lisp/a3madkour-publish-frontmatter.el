@@ -84,6 +84,10 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
    ((eq section 'works-poetry)
     (a3madkour-pub-frontmatter--normalize-works-poetry raw-alist source-file))
+   ((eq section 'works-games)
+    (a3madkour-pub-frontmatter--normalize-works-games raw-alist source-file))
+   ((eq section 'works-music)
+    (a3madkour-pub-frontmatter--normalize-works-music raw-alist source-file))
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
@@ -573,6 +577,83 @@ in the per-section normalizer or the handler entry point."
       (let ((v (alist-get key out)))
         (when (or (null v) (and (stringp v) (string-empty-p v)))
           (setq out (assq-delete-all key out)))))
+    out))
+
+(defconst a3madkour-pub-frontmatter--works-comma-keys
+  '(collaborators tech_stack made_with)
+  "Works list keys holding free text, split on comma rather than whitespace.
+A collaborator named \"Alice Example\" is one person, not two.")
+
+(defconst a3madkour-pub-frontmatter--works-path-keys
+  '((research_questions . "/research/questions/%s/")
+    (related_essays     . "/essays/%s/")
+    (related_notes      . "/garden/%s/")
+    (related_works      . "/works/%s/"))
+  "Works slug-list keys and the site-path template each expands to.")
+
+(defun a3madkour-pub-frontmatter--split-commas (raw)
+  "Split RAW on commas, trimming each field.  Drops empty fields."
+  (cond
+   ((null raw) nil)
+   ((listp raw) raw)
+   ((stringp raw)
+    (delq nil (mapcar (lambda (s)
+                        (let ((trimmed (string-trim s)))
+                          (unless (string-empty-p trimmed) trimmed)))
+                      (split-string raw "," t))))
+   (t nil)))
+
+(defun a3madkour-pub-frontmatter--normalize-works-common (raw file)
+  "Normalization shared by works-games and works-music."
+  (let ((out (copy-alist raw)))
+    ;; year → integer (check_works_fixtures.py rejects a string).
+    (let ((y (alist-get 'year out)))
+      (when (stringp y) (setf (alist-get 'year out) (string-to-number y))))
+    ;; Free-text lists split on comma.
+    (dolist (k a3madkour-pub-frontmatter--works-comma-keys)
+      (when (assq k out)
+        (let ((v (a3madkour-pub-frontmatter--split-commas (alist-get k out))))
+          (if v (setf (alist-get k out) v) (setq out (assq-delete-all k out))))))
+    ;; Slug lists split on whitespace and expand to site paths.
+    (dolist (cell a3madkour-pub-frontmatter--works-path-keys)
+      (let ((k (car cell)) (tmpl (cdr cell)))
+        (when (assq k out)
+          (let ((slugs (a3madkour-pub-frontmatter--coerce-slug-list (alist-get k out))))
+            (if slugs
+                (setf (alist-get k out)
+                      (mapcar (lambda (s) (format tmpl s)) slugs))
+              (setq out (assq-delete-all k out)))))))
+    ;; featured is a bool on both types.  `--coerce-bool' maps both a false
+    ;; VALUE and (implicitly) an absent key to nil, so a nil coercion result
+    ;; is indistinguishable from "not set" — delete the key rather than
+    ;; write `(featured . nil)', which would render a broken `featured:'
+    ;; line with no value.
+    (when (assq 'featured out)
+      (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'featured out))
+          (setf (alist-get 'featured out) t)
+        (setq out (assq-delete-all 'featured out))))
+    (ignore file)
+    out))
+
+(defun a3madkour-pub-frontmatter--normalize-works-games (raw file)
+  "Normalize a works-games RAW alist.  `screenshots' is a filename list here."
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common raw file)))
+    ;; screenshots: whitespace-split, left as bare filenames (no path expansion).
+    (when (assq 'screenshots out)
+      (let ((v (a3madkour-pub-frontmatter--coerce-slug-list (alist-get 'screenshots out))))
+        (if v (setf (alist-get 'screenshots out) v)
+          (setq out (assq-delete-all 'screenshots out)))))
+    out))
+
+(defun a3madkour-pub-frontmatter--normalize-works-music (raw file)
+  "Normalize a works-music RAW alist.  `hero' is a BOOL here (Bento directive)."
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common raw file)))
+    ;; Same nil-vs-absent reasoning as `featured' above: delete rather than
+    ;; write a nil value.
+    (when (assq 'hero out)
+      (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'hero out))
+          (setf (alist-get 'hero out) t)
+        (setq out (assq-delete-all 'hero out))))
     out))
 
 (provide 'a3madkour-publish-frontmatter)
