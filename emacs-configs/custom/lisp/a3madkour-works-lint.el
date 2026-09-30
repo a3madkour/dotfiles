@@ -171,6 +171,19 @@ post-push CI failure into a file:line error."
                   (let ((allowed (a3madkour-works-lint/vocab (cdr spec))))
                     (unless (member v allowed)
                       (add (car spec) ":%s=%S not in %S" (car spec) v allowed))))))
+            ;; 2b — `year' must be four digits.
+            ;;
+            ;; Uniquely among the authored fields, `year' had its presence
+            ;; checked (rule 1) but never its shape, and nothing downstream
+            ;; closed the gap: the normalizer coerces with `string-to-number',
+            ;; which returns 0 for any non-numeric string, and
+            ;; `check_works_fixtures.py' only asserts `isinstance(year, int)'
+            ;; — which 0 satisfies.  `:year twenty-twentysix' therefore shipped
+            ;; as `year: 0' with every gate green.  Checked here because this
+            ;; is the only layer that still sees what the author typed.
+            (let ((y (val 'year)))
+              (when (and y (not (string-match-p "\\`[0-9]\\{4\\}\\'" y)))
+                (add 'year ":year must be a four-digit year, got %S" y)))
             ;; 3 — hero polymorphism: filename for games, bool for music
             (let ((h (val 'hero)))
               (when h

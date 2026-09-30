@@ -78,6 +78,52 @@ a second literal would be a second thing to keep in step.")
             (should (cl-some (lambda (e) (string-match-p "game_kind" e)) errs)))
         (delete-file f)))))
 
+;;; `:year' shape (rule 2b)
+;;
+;; `year' was the one authored field whose presence was checked but whose
+;; SHAPE was not, and nothing downstream noticed: the normalizer's
+;; `string-to-number' turns garbage into 0, and `check_works_fixtures.py' only
+;; asserts `isinstance(year, int)'.  `:year twenty-twentysix' shipped as
+;; `year: 0'.  The assertions below match "four-digit", which no other rule
+;; emits — matching the bare word "year" would also match rule 1's
+;; missing-required-key message.
+
+(ert-deftest a3madkour-works-lint--rejects-non-numeric-year ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year twenty-twentysix :tagline T
+")))
+      (unwind-protect
+          (let ((errs (a3madkour-works-lint/lint-file f)))
+            (should (cl-some (lambda (e) (string-match-p "four-digit" e)) errs)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--rejects-short-year ()
+  "A two-digit year coerces to the integer 26, which the site linter accepts."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 26
+")))
+      (unwind-protect
+          (let ((errs (a3madkour-works-lint/lint-file f)))
+            (should (cl-some (lambda (e) (string-match-p "four-digit" e)) errs)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--accepts-four-digit-year ()
+  "The other half: the rule must not reject the ordinary case."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T
+")))
+      (unwind-protect
+          (let ((errs (a3madkour-works-lint/lint-file f)))
+            (should-not (cl-some (lambda (e) (string-match-p "four-digit" e)) errs))
+            (should (null errs)))
+        (delete-file f)))))
+
 (ert-deftest a3madkour-works-lint--rejects-filename-in-music-hero ()
   "hero is a bool for music and a filename for games."
   (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
