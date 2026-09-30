@@ -579,6 +579,34 @@ in the per-section normalizer or the handler entry point."
           (setq out (assq-delete-all key out)))))
     out))
 
+(defconst a3madkour-pub-frontmatter--works-games-keys
+  '(collaborators date draft embed_url featured game_kind hero itch_url
+    lastmod length related_essays related_notes research_questions
+    screenshots source_stream source_url status summary tagline tags
+    tech_stack tile_size title year)
+  "Every key legal in emitted works/games frontmatter (24).
+
+Mirrors `GAME_REQUIRED | GAME_OPTIONAL' in the site repo's
+`tools/check_works_fixtures.py' (GAME_OPTIONAL already unions
+UMBRELLA_OPTIONAL, so featured/hero/tile_size are included here).  The
+normalizer filters to this set because ox-hugo auto-emits keys of its own --
+`author' (from `#+author:' / `:AUTHOR:') and `slug' (from `:CUSTOM_ID:' /
+`#+HUGO_SLUG:' / title derivation) -- which the linter rejects as unknown
+fields.  Garden and essays strip exactly these two for the same reason.")
+
+(defconst a3madkour-pub-frontmatter--works-music-keys
+  '(audio_url collaborators cover date draft duration featured format hero
+    lastmod lyrics_poem made_with platform_embed related_essays related_works
+    source_stream summary tagline tags tile_size title tracks year)
+  "Every key legal in emitted works/music frontmatter (23).
+
+Mirrors `MUSIC_REQUIRED | MUSIC_OPTIONAL' in `check_works_fixtures.py'.
+`tracks' is listed although the handler injects it AFTER `normalize' -- the
+set is the contract, not a record of who writes each key.  The two flat
+authoring keys `platform_kind' / `platform_url' are deliberately ABSENT:
+they are inputs the music normalizer folds into `platform_embed', and
+filtering them out here is what keeps them off the page.")
+
 (defconst a3madkour-pub-frontmatter--works-comma-keys
   '(collaborators tech_stack made_with)
   "Works list keys holding free text, split on comma rather than whitespace.
@@ -603,9 +631,16 @@ A collaborator named \"Alice Example\" is one person, not two.")
                       (split-string raw "," t))))
    (t nil)))
 
-(defun a3madkour-pub-frontmatter--normalize-works-common (raw file)
-  "Normalization shared by works-games and works-music."
-  (let ((out (copy-alist raw)))
+(defun a3madkour-pub-frontmatter--normalize-works-common (raw file allowed)
+  "Normalization shared by works-games and works-music.
+
+ALLOWED is the per-type list of legal emitted keys (see
+`a3madkour-pub-frontmatter--works-games-keys' /
+`--works-music-keys').  RAW is filtered to it first, which is how ox-hugo's
+own `author' and `slug' keys are kept off the page -- every sibling
+normalizer does the same, and works was the one that did not."
+  (let ((out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
+                               (copy-alist raw))))
     ;; year → integer (check_works_fixtures.py rejects a string).
     (let ((y (alist-get 'year out)))
       (when (stringp y) (setf (alist-get 'year out) (string-to-number y))))
@@ -662,7 +697,8 @@ A collaborator named \"Alice Example\" is one person, not two.")
 
 (defun a3madkour-pub-frontmatter--normalize-works-games (raw file)
   "Normalize a works-games RAW alist.  `screenshots' is a filename list here."
-  (let ((out (a3madkour-pub-frontmatter--normalize-works-common raw file)))
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common
+              raw file a3madkour-pub-frontmatter--works-games-keys)))
     ;; screenshots: whitespace-split, left as bare filenames (no path expansion).
     (when (assq 'screenshots out)
       (let ((v (a3madkour-pub-frontmatter--coerce-slug-list (alist-get 'screenshots out))))
@@ -672,7 +708,8 @@ A collaborator named \"Alice Example\" is one person, not two.")
 
 (defun a3madkour-pub-frontmatter--normalize-works-music (raw file)
   "Normalize a works-music RAW alist.  `hero' is a BOOL here (Bento directive)."
-  (let ((out (a3madkour-pub-frontmatter--normalize-works-common raw file)))
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common
+              raw file a3madkour-pub-frontmatter--works-music-keys)))
     ;; Same nil-vs-absent reasoning as `featured' above: delete rather than
     ;; write a nil value.
     (when (assq 'hero out)

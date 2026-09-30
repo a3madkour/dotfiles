@@ -957,5 +957,114 @@ never-committed works note does not churn its date to today."
             (should (equal (alist-get 'lastmod out) "2023-04-05"))))
       (delete-file f))))
 
+
+;;; Defect 4 (task-12 E2E) — the works normalizers never filtered to an
+;;; allowed-key set, so ox-hugo's own auto-emitted `author' and `slug' reached
+;;; the page and `check_works_fixtures.py' rejected both as unknown fields on
+;;; every real publish.  Garden and essays already stripped exactly these two.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-strips-ox-hugo-noise ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (status . "playable")
+                (game_kind . "jam") (tagline . "T")
+                (author . ("Abdelrahman Madkour")) (slug . "a-game")
+                (export_file_name . "x") (aliases . ("/y/")))
+              "/tmp/a3-works-no-such-file.org")))
+    (should-not (assq 'author out))
+    (should-not (assq 'slug out))
+    ;; Not a closed list of two: anything outside the contract goes.
+    (should-not (assq 'export_file_name out))
+    (should-not (assq 'aliases out))
+    ;; ...and the filter did not eat the real fields on its way past.
+    (should (equal (alist-get 'status out) "playable"))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-strips-ox-hugo-noise ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (author . ("Abdelrahman Madkour")) (slug . "a-release"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should-not (assq 'author out))
+    (should-not (assq 'slug out))
+    (should (equal (alist-get 'format out) "album"))))
+
+;; The other half of an allowed-key filter: it must not be over-tight.  A set
+;; missing one legal field would silently drop author data with no linter
+;; complaint anywhere, which is the harder failure to notice.  These two pin
+;; every key in `check_works_fixtures.py''s GAME_FIELDS / MUSIC_FIELDS.
+;; `platform_embed' is exercised separately (it is assembled, not passed
+;; through).
+
+
+;; The expected sets are transcribed LITERALLY here, from
+;; `tools/check_works_fixtures.py''s GAME_FIELDS / MUSIC_FIELDS in the site
+;; repo.  Deliberately NOT read back out of the defconsts under test: a loop
+;; over the very list it is checking passes no matter what that list says --
+;; deleting a key from the source deletes the assertion along with it.  Drift
+;; between these literals and the Python contract is a real, separate bug and
+;; that is what the two `-key-set-matches-contract' tests below exist to see.
+
+(defconst a3madkour-pub-frontmatter-test--game-fields
+  '(collaborators date draft embed_url featured game_kind hero itch_url
+    lastmod length related_essays related_notes research_questions
+    screenshots source_stream source_url status summary tagline tags
+    tech_stack tile_size title year))
+
+(defconst a3madkour-pub-frontmatter-test--music-fields
+  '(audio_url collaborators cover date draft duration featured format hero
+    lastmod lyrics_poem made_with platform_embed related_essays related_works
+    source_stream summary tagline tags tile_size title tracks year))
+
+(defun a3madkour-pub-frontmatter-test--sorted-names (syms)
+  (sort (mapcar #'symbol-name syms) #'string<))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-key-set-matches-contract ()
+  "The games allowed set is exactly GAME_REQUIRED | GAME_OPTIONAL (24 keys)."
+  (should (equal (a3madkour-pub-frontmatter-test--sorted-names
+                  a3madkour-pub-frontmatter--works-games-keys)
+                 (a3madkour-pub-frontmatter-test--sorted-names
+                  a3madkour-pub-frontmatter-test--game-fields))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-key-set-matches-contract ()
+  "The music allowed set is exactly MUSIC_REQUIRED | MUSIC_OPTIONAL (23 keys)."
+  (should (equal (a3madkour-pub-frontmatter-test--sorted-names
+                  a3madkour-pub-frontmatter--works-music-keys)
+                 (a3madkour-pub-frontmatter-test--sorted-names
+                  a3madkour-pub-frontmatter-test--music-fields))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-keeps-every-legal-key ()
+  (let* ((input '((title . "G") (date . "2026-01-01") (draft . nil)
+                  (status . "playable") (game_kind . "jam") (tagline . "T")
+                  (year . "2026") (tags . ("a")) (summary . "S")
+                  (hero . "hero.png") (embed_url . "https://e") 
+                  (source_url . "https://s") (itch_url . "https://i")
+                  (collaborators . "Alice Example") (tech_stack . "Godot")
+                  (length . "3 hours") (screenshots . "a.png b.png")
+                  (research_questions . "q-one") (related_essays . "e-one")
+                  (related_notes . "n-one") (source_stream . "2026-01-01-s")
+                  (tile_size . "large") (featured . "t")))
+         (out (a3madkour-pub-frontmatter/normalize
+               'works-games input "/tmp/a3-works-no-such-file.org")))
+    (dolist (k a3madkour-pub-frontmatter-test--game-fields)
+      (should (assq k out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-keeps-every-legal-key ()
+  (let* ((input '((title . "M") (date . "2026-01-01") (draft . nil)
+                  (format . "album") (year . "2026") (tags . ("a"))
+                  (summary . "S") (tagline . "T") (cover . "cover.png")
+                  (duration . "13:19")
+                  (tracks . (((title . "One") (duration . "3:14"))))
+                  (audio_url . "https://a") (lyrics_poem . "a-poem")
+                  (related_works . "w-one") (related_essays . "e-one")
+                  (made_with . "Ableton Live") (collaborators . "Alice Example")
+                  (source_stream . "2026-01-01-s")
+                  (tile_size . "large") (featured . "t") (hero . "t")))
+         (out (a3madkour-pub-frontmatter/normalize
+               'works-music input "/tmp/a3-works-no-such-file.org")))
+    (dolist (k (remq 'platform_embed
+                     a3madkour-pub-frontmatter-test--music-fields))
+      (should (assq k out)))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
