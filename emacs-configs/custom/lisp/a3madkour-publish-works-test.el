@@ -238,6 +238,77 @@
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+;; Pins the 5th-positional (extra-refs) contract on
+;; `a3madkour-pub/asset-validate-and-copy'.  A missing declared asset must
+;; not ship a broken filename into the page frontmatter -- `hero' drops the
+;; whole key when its file is absent.  That half alone, though, passes
+;; identically whether the call is correct OR has `extra-refs' silently
+;; shifted into the `dry-run' slot (dropping the positional `nil'): under
+;; the shift, `extra-refs' becomes nil so the loop that would report
+;; "extra-ref not found" never runs at all, and the missing asset still
+;; ends up dropped by coincidence -- same visible outcome, wrong reason.
+;; So this test ALSO declares a `screenshots' entry whose file DOES exist:
+;; under correct code that file gets copied and the entry survives; under
+;; the positional-shift mutation, `dry-run' becomes truthy (the non-nil
+;; names list) and NOTHING gets copied, including the present file, so it
+;; would wrongly disappear too.  That divergence is what actually catches
+;; the mutation -- see the mutation transcript in the task-7 report.
+(ert-deftest a3madkour-pub-works--drops-broken-asset-keys-and-keeps-landed-ones ()
+  (let* ((notes-dir (make-temp-file "a3-pub-works-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-works-site-" t))
+         (src       (expand-file-name "example-game-assets.org" notes-dir))
+         (id        "bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+         (assets-dir (expand-file-name (format "assets/%s/" id) notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/works/games" site-dir) t)
+          (make-directory assets-dir t)
+          ;; present-shot.png exists on disk; missing-hero.png does not.
+          (with-temp-file (expand-file-name "present-shot.png" assets-dir)
+            (insert "not-really-a-png"))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: " id "\n"
+                    ":END:\n"
+                    "#+title: Example Game With Assets\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: works/games\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "#+HUGO_CUSTOM_FRONT_MATTER: :hero missing-hero.png\n"
+                    "#+HUGO_CUSTOM_FRONT_MATTER: :screenshots present-shot.png\n"
+                    "Body text.\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir)
+                (a3madkour-works-lint-enabled nil)
+                (done 'unset))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-works/publish-works-file
+               src (make-a3-pub-async-run)
+               :on-done (lambda (s) (setq done s)))
+              (a3madkour-pub/finish-publish))
+            (should (eq done 'ok))
+            (let ((out (expand-file-name
+                        "content/works/games/example-game-with-assets/index.md"
+                        site-dir)))
+              (should (file-exists-p out))
+              (should (file-exists-p
+                       (expand-file-name
+                        "content/works/games/example-game-with-assets/present-shot.png"
+                        site-dir)))
+              (with-temp-buffer
+                (insert-file-contents out)
+                (let ((fm (buffer-string)))
+                  ;; Missing asset: key dropped entirely.
+                  (should-not (string-match-p "hero:" fm))
+                  (should-not (string-match-p "missing-hero" fm))
+                  ;; Present asset: survives and is actually referenced.
+                  (should (string-match-p "present-shot.png" fm)))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here

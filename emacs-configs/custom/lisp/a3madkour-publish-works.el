@@ -169,10 +169,48 @@ the next."
     (pcase section
       ("works/games"
        (when-let ((h (alist-get 'hero fm))) (when (stringp h) (push h names)))
-       (dolist (s (alist-get 'screenshots fm)) (push s names)))
+       (dolist (s (alist-get 'screenshots fm)) (when (stringp s) (push s names))))
       ("works/music"
        (when-let ((c (alist-get 'cover fm))) (when (stringp c) (push c names)))))
     (nreverse names)))
+
+(defun a3madkour-pub-works--drop-broken-assets (section final-fm bundle-dir copied)
+  "Drop FINAL-FM asset keys for SECTION whose declared file did not land in
+BUNDLE-DIR, per COPIED (the `:copied' list `a3madkour-pub/asset-validate-and-copy'
+returned for this call).
+
+`asset-validate-and-copy' reports a missing/failed frontmatter-declared
+asset (an `extra-refs' entry) via its returned `:errors' list rather than
+signaling -- works is the first handler to pass `extra-refs', so without
+this a broken filename would ship straight into the page frontmatter and
+render a dead image, with nothing else in the pipeline catching it
+(`works-lint' has no asset-existence check yet; `check_works_fixtures.py'
+only type-checks).  Mirrors recipes' `--copy-drawer-image' precedent
+\(recipes.el\): drop the key rather than fail the publish -- a missing
+screenshot should not block a release, and Task 8's lint will catch it
+earlier, at authoring `file:line' time.
+
+`hero' (games) / `cover' (music) drop the whole key when its one file is
+missing; `screenshots' (games) drops only the missing entry, keeping the
+rest of the list."
+  (cl-flet ((landed-p (name)
+              (and (stringp name)
+                   (member (expand-file-name (file-name-nondirectory name) bundle-dir)
+                           copied))))
+    (let ((out (copy-alist final-fm)))
+      (pcase section
+        ("works/games"
+         (when (and (assq 'hero out) (not (landed-p (alist-get 'hero out))))
+           (setq out (assq-delete-all 'hero out)))
+         (when (assq 'screenshots out)
+           (let ((kept (seq-filter #'landed-p (alist-get 'screenshots out))))
+             (if kept
+                 (setf (alist-get 'screenshots out) kept)
+               (setq out (assq-delete-all 'screenshots out))))))
+        ("works/music"
+         (when (and (assq 'cover out) (not (landed-p (alist-get 'cover out))))
+           (setq out (assq-delete-all 'cover out)))))
+      out)))
 
 (cl-defun a3madkour-pub-works/publish-works-file (file run &key on-done)
   "Publish a works/games or works/music FILE to content/works/<type>/<slug>/index.md.
@@ -197,9 +235,13 @@ inject tracks → render → asset-copy → write-if-different → record-publis
                (bundle-dir (expand-file-name
                             (format "content/%s/%s/" subdir slug) site-root))
                (out-path   (expand-file-name "index.md" bundle-dir))
-               (src-ast    (with-temp-buffer
-                             (insert-file-contents file) (org-mode)
-                             (org-element-parse-buffer)))
+               ;; Only music reads the AST (for the tracks table) -- skip the
+               ;; org-mode + org-element-parse-buffer cost for games, which
+               ;; never consults it.
+               (src-ast    (when (eq nsym 'works-music)
+                             (with-temp-buffer
+                               (insert-file-contents file) (org-mode)
+                               (org-element-parse-buffer))))
                (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
                             file id "a3-pub-works"))
                (exported   (unwind-protect
@@ -216,9 +258,13 @@ inject tracks → render → asset-copy → write-if-different → record-publis
                              out))
                (body       (plist-get exported :body)))
           (a3madkour-pub-works--claim-slug a3madkour-pub-works--slugs-seen slug file)
-          (a3madkour-pub/asset-validate-and-copy
-           file bundle-dir id nil
-           (a3madkour-pub-works--asset-names section final-fm))
+          (let* ((asset-result (a3madkour-pub/asset-validate-and-copy
+                                 file bundle-dir id nil
+                                 (a3madkour-pub-works--asset-names section final-fm)))
+                 (copied (plist-get asset-result :copied)))
+            (setq final-fm
+                  (a3madkour-pub-works--drop-broken-assets
+                   section final-fm bundle-dir copied)))
           (a3madkour-pub-yaml/write-if-different
            out-path
            (concat (a3madkour-pub-works--render-frontmatter final-fm) body))
