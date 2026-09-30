@@ -588,6 +588,95 @@ write the org source.  `slug-path' must be bound by BODY's caller via
       (should (string-match-p "Forty-two minutes of tape-saturated drone" fm)))))
 
 
+;;; Asset drops are reported, not swallowed (final-review finding 5)
+;;
+;; `--drop-broken-assets' reads only `:copied' and used to discard
+;; `asset-validate-and-copy''s `:errors'.  With `--skip-works-check', or with
+;; `a3madkour-works-lint-enabled' nil — which this file's own integration tests
+;; set — a typo'd hero/screenshots/cover was dropped with ZERO output at any
+;; layer.  Asserted on "extra-ref not found", the message the assets module
+;; actually produces, rather than on the bare word "hero" that several other
+;; paths also emit.
+
+(ert-deftest a3madkour-pub-works--reports-dropped-assets-with-the-lint-off ()
+  (a3madkour-pub-works-test--with-published
+      (with-temp-file src
+        (insert ":PROPERTIES:\n"
+                ":ID: 33333333-4444-5555-6666-777777777777\n"
+                ":END:\n"
+                "#+title: Typo Hero Game\n"
+                "#+HUGO_PUBLISH: t\n"
+                "#+HUGO_SECTION: works/games\n"
+                "#+HUGO_BASE_DIR: " site-dir "\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026 :tagline T :hero heor.png\n"
+                "Body text.\n"))
+    ;; The key really was dropped (the pre-existing half) ...
+    (let ((fm (a3madkour-pub-works-test--frontmatter-of
+               (expand-file-name "content/works/games/typo-hero-game/index.md"
+                                 site-dir))))
+      (should-not (string-match-p "heor.png" fm)))
+    ;; ... and the drop was reported, which is the part that was missing.
+    (should (seq-some (lambda (m)
+                        (and (string-match-p "asset dropped" m)
+                             (string-match-p "extra-ref not found" m)
+                             (string-match-p "heor\\.png" m)))
+                      messages))))
+
+
+;;; `--warn-stale-backlink' call-site wiring (final-review finding 9)
+;;
+;; The three tests above only call the helper directly, so the `(eq nsym
+;; 'works-music)' gate in `publish-works-file' and its `lyrics_poem' read out
+;; of `final-fm' were unpinned.  Deferred during execution on the grounds that
+;; the end-to-end run might not happen; it did.
+
+(ert-deftest a3madkour-pub-works--publish-fires-the-stale-backlink-warning ()
+  (let ((poetry-dir (make-temp-file "a3-works-poetry-" t)))
+    (unwind-protect
+        (a3madkour-pub-works-test--with-published
+            (progn
+              ;; A published poem bundle that has NOT yet grown its back-link.
+              (make-directory
+               (expand-file-name "content/works/poetry/tessellations" site-dir) t)
+              (with-temp-file (expand-file-name
+                               "content/works/poetry/tessellations/index.md" site-dir)
+                (insert "---\ntitle: Tessellations\n---\nBody.\n"))
+              (with-temp-file (expand-file-name "tessellations.org" poetry-dir)
+                (insert "#+TITLE: Tessellations\n"))
+              (with-temp-file src
+                (insert ":PROPERTIES:\n"
+                        ":ID: 44444444-5555-6666-7777-888888888888\n"
+                        ":END:\n"
+                        "#+title: Set To Music\n"
+                        "#+HUGO_PUBLISH: t\n"
+                        "#+HUGO_SECTION: works/music\n"
+                        "#+HUGO_BASE_DIR: " site-dir "\n"
+                        "#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026\n"
+                        "#+HUGO_CUSTOM_FRONT_MATTER: :lyrics_poem tessellations\n"
+                        "Headnote.\n")))
+          (should (seq-some
+                   (lambda (m) (string-match-p "lacks set_to_music" m))
+                   messages)))
+      (delete-directory poetry-dir t))))
+
+(ert-deftest a3madkour-pub-works--publish-is-silent-without-lyrics-poem ()
+  "The gate is a gate: a music release declaring no poem warns about nothing."
+  (a3madkour-pub-works-test--with-published
+      (with-temp-file src
+        (insert ":PROPERTIES:\n"
+                ":ID: 55555555-6666-7777-8888-999999999999\n"
+                ":END:\n"
+                "#+title: No Poem Here\n"
+                "#+HUGO_PUBLISH: t\n"
+                "#+HUGO_SECTION: works/music\n"
+                "#+HUGO_BASE_DIR: " site-dir "\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026\n"
+                "Headnote.\n"))
+    (should-not (seq-some (lambda (m) (string-match-p "lacks set_to_music" m))
+                          messages))))
+
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here

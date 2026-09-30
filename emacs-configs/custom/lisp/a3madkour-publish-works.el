@@ -213,8 +213,11 @@ asset (an `extra-refs' entry) via its returned `:errors' list rather than
 signaling -- works is the first handler to pass `extra-refs', so without
 this a broken filename would ship straight into the page frontmatter and
 render a dead image, with nothing else in the pipeline catching it
-(`works-lint' has no asset-existence check yet; `check_works_fixtures.py'
-only type-checks).  Mirrors recipes' `--copy-drawer-image' precedent
+(`works-lint' rule 4 checks asset existence too, but it is skippable via
+`--skip-works-check' and disabled outright by the handler's own integration
+tests; `check_works_fixtures.py' only type-checks).  The caller also logs
+those `:errors', so a drop is never silent.  Mirrors recipes'
+`--copy-drawer-image' precedent
 \(recipes.el\): drop the key rather than fail the publish -- a missing
 screenshot should not block a release, and Task 8's lint will catch it
 earlier, at authoring `file:line' time.
@@ -324,6 +327,17 @@ inject tracks → render → asset-copy → write-if-different → record-publis
                                  file bundle-dir id nil
                                  (a3madkour-pub-works--asset-names section final-fm)))
                  (copied (plist-get asset-result :copied)))
+            ;; Report, do not swallow.  `--drop-broken-assets' below removes a
+            ;; declared-but-absent asset from the frontmatter so the page does
+            ;; not render a dead image, and rule 4 of the lint normally catches
+            ;; it earlier at `file:line'.  But the lint is skippable
+            ;; (`--skip-works-check') and is switched off entirely by this
+            ;; handler's own integration tests, and this function's
+            ;; `condition-case' means nothing else surfaces it either -- so
+            ;; with the lint off a typo'd hero/screenshots/cover was dropped
+            ;; with ZERO output at any layer.  One line closes that.
+            (dolist (e (plist-get asset-result :errors))
+              (a3madkour-pub/warn "works" file "asset dropped: %s" e))
             (setq final-fm
                   (a3madkour-pub-works--drop-broken-assets
                    section final-fm bundle-dir copied)))
