@@ -385,9 +385,47 @@ declared asset genuinely exists, so a correct reader finds it."
     (let ((f (a3madkour-works-lint-test--music-file
               ":platform_embed \"{ kind: bandcamp, url: x }\"")))
       (unwind-protect
+          ;; The REMEDY is the distinct half.  "cannot be authored directly" is
+          ;; now shared with the `tracks' branch of the same rule, so asserting
+          ;; on it would pin neither key.
           (should (cl-some (lambda (e)
-                             (string-match-p "cannot be authored directly" e))
+                             (string-match-p ":platform_kind \\+ :platform_url" e))
                            (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+;; Fix round 2 — `tracks' is the only other map-valued works field, and it had
+;; the identical hole: it is in `--works-music-keys' so a hand-authored
+;; `:tracks "One 3:14"' survives the allowed-key filter as a string, is not
+;; overwritten (the handler's `when-let' on `--parse-tracks' is nil with no
+;; table), and is then `:omit'-ed by the render key-hook -- dropped with no
+;; error at any layer, exactly the D6 failure mode.  Design spec §3.3 makes
+;; that a general rule; this is what enforces it for the second member of the
+;; class.
+(ert-deftest a3madkour-works-lint--rejects-direct-tracks ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file ":tracks \"Lorem One 3:14\"")))
+      (unwind-protect
+          (should (cl-some (lambda (e)
+                             (string-match-p "#\\+NAME: tracks" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--accepts-tracks-as-a-named-table ()
+  "The org-table form is the supported one and must not trip rule 6."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026
+
+#+NAME: tracks
+| title     | duration |
+|-----------+----------|
+| Lorem One | 3:14     |
+")))
+      (unwind-protect
+          (let ((errs (a3madkour-works-lint/lint-file f)))
+            (should-not (cl-some (lambda (e) (string-match-p "tracks" e)) errs))
+            (should (null errs)))
         (delete-file f)))))
 
 (ert-deftest a3madkour-works-lint--accepts-both-platform-keys ()

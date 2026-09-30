@@ -231,22 +231,33 @@ post-push CI failure into a file:line error."
                         (add k ":%s value %S has a space inside a filename; \
 filenames may not contain spaces" k raw))
                     (add k ":%s value %S contains a space; filenames may not" k raw)))))
-            ;; 6 — platform_embed is authored as TWO flat keys.
+            ;; 6 — map-valued keys cannot be carried by custom front matter.
             ;;
             ;; `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips every custom value as
-            ;; a flat scalar, so the nested map the site wants is not
-            ;; expressible through the authoring channel: an authored
-            ;; `:platform_embed { kind: ... }' reached the render key-hook as a
-            ;; string, failed its `listp' test, and was silently omitted from
-            ;; every page.  `:platform_kind' + `:platform_url' are the
-            ;; documented exception to "org keys mirror emitted keys"; the
-            ;; music normalizer folds them into `platform_embed'.  Rejecting
-            ;; the direct form here is what stops the silent drop recurring.
+            ;; a flat scalar, so a nested map is not expressible through the
+            ;; authoring channel at all: the value arrives as a string, the
+            ;; render key-hook's `listp' test fails, its `:omit' branch fires,
+            ;; and the field vanishes from the page with nothing anywhere
+            ;; reporting it.
+            ;;
+            ;; Design spec §3.3 states the general rule: a works field whose
+            ;; emitted shape is a map or a list of maps is authored either as
+            ;; flat component keys the normalizer assembles (`platform_embed'
+            ;; <- `:platform_kind' + `:platform_url') or as a named org table
+            ;; parsed from the AST (`tracks' <- `#+NAME: tracks').  Those two
+            ;; are the whole class today.  BOTH are in the emitted contract, so
+            ;; both survive the normalizer's allowed-key filter as strings --
+            ;; which is exactly why the rule has to be enforced here rather
+            ;; than assumed.  Without it §3.3 is a comment, not a guarantee.
             (unless games-p
-              (when (val 'platform_embed)
-                (add 'platform_embed
-                     ":platform_embed cannot be authored directly (HUGO_CUSTOM_FRONT_MATTER \
-carries flat scalars only); use :platform_kind + :platform_url"))
+              (dolist (spec
+                       '((platform_embed . "use :platform_kind + :platform_url")
+                         (tracks . "supply a `#+NAME: tracks' org table instead")))
+                (when (val (car spec))
+                  (add (car spec)
+                       ":%s cannot be authored directly (HUGO_CUSTOM_FRONT_MATTER \
+carries flat scalars only, and a map-valued key is then silently dropped); %s"
+                       (car spec) (cdr spec))))
               (let ((kind (val 'platform_kind))
                     (url  (val 'platform_url)))
                 (cond
