@@ -367,6 +367,100 @@ that has simply never been published is not what this warning is for."
           (should-not (cdr out)))
       (delete-directory root t))))
 
+
+;;; Defect 5 (task-12 E2E) — the `#+NAME: tracks' table leaked into the body.
+;;
+;; It is parsed for the frontmatter from the ORIGINAL AST but was never removed
+;; from the export input, so ox-hugo rendered it a second time as a raw,
+;; unstyled table inside the About section, beside the templated Tracks
+;; section.  Unit tests of `--parse-tracks' could not see this: it is the
+;; exported BODY that is wrong, not the parse.
+
+(ert-deftest a3madkour-pub-works--strip-named-table-removes-name-line-too ()
+  "The `#+NAME:' affiliated keyword goes with the table, not just the rows."
+  (let ((out (a3madkour-pub-works--strip-named-table
+              "#+TITLE: M\nHeadnote.\n\n#+NAME: tracks\n| title | duration |\n|-------+----------|\n| One   | 3:14     |\n\nTail.\n"
+              "tracks")))
+    (should-not (string-match-p "#\\+NAME: tracks" out))
+    (should-not (string-match-p "|" out))
+    (should (string-match-p "Headnote\\." out))
+    (should (string-match-p "Tail\\." out))))
+
+(ert-deftest a3madkour-pub-works--strip-named-table-leaves-other-tables ()
+  "Only the named table goes; an unrelated body table is content."
+  (let ((out (a3madkour-pub-works--strip-named-table
+              "#+NAME: tracks\n| title | duration |\n| One   | 3:14     |\n\n| keep | me |\n"
+              "tracks")))
+    (should-not (string-match-p "duration" out))
+    (should (string-match-p "| keep | me |" out))))
+
+(defun a3madkour-pub-works-test--write-music-fixture (src site-dir)
+  "Write a works/music org fixture with a `#+NAME: tracks' table at SRC."
+  (with-temp-file src
+    (insert ":PROPERTIES:\n"
+            ":ID: dddddddd-eeee-ffff-0000-111111111111\n"
+            ":END:\n"
+            "#+title: Example Release\n"
+            "#+HUGO_PUBLISH: t\n"
+            "#+HUGO_SECTION: works/music\n"
+            "#+HUGO_BASE_DIR: " site-dir "\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026\n"
+            "\n"
+            "Headnote prose.\n"
+            "\n"
+            "#+NAME: tracks\n"
+            "| title     | duration |\n"
+            "|-----------+----------|\n"
+            "| Lorem One | 3:14     |\n")))
+
+(ert-deftest a3madkour-pub-works--tracks-table-does-not-leak-into-the-body ()
+  "The tracks table reaches the frontmatter and NOT the rendered body."
+  (let* ((notes-dir (make-temp-file "a3-pub-works-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-works-site-" t))
+         (src       (expand-file-name "example-release.org" notes-dir)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir))
+          (make-directory (expand-file-name "content/works/music" site-dir) t)
+          (a3madkour-pub-works-test--write-music-fixture src site-dir)
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir)
+                (a3madkour-works-lint-enabled nil)
+                (done 'unset))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-works/publish-works-file
+               src (make-a3-pub-async-run) :on-done (lambda (st) (setq done st)))
+              (a3madkour-pub/finish-publish))
+            (should (eq done 'ok))
+            (let ((out (expand-file-name
+                        "content/works/music/example-release/index.md" site-dir)))
+              (should (file-exists-p out))
+              (with-temp-buffer
+                (insert-file-contents out)
+                (let* ((text (buffer-string))
+                       ;; Split at the closing frontmatter fence so the body
+                       ;; assertions cannot be satisfied by the frontmatter's
+                       ;; own (correct, flow-map) rendering of the same data.
+                       (body (progn
+                               (goto-char (point-min))
+                               (forward-line 1)
+                               (if (re-search-forward "^---$" nil t)
+                                   (buffer-substring-no-properties
+                                    (point) (point-max))
+                                 text))))
+                  ;; The parse still happened: frontmatter carries the track.
+                  (should (string-match-p "tracks:" text))
+                  (should (string-match-p "Lorem One" text))
+                  ;; The body carries the headnote and no table at all.
+                  (should (string-match-p "Headnote prose" body))
+                  (should-not (string-match-p "| title" body))
+                  (should-not (string-match-p "Lorem One" body))
+                  (should-not (string-match-p "table--tracks" body)))))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here

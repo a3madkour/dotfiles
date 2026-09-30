@@ -37,6 +37,32 @@
         tbl))
     nil t))
 
+(defun a3madkour-pub-works--strip-named-table (org-text name)
+  "Return ORG-TEXT with the `#+NAME: NAME' table removed.
+
+The tracks table is parsed for frontmatter out of the ORIGINAL source AST, so
+leaving it in the export input renders it a SECOND time -- as a raw, unstyled
+HTML <table> in the page body, beside the templated Tracks section.  Recipes hit
+the same class of bug and answered it with `--strip-data-subtrees'; this is the
+named-table equivalent.
+
+The design spec argued a strip stage could not be needed here because there is
+no :PROPERTIES: drawer to strip.  That held for the drawer; it did not hold for
+the table, which is body content by construction.
+
+`org-element' includes affiliated keywords in an element's extent, so :begin
+sits on the `#+NAME:' line itself and deleting [:begin, :end) takes the name
+line with the table."
+  (with-temp-buffer
+    (insert org-text)
+    (org-mode)
+    (let* ((ast (org-element-parse-buffer))
+           (tbl (a3madkour-pub-works--named-table ast name)))
+      (when tbl
+        (delete-region (org-element-property :begin tbl)
+                       (org-element-property :end tbl))))
+    (buffer-substring-no-properties (point-min) (point-max))))
+
 (defun a3madkour-pub-works--table-rows (table)
   "Return TABLE's non-rule rows as lists of trimmed cell strings."
   (when table
@@ -235,7 +261,8 @@ naming the exact command to close the gap."
 
 (cl-defun a3madkour-pub-works/publish-works-file (file run &key on-done)
   "Publish a works/games or works/music FILE to content/works/<type>/<slug>/index.md.
-Pipeline: lint → parse tracks → rewrite links → ox-hugo → normalize →
+Pipeline: lint → parse tracks → rewrite links → strip tracks table →
+ox-hugo → normalize →
 inject tracks → render → asset-copy → write-if-different → record-publish."
   (condition-case err
       (progn
@@ -266,7 +293,21 @@ inject tracks → render → asset-copy → write-if-different → record-publis
                (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
                             file id "a3-pub-works"))
                (exported   (unwind-protect
-                               (a3madkour-pub-export/export-file tmp-src)
+                               (progn
+                                 ;; Music only: the tracks table has already
+                                 ;; been read from `src-ast' for the
+                                 ;; frontmatter, so strip it from the export
+                                 ;; input or ox-hugo renders it into the body
+                                 ;; as well.  Mirrors recipes' strip stage.
+                                 (when (eq nsym 'works-music)
+                                   (let ((stripped
+                                          (a3madkour-pub-works--strip-named-table
+                                           (with-temp-buffer
+                                             (insert-file-contents tmp-src)
+                                             (buffer-string))
+                                           "tracks")))
+                                     (with-temp-file tmp-src (insert stripped))))
+                                 (a3madkour-pub-export/export-file tmp-src))
                              (when (file-exists-p tmp-src) (delete-file tmp-src))))
                (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
                                   (a3madkour-pub-history/recorded-last-modified id new-url)))
