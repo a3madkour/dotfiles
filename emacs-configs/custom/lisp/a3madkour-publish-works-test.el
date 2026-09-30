@@ -46,3 +46,25 @@
 |   Padded    |   1:05   |
 "))))
     (should (equal (alist-get 'title (car tracks)) "Padded"))))
+
+;; Guard mutation test: verify both-empty-drop logic at line 61 (and vs or).
+;; Row with title but empty duration is kept; row with both empty is dropped.
+(ert-deftest a3madkour-pub-works--parse-tracks-filters-all-empty-rows ()
+  (let ((tracks (a3madkour-pub-works--parse-tracks
+                 (a3madkour-pub-works-test--parse "
+#+NAME: tracks
+| title      | duration |
+|------------+----------|
+| Song One   |          |
+|            |          |
+| Song Two   | 2:30     |
+"))))
+    (should (equal (length tracks) 2))
+    (should (equal (alist-get 'title (car tracks)) "Song One"))
+    (should (equal (alist-get 'duration (car tracks)) ""))
+    (should (equal (alist-get 'title (nth 1 tracks)) "Song Two"))
+    (should (equal (alist-get 'duration (nth 1 tracks)) "2:30"))))
+
+(provide 'a3madkour-publish-works-test)
+
+;;; a3madkour-publish-works-test.el ends here
