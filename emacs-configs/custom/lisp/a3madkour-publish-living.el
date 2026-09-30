@@ -39,14 +39,19 @@ handler will `add-to-list' an entry here via `with-eval-after-load'
 
 (defun a3madkour-pub-living--collect-triples ()
   "Return list of (section file handler) triples for every living-section
-file under `a3madkour-pub/org-notes-dir'."
-  (let (triples)
-    (dolist (entry a3madkour-pub-living--handlers)
-      (let ((section (car entry)) (handler (cdr entry)))
-        (dolist (file (directory-files-recursively
-                       a3madkour-pub/org-notes-dir "\\.org\\'"))
-          (when (equal section (a3madkour-pub/note-section file))
-            (push (list section file handler) triples)))))
+file under `a3madkour-pub/org-notes-dir'.
+
+Walks the notes tree exactly once and dispatches per file.  The previous
+shape nested the walk inside the per-handler loop, which cost one full
+traversal per registered section."
+  (let ((triples nil))
+    (dolist (file (directory-files-recursively
+                   a3madkour-pub/org-notes-dir "\\.org\\'"))
+      (let ((section (a3madkour-pub/note-section file)))
+        (when section
+          (let ((handler (cdr (assoc section a3madkour-pub-living--handlers))))
+            (when handler
+              (push (list section file handler) triples))))))
     (nreverse triples)))
 
 ;;;###autoload

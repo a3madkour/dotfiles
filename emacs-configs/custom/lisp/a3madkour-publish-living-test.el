@@ -265,5 +265,41 @@ even when the filesystem mtime advances between runs (never-committed note)."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+;; -- Task 10: walk the notes tree once, not once per registered handler --
+
+(ert-deftest a3madkour-pub-living--collect-walks-tree-once ()
+  "With N registered handlers the tree must be walked once, not N times."
+  (let* ((dir (make-temp-file "a3-living-walk" t))
+         (calls 0))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "a.org" dir)
+            (insert "#+TITLE: A\n#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"))
+          (let ((a3madkour-pub/org-notes-dir dir)
+                (a3madkour-pub-living--handlers
+                 '(("garden" . ignore) ("recipes" . ignore) ("works/games" . ignore))))
+            (cl-letf* ((orig (symbol-function 'directory-files-recursively))
+                       ((symbol-function 'directory-files-recursively)
+                        (lambda (&rest args)
+                          (setq calls (1+ calls))
+                          (apply orig args))))
+              (a3madkour-pub-living--collect-triples))
+            (should (equal calls 1))))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-living--collect-yields-one-triple-per-match ()
+  (let* ((dir (make-temp-file "a3-living-walk" t)))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "a.org" dir)
+            (insert "#+TITLE: A\n#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"))
+          (let ((a3madkour-pub/org-notes-dir dir)
+                (a3madkour-pub-living--handlers
+                 '(("garden" . ignore) ("recipes" . ignore))))
+            (let ((triples (a3madkour-pub-living--collect-triples)))
+              (should (equal (length triples) 1))
+              (should (equal (car (car triples)) "garden")))))
+      (delete-directory dir t))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here
