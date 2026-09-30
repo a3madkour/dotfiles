@@ -100,6 +100,36 @@ When JSON is nil, no vocabulary file is written."
             (should (cl-some (lambda (e) (string-match-p "hero" e)) errs)))
         (delete-file f)))))
 
+;; Fix round 1: `rejects-bool-in-games-hero' above passes even with rule 3's
+;; games branch disabled, because rule 4 independently emits a "hero entry
+;; ... not found" message for the same non-existent asset "t" — both
+;; messages contain the bare word "hero". Isolate rule 3 by making a real
+;; file literally named "t" on disk (so rule 4 stays silent) and assert on
+;; rule 3's distinct substring instead of the shared word.
+(ert-deftest a3madkour-works-lint--rejects-bool-in-games-hero-isolated ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let* ((slug (make-temp-name "a3wl"))
+           (f (a3madkour-works-lint-test--file (format "#+TITLE: G
+#+ID: %s
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T :hero t
+" slug)))
+           (asset-dir (expand-file-name (format "assets/%s/" slug)
+                                        (file-name-directory f))))
+      (unwind-protect
+          (progn
+            (make-directory asset-dir t)
+            (with-temp-file (expand-file-name "t" asset-dir) (insert "x"))
+            (let ((errs (a3madkour-works-lint/lint-file f)))
+              (should (cl-some (lambda (e)
+                                 (string-match-p
+                                  "must be a filename for works/games" e))
+                               errs))))
+        (delete-directory (expand-file-name (format "assets/%s" slug)
+                                            (file-name-directory f))
+                           t)
+        (delete-file f)))))
+
 ;; Review Focus #2 — a space inside a screenshot filename silently becomes
 ;; two broken names under whitespace splitting.
 (ert-deftest a3madkour-works-lint--rejects-space-in-asset-filename ()

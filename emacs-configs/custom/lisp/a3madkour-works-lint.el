@@ -151,16 +151,13 @@ title/date/lastmod/draft come from ox-hugo and are not authored here.")
                       (add 'hero ":hero must be a filename for works/games, got %S" h))
                   (when (a3madkour-works-lint--looks-like-filename-p h)
                     (add 'hero ":hero must be a boolean for works/music, got %S" h)))))
-            ;; 4 — asset filenames: no whitespace, and present on disk
+            ;; 4 — asset filenames: present on disk
             (dolist (k (if games-p '(hero screenshots) '(cover)))
               (let ((raw (val k)))
                 (when (and raw (or (not (eq k 'hero)) games-p))
                   (dolist (name (split-string raw "[ \t]+" t))
-                    (cond
-                     ((string-match-p "[ \t]" name)
-                      (add k ":%s entry %S contains a space" k name))
-                     ((not (file-exists-p (expand-file-name name asset-dir)))
-                      (add k ":%s entry %S not found in %s" k name asset-dir)))))))
+                    (unless (file-exists-p (expand-file-name name asset-dir))
+                      (add k ":%s entry %S not found in %s" k name asset-dir))))))
             ;; A quoted multi-word filename survives `val' intact, so catch it
             ;; before the split above can hide it as two names.
             (dolist (k (if games-p '(hero screenshots) '(cover)))
