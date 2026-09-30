@@ -707,7 +707,22 @@ normalizer does the same, and works was the one that did not."
     out))
 
 (defun a3madkour-pub-frontmatter--normalize-works-music (raw file)
-  "Normalize a works-music RAW alist.  `hero' is a BOOL here (Bento directive)."
+  "Normalize a works-music RAW alist.  `hero' is a BOOL here (Bento directive).
+
+`platform_embed' is the one field where the design's \"org keys mirror emitted
+keys exactly\" principle cannot hold.  The site wants a nested map
+\(`{ kind: ..., url: ... }'), but `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips
+every custom value as a FLAT scalar, so an authored
+`:platform_embed { kind: bandcamp, url: \"...\" }' arrived as the plain string
+`\"{ kind: bandcamp, url: ... }\"'.  The works key-hook only renders a real
+list, so it hit its `:omit' branch every time and the field silently never
+appeared on any page -- with no error anywhere in the pipeline.
+
+It is therefore authored as TWO flat keys, `:platform_kind' and
+`:platform_url', and assembled here.  A documented exception beats a field
+that does nothing.  `a3madkour-works-lint' enforces both-or-neither and checks
+`platform_kind' against the shared vocabulary's `platform_kinds', and rejects
+a directly-authored `:platform_embed' so the silent-drop cannot recur."
   (let ((out (a3madkour-pub-frontmatter--normalize-works-common
               raw file a3madkour-pub-frontmatter--works-music-keys)))
     ;; Same nil-vs-absent reasoning as `featured' above: delete rather than
@@ -716,6 +731,20 @@ normalizer does the same, and works was the one that did not."
       (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'hero out))
           (setf (alist-get 'hero out) t)
         (setq out (assq-delete-all 'hero out))))
+    ;; Assemble platform_embed from the two flat authoring keys.  Deleted
+    ;; unconditionally first: a flat `platform_embed' string survives the
+    ;; allowed-key filter (the key IS in the contract), and passing it through
+    ;; would render `platform_embed: "{ kind: ... }"' -- a quoted scalar where
+    ;; the linter demands a dict.  `platform_kind'/`platform_url' are absent
+    ;; from the allowed set, so the filter has already kept them off the page.
+    (setq out (assq-delete-all 'platform_embed out))
+    (let ((kind (alist-get 'platform_kind raw))
+          (url  (alist-get 'platform_url raw)))
+      (when (and (stringp kind) (not (string-empty-p (string-trim kind)))
+                 (stringp url)  (not (string-empty-p (string-trim url))))
+        (setf (alist-get 'platform_embed out)
+              (list (cons 'kind (string-trim kind))
+                    (cons 'url  (string-trim url))))))
     out))
 
 (provide 'a3madkour-publish-frontmatter)

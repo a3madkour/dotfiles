@@ -1066,5 +1066,52 @@ never-committed works note does not churn its date to today."
                      a3madkour-pub-frontmatter-test--music-fields))
       (should (assq k out)))))
 
+;;; Defect 6 (task-12 E2E) — `platform_embed' could not be authored at all.
+;;
+;; `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips custom values as flat scalars, so
+;; the nested map arrived as a string, failed the render key-hook's `listp'
+;; test, and was silently omitted from every page.  Authored now as two flat
+;; keys and assembled here.
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-assembles-platform-embed ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (platform_kind . "bandcamp")
+                (platform_url . "https://example.bandcamp.com/album/x"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should (equal (alist-get 'platform_embed out)
+                   '((kind . "bandcamp")
+                     (url . "https://example.bandcamp.com/album/x"))))
+    ;; A LIST, which is what the render key-hook tests for -- the string the
+    ;; old authoring path produced is exactly what it rejected.
+    (should (listp (alist-get 'platform_embed out)))
+    ;; The two authoring keys are inputs, not emitted fields.
+    (should-not (assq 'platform_kind out))
+    (should-not (assq 'platform_url out))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-platform-embed-needs-both ()
+  "One half alone emits nothing -- a half-map fails the site linter."
+  (dolist (half '(((platform_kind . "bandcamp"))
+                  ((platform_url . "https://example.com/x"))))
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                (append '((title . "M") (year . "2026") (format . "album")) half)
+                "/tmp/a3-works-no-such-file.org")))
+      (should-not (assq 'platform_embed out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-drops-flat-platform-embed ()
+  "A directly-authored `platform_embed' arrives as a string and must not ship.
+
+`platform_embed' IS in the allowed key set, so the filter alone lets the
+string through; emitting it would render a quoted scalar where the linter
+demands a dict."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (platform_embed . "{ kind: bandcamp, url: \"https://x\" }"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should-not (assq 'platform_embed out))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

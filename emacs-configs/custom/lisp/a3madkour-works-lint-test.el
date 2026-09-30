@@ -338,5 +338,67 @@ declared asset genuinely exists, so a correct reader finds it."
                              (a3madkour-works-lint/lint-file music))))
         (delete-file music)))))
 
+;;; platform_embed authoring exception (Defect 6)
+
+(defun a3madkour-works-lint-test--music-file (cfm)
+  "Temp works/music org file whose second CFM line is CFM."
+  (a3madkour-works-lint-test--file
+   (format "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026
+#+HUGO_CUSTOM_FRONT_MATTER: %s
+" cfm)))
+
+(ert-deftest a3madkour-works-lint--platform-kind-needs-url ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file ":platform_kind bandcamp")))
+      (unwind-protect
+          (should (cl-some (lambda (e)
+                             (string-match-p "needs a matching :platform_url" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--platform-url-needs-kind ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file
+              ":platform_url \"https://example.com/x\"")))
+      (unwind-protect
+          (should (cl-some (lambda (e)
+                             (string-match-p "needs a matching :platform_kind" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--rejects-unknown-platform-kind ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file
+              ":platform_kind spotify :platform_url \"https://example.com/x\"")))
+      (unwind-protect
+          ;; ":platform_kind=" is rule 6's own wording; the bare word
+          ;; "platform_kind" also appears in the both-or-neither messages.
+          (should (cl-some (lambda (e) (string-match-p ":platform_kind=" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--rejects-direct-platform-embed ()
+  "The nested form is unreachable through ox-hugo, so authoring it is an error."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file
+              ":platform_embed \"{ kind: bandcamp, url: x }\"")))
+      (unwind-protect
+          (should (cl-some (lambda (e)
+                             (string-match-p "cannot be authored directly" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--accepts-both-platform-keys ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--music-file
+              ":platform_kind bandcamp :platform_url \"https://example.com/x\"")))
+      (unwind-protect
+          (let ((errs (a3madkour-works-lint/lint-file f)))
+            (should-not (cl-some (lambda (e) (string-match-p "platform" e)) errs))
+            (should (null errs)))
+        (delete-file f)))))
+
 (provide 'a3madkour-works-lint-test)
 ;;; a3madkour-works-lint-test.el ends here

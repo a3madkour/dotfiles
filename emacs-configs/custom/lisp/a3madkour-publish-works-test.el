@@ -461,6 +461,26 @@ that has simply never been published is not what this warning is for."
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+
+;; Defect 6, the other end: the assembled shape has to satisfy the render
+;; key-hook.  `renders-platform-embed-map' above hand-builds the nested alist
+;; in elisp, which is precisely the step real authoring could never reach --
+;; so it passed while the field was unreachable.  Chaining normalize into
+;; render is what pins the authoring path end to end.
+(ert-deftest a3madkour-pub-works--platform-embed-round-trips-from-flat-keys ()
+  (let* ((fm (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album")
+                (platform_kind . "bandcamp")
+                (platform_url . "https://example.bandcamp.com/album/x"))
+              "/tmp/a3-works-no-such-file.org"))
+         (yaml (a3madkour-pub-works--render-frontmatter fm)))
+    (should (string-match-p
+             "platform_embed: { kind: bandcamp, url: \"https://example\\.bandcamp\\.com/album/x\" }"
+             yaml))
+    ;; Not the `:omit' branch, and not a quoted scalar.
+    (should-not (string-match-p "platform_embed: \"" yaml))))
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here
