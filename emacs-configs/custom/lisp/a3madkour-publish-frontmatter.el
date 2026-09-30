@@ -649,6 +649,21 @@ own `author' and `slug' keys are kept off the page -- every sibling
 normalizer does the same, and works was the one that did not."
   (let ((out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
                                (copy-alist raw))))
+    ;; summary: `#+HUGO_SUMMARY:' is not an ox-hugo keyword, so it never
+    ;; reaches RAW and the allowed-key filter above cannot put it back.  Read
+    ;; it from the source exactly as the essays and recipes normalizers do.
+    ;;
+    ;; Without this the key was silently dropped on the documented authoring
+    ;; path: the design's own §3.1 example org file carries
+    ;; `#+HUGO_SUMMARY:', `layouts/partials/works/tile.html' renders `summary'
+    ;; as the tile pull-quote, and the shipped
+    ;; `content/works/games/example-playable-full-release/index.md' declares
+    ;; it — so migrating that fixture to org lost its pull-quote with no error
+    ;; anywhere.  Unlike essays/recipes it is injected only when PRESENT:
+    ;; `summary' is optional for both works types, and an unconditional `""'
+    ;; would emit an empty key on every game and release.
+    (when-let ((s (a3madkour-pub-frontmatter--read-org-keyword file "HUGO_SUMMARY")))
+      (setf (alist-get 'summary out) s))
     ;; year → integer (check_works_fixtures.py rejects a string).
     (let ((y (alist-get 'year out)))
       (when (stringp y) (setf (alist-get 'year out) (string-to-number y))))

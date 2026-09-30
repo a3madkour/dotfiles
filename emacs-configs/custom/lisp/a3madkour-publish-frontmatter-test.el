@@ -1114,6 +1114,54 @@ ox-hugo's `author'/`slug' on the page and fail the site linter."
                    'works-music '((title . "M")) "/tmp/m.org"))))
 
 
+;;; `#+HUGO_SUMMARY:' (final-review finding 1) — silently dropped for both
+;;; sections.  `summary' is in both allowed key sets, but ox-hugo does not
+;;; emit it from that keyword and nothing injected it, so the documented
+;;; authoring path lost the works tile's pull-quote with no error anywhere.
+;;; The real-export proof lives in `a3madkour-publish-works-test.el'; these
+;;; two pin the normalizer unit.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-injects-hugo-summary ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f
+              (insert "#+TITLE: G\n#+HUGO_SUMMARY: A memory-palace roguelike.\n"))
+            (let ((out (a3madkour-pub-frontmatter/normalize
+                        'works-games '((title . "G") (year . "2026")) f)))
+              (should (equal (alist-get 'summary out)
+                             "A memory-palace roguelike."))))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-injects-hugo-summary ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f
+              (insert "#+TITLE: M\n#+HUGO_SUMMARY: Forty-two minutes of drone.\n"))
+            (let ((out (a3madkour-pub-frontmatter/normalize
+                        'works-music
+                        '((title . "M") (year . "2026") (format . "album")) f)))
+              (should (equal (alist-get 'summary out)
+                             "Forty-two minutes of drone."))))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-summary-absent-emits-no-key ()
+  "`summary' is optional for works, unlike essays/recipes where the linter
+requires the key — so an absent keyword must emit nothing, not `summary: \"\"'."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f (insert "#+TITLE: G\n"))
+            (should-not (assq 'summary
+                              (a3madkour-pub-frontmatter/normalize
+                               'works-games '((title . "G") (year . "2026")) f))))
+        (delete-file f)))))
+
+
 ;;; Defect 6 (task-12 E2E) — `platform_embed' could not be authored at all.
 ;;
 ;; `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips custom values as flat scalars, so

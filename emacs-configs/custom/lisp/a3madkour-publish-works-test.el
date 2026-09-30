@@ -486,6 +486,108 @@ that has simply never been published is not what this warning is for."
     (should-not (string-match-p "platform_embed: \"" yaml)))))
 
 
+;;; `#+HUGO_SUMMARY:' through a REAL export (final-review finding 1)
+;;
+;; `summary' is in both allowed key sets, so the filter was never the problem
+;; — nothing ever put the value in.  ox-hugo has no built-in HUGO_SUMMARY
+;; keyword, which is precisely why the essays and recipes normalizers read it
+;; with `--read-org-keyword'; works did not, so the key was silently absent
+;; from every published game and release.  The design's own §3.1 example org
+;; file carries `#+HUGO_SUMMARY:' and `layouts/partials/works/tile.html'
+;; renders `summary' as the tile pull-quote, so the documented path lost the
+;; pull-quote with no error at any layer.
+;;
+;; These go through the REAL exporter, not a hand-built alist.  The test that
+;; should have caught this — `works-games-keeps-every-legal-key' — fed
+;; `(summary . "S")' into `normalize' directly, which is §8a defect 4's exact
+;; pattern: the input already contained what the code under test was supposed
+;; to supply.
+
+(defun a3madkour-pub-works-test--frontmatter-of (path)
+  "Return PATH's YAML frontmatter block (between the two `---' fences)."
+  (with-temp-buffer
+    (insert-file-contents path)
+    (goto-char (point-min))
+    (forward-line 1)
+    (let ((start (point)))
+      (if (re-search-forward "^---$" nil t)
+          (buffer-substring-no-properties start (match-beginning 0))
+        (buffer-string)))))
+
+(defmacro a3madkour-pub-works-test--with-published (fixture-body &rest body)
+  "Publish one works org file and run BODY with `out' bound to its index.md.
+
+FIXTURE-BODY is a form evaluated with `src' and `site-dir' bound, which must
+write the org source.  `slug-path' must be bound by BODY's caller via
+`a3madkour-pub-works-test--published-path'."
+  (declare (indent 1))
+  `(let* ((notes-dir (make-temp-file "a3-pub-works-notes-" t))
+          (site-dir  (make-temp-file "a3-pub-works-site-" t))
+          (src       (expand-file-name "example.org" notes-dir))
+          (messages  '()))
+     (unwind-protect
+         (progn
+           (a3madkour-works-vocab-test/write site-dir)
+           (make-directory (expand-file-name "content/works/games" site-dir) t)
+           (make-directory (expand-file-name "content/works/music" site-dir) t)
+           ,fixture-body
+           (let ((a3madkour-pub/site-data-dir
+                  (file-name-as-directory (expand-file-name "data" site-dir)))
+                 (a3madkour-pub/org-notes-dir notes-dir)
+                 (a3madkour-works-lint-enabled nil)
+                 (done 'unset))
+             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+               (a3madkour-pub/begin-publish)
+               (cl-letf (((symbol-function 'message)
+                          (lambda (fmt &rest args)
+                            (push (apply #'format fmt args) messages))))
+                 (a3madkour-pub-works/publish-works-file
+                  src (make-a3-pub-async-run) :on-done (lambda (s) (setq done s))))
+               (a3madkour-pub/finish-publish))
+             (should (eq done 'ok))
+             ,@body))
+       (delete-directory notes-dir t)
+       (delete-directory site-dir t))))
+
+(ert-deftest a3madkour-pub-works--games-summary-survives-a-real-export ()
+  (a3madkour-pub-works-test--with-published
+      (with-temp-file src
+        (insert ":PROPERTIES:\n"
+                ":ID: 11111111-2222-3333-4444-555555555555\n"
+                ":END:\n"
+                "#+title: Mnemosyne\n"
+                "#+HUGO_PUBLISH: t\n"
+                "#+HUGO_SECTION: works/games\n"
+                "#+HUGO_BASE_DIR: " site-dir "\n"
+                "#+HUGO_SUMMARY: A memory-palace roguelike built for a thesis chapter.\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026 :tagline T\n"
+                "Body text.\n"))
+    (let ((fm (a3madkour-pub-works-test--frontmatter-of
+               (expand-file-name "content/works/games/mnemosyne/index.md"
+                                 site-dir))))
+      (should (string-match-p "memory-palace roguelike built for a thesis chapter"
+                              fm)))))
+
+(ert-deftest a3madkour-pub-works--music-summary-survives-a-real-export ()
+  (a3madkour-pub-works-test--with-published
+      (with-temp-file src
+        (insert ":PROPERTIES:\n"
+                ":ID: 22222222-3333-4444-5555-666666666666\n"
+                ":END:\n"
+                "#+title: Drone Studies\n"
+                "#+HUGO_PUBLISH: t\n"
+                "#+HUGO_SECTION: works/music\n"
+                "#+HUGO_BASE_DIR: " site-dir "\n"
+                "#+HUGO_SUMMARY: Forty-two minutes of tape-saturated drone.\n"
+                "#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026\n"
+                "Headnote.\n"))
+    (let ((fm (a3madkour-pub-works-test--frontmatter-of
+               (expand-file-name "content/works/music/drone-studies/index.md"
+                                 site-dir))))
+      (should (string-match-p "Forty-two minutes of tape-saturated drone" fm)))))
+
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here
