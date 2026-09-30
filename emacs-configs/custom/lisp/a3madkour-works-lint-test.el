@@ -37,5 +37,10 @@ When JSON is nil, no vocabulary file is written."
   (a3madkour-works-lint-test--with-vocab "{\"game_statuses\":[\"playable\"]}"
     (should-error (a3madkour-works-lint/vocab "game_kinds"))))
 
+(ert-deftest a3madkour-works-lint--vocab-fails-closed-on-unknown-key ()
+  (a3madkour-works-lint-test--with-vocab
+      "{\"game_statuses\":[\"playable\"],\"game_kinds\":[\"jam\"],\"music_formats\":[\"album\"],\"platform_kinds\":[\"bandcamp\"]}"
+    (should-error (a3madkour-works-lint/vocab "not_a_real_key"))))
+
 (provide 'a3madkour-works-lint-test)
 ;;; a3madkour-works-lint-test.el ends here
