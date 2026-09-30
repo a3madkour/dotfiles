@@ -150,7 +150,42 @@ When JSON is nil, no vocabulary file is written."
 ")))
       (unwind-protect
           (let ((errs (a3madkour-works-lint/lint-file f)))
-            (should (cl-some (lambda (e) (string-match-p "space" e)) errs)))
+            ;; Rule 5's distinct wording.  The bare word "space" is too loose:
+            ;; hero/cover's own message carries it too.
+            (should (cl-some (lambda (e)
+                               (string-match-p "has a space inside a filename" e))
+                             errs)))
+        (delete-file f)))))
+
+;; Defect 2 (task-12 E2E): rule 5's old form asked only whether the value
+;; held a space AND ended in an extension, which is true of every legitimate
+;; multi-entry `screenshots' list -- including the design spec's own example.
+;; Two-screenshot games were unpublishable.  Both files exist on disk here and
+;; the ID drawer resolves, so a correct rule 5 has nothing to say.
+(ert-deftest a3madkour-works-lint--accepts-multi-screenshot-list ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let* ((slug (make-temp-name "a3wl"))
+           (f (a3madkour-works-lint-test--file (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T
+#+HUGO_CUSTOM_FRONT_MATTER: :screenshots \"shot-1.png shot-2.png\"
+" slug)))
+           (asset-dir (expand-file-name (format "assets/%s/" slug)
+                                        (file-name-directory f))))
+      (unwind-protect
+          (progn
+            (make-directory asset-dir t)
+            (dolist (n '("shot-1.png" "shot-2.png"))
+              (with-temp-file (expand-file-name n asset-dir) (insert "x")))
+            (let ((errs (a3madkour-works-lint/lint-file f)))
+              (should-not (cl-some (lambda (e) (string-match-p "space" e)) errs))
+              (should (null errs))))
+        (delete-directory (expand-file-name (format "assets/%s" slug)
+                                            (file-name-directory f))
+                          t)
         (delete-file f)))))
 
 ;; Supplementary — the six brief tests never exercise the on-disk

@@ -208,14 +208,30 @@ post-push CI failure into a file:line error."
                   (dolist (name (split-string raw "[ \t]+" t))
                     (unless (file-exists-p (expand-file-name name asset-dir))
                       (add k ":%s entry %S not found in %s" k name asset-dir))))))
-            ;; A quoted multi-word filename survives `val' intact, so catch it
-            ;; before the split above can hide it as two names.
+            ;; 5 — a single quoted filename containing a space.  Rule 4 splits
+            ;; on whitespace, so "my shot.png" would otherwise be hidden as two
+            ;; independent not-found names.
+            ;;
+            ;; `hero'/`cover' name exactly ONE file, so any whitespace in them
+            ;; is wrong.  `screenshots' is documented and implemented as a
+            ;; whitespace-separated LIST (design spec §3.1's own example is
+            ;; `:screenshots "shot-1.png shot-2.png"'), so whitespace there is
+            ;; legitimate and the test has to be per-token instead: every token
+            ;; must itself look like a filename.  "my shot.png" fails that
+            ;; ("my" carries no extension) while "shot-1.png shot-2.png"
+            ;; passes.  The previous form asked only whether the WHOLE value
+            ;; held a space and ended in an extension, which rejected every
+            ;; multi-screenshot game outright.
             (dolist (k (if games-p '(hero screenshots) '(cover)))
               (let ((raw (val k)))
-                (when (and raw (string-match-p "[^ \t]\\(?:[ \t]\\)[^ \t]*\\.[A-Za-z0-9]+\\'" raw)
-                           (not (string-match-p "\\`[^ \t]+\\'" raw)))
-                  (add k ":%s value %S contains a space; filenames may not" k raw))))
-            ;; 5 — lyrics_poem must have its reciprocal set_to_music
+                (when (and raw (string-match-p "[ \t]" raw))
+                  (if (eq k 'screenshots)
+                      (unless (cl-every #'a3madkour-works-lint--looks-like-filename-p
+                                        (split-string raw "[ \t]+" t))
+                        (add k ":%s value %S has a space inside a filename; \
+filenames may not contain spaces" k raw))
+                    (add k ":%s value %S contains a space; filenames may not" k raw)))))
+            ;; 6 — lyrics_poem must have its reciprocal set_to_music
             (unless games-p
               (setq errs (append (a3madkour-works-lint--check-lyrics-symmetry base cells)
                                  errs)))))
