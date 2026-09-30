@@ -12,6 +12,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+(require 'org-element)
 (require 'a3madkour-publish-yaml)
 
 (defvar a3madkour-works-lint-enabled t
@@ -58,11 +60,116 @@
     (error "a3madkour-works-lint: unknown vocabulary key %s" key))
   (cdr (assq (intern key) (a3madkour-works-lint--read-vocab))))
 
+(defconst a3madkour-works-lint--required
+  '((works-games . (status game_kind tagline year))
+    (works-music . (format year)))
+  "Required `#+HUGO_CUSTOM_FRONT_MATTER' keys per section.
+title/date/lastmod/draft come from ox-hugo and are not authored here.")
+
+(defun a3madkour-works-lint--kw (ast name)
+  "Value of keyword NAME (upcased) in AST, or nil."
+  (org-element-map ast 'keyword
+    (lambda (kw)
+      (when (string-equal (upcase (org-element-property :key kw)) name)
+        (org-element-property :value kw)))
+    nil t))
+
+(defun a3madkour-works-lint--parse-plist (s)
+  "Parse `:key value :key \"quoted value\"' string S into ((SYMBOL . STRING) ...)."
+  (let ((pos 0) (len (length s)) (out '()))
+    (while (and (< pos len)
+                (string-match ":\\([A-Za-z0-9_-]+\\)[ \t]+" s pos))
+      (let* ((key (intern (match-string 1 s)))
+             (vstart (match-end 0)))
+        (if (and (< vstart len) (eq (aref s vstart) ?\"))
+            (let ((end (string-match "\"" s (1+ vstart))))
+              (push (cons key (substring s (1+ vstart) (or end len))) out)
+              (setq pos (if end (1+ end) len)))
+          (let ((end (or (string-match "[ \t]+:[A-Za-z0-9_-]+[ \t]" s vstart) len)))
+            (push (cons key (string-trim (substring s vstart end))) out)
+            (setq pos end)))))
+    (nreverse out)))
+
+(defun a3madkour-works-lint--cfm-cells (ast)
+  "Merged custom-front-matter cells as ((KEY VALUE . LINE) ...), later lines winning."
+  (let ((cells '()))
+    (org-element-map ast 'keyword
+      (lambda (kw)
+        (when (string-equal (upcase (org-element-property :key kw))
+                            "HUGO_CUSTOM_FRONT_MATTER")
+          (let ((line (line-number-at-pos (org-element-property :begin kw))))
+            (dolist (pair (a3madkour-works-lint--parse-plist
+                           (or (org-element-property :value kw) "")))
+              (setf (alist-get (car pair) cells) (cons (cdr pair) line)))))))
+    cells))
+
+(defun a3madkour-works-lint--looks-like-filename-p (v)
+  "Non-nil when V has a file extension."
+  (and (stringp v) (string-match-p "\\.[A-Za-z0-9]+\\'" v)))
+
 (defun a3madkour-works-lint/lint-file (file)
-  "Lint works FILE.  Return a list of \"FILE:LINE: message\" strings.
-Rules are added in later tasks; this returns the empty list."
-  (ignore file)
-  nil)
+  "Lint works FILE.  Return a list of \"FILE:LINE: message\" strings (empty = clean)."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (org-mode)
+    (let* ((ast     (org-element-parse-buffer))
+           (base    (file-name-nondirectory file))
+           (section (a3madkour-works-lint--kw ast "HUGO_SECTION"))
+           (errs    '()))
+      (when (member section '("works/games" "works/music"))
+        (let* ((games-p (string-equal section "works/games"))
+               (sym     (if games-p 'works-games 'works-music))
+               (cells   (a3madkour-works-lint--cfm-cells ast))
+               (id      (a3madkour-works-lint--kw ast "ID"))
+               (asset-dir (expand-file-name
+                           (format "assets/%s/" (or id ""))
+                           (file-name-directory file))))
+          (cl-flet* ((val (k) (car (alist-get k cells)))
+                     (ln  (k) (or (cdr (alist-get k cells)) 1))
+                     (add (k fmt &rest args)
+                          (push (format "%s:%d: %s" base (ln k)
+                                        (apply #'format fmt args))
+                                errs)))
+            ;; 1 — required keys
+            (dolist (k (cdr (assq sym a3madkour-works-lint--required)))
+              (unless (alist-get k cells)
+                (push (format "%s:1: missing required key :%s" base k) errs)))
+            ;; 2 — enum membership, against the shared vocabulary
+            (dolist (spec (if games-p
+                              '((status . "game_statuses") (game_kind . "game_kinds"))
+                            '((format . "music_formats"))))
+              (let ((v (val (car spec))))
+                (when v
+                  (let ((allowed (a3madkour-works-lint/vocab (cdr spec))))
+                    (unless (member v allowed)
+                      (add (car spec) ":%s=%S not in %S" (car spec) v allowed))))))
+            ;; 3 — hero polymorphism: filename for games, bool for music
+            (let ((h (val 'hero)))
+              (when h
+                (if games-p
+                    (unless (a3madkour-works-lint--looks-like-filename-p h)
+                      (add 'hero ":hero must be a filename for works/games, got %S" h))
+                  (when (a3madkour-works-lint--looks-like-filename-p h)
+                    (add 'hero ":hero must be a boolean for works/music, got %S" h)))))
+            ;; 4 — asset filenames: no whitespace, and present on disk
+            (dolist (k (if games-p '(hero screenshots) '(cover)))
+              (let ((raw (val k)))
+                (when (and raw (or (not (eq k 'hero)) games-p))
+                  (dolist (name (split-string raw "[ \t]+" t))
+                    (cond
+                     ((string-match-p "[ \t]" name)
+                      (add k ":%s entry %S contains a space" k name))
+                     ((not (file-exists-p (expand-file-name name asset-dir)))
+                      (add k ":%s entry %S not found in %s" k name asset-dir)))))))
+            ;; A quoted multi-word filename survives `val' intact, so catch it
+            ;; before the split above can hide it as two names.
+            (dolist (k (if games-p '(hero screenshots) '(cover)))
+              (let ((raw (val k)))
+                (when (and raw (string-match-p "[^ \t]\\(?:[ \t]\\)[^ \t]*\\.[A-Za-z0-9]+\\'" raw)
+                           (not (string-match-p "\\`[^ \t]+\\'" raw)))
+                  (add k ":%s value %S contains a space; filenames may not" k raw))))))
+        (setq errs (nreverse errs)))
+      errs)))
 
 (provide 'a3madkour-works-lint)
 
