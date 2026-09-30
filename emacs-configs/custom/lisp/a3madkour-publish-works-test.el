@@ -677,6 +677,35 @@ write the org source.  `slug-path' must be bound by BODY's caller via
                           messages))))
 
 
+;;; `a3-pub.sh' lint-flag wiring (final-review finding 10)
+;;
+;; Both lint gates live INSIDE the emacs batch process, so each `--skip-*' flag
+;; only works on a path that translates it into a `setq'.  The default
+;; ready-path block loaded `a3madkour-recipe-lint' but never set
+;; `a3madkour-recipe-lint-enabled', so `--skip-recipe-check' was parsed,
+;; exported and then never read — it silently did nothing there.  A per-block
+;; assertion rather than a total count, because a count passes as soon as the
+;; two numbers match for any reason.
+
+(ert-deftest a3madkour-pub-works--a3-pub-sh-wires-each-lint-flag-on-each-path ()
+  (let* ((script (expand-file-name
+                  "a3-pub.sh"
+                  (file-name-directory (locate-library "a3madkour-publish-works"))))
+         (text (with-temp-buffer (insert-file-contents script) (buffer-string)))
+         ;; One `emacs --batch' invocation per publish path.
+         (blocks (cdr (split-string text "emacs --batch")))
+         (checked 0))
+    (should (file-exists-p script))
+    (should (> (length blocks) 2))
+    (dolist (spec '(("-l a3madkour-recipe-lint" . "a3madkour-recipe-lint-enabled")
+                    ("-l a3madkour-works-lint"  . "a3madkour-works-lint-enabled")))
+      (dolist (b blocks)
+        (when (string-match-p (regexp-quote (car spec)) b)
+          (setq checked (1+ checked))
+          (should (string-match-p (regexp-quote (cdr spec)) b)))))
+    ;; Not vacuous: three publish paths load each of the two lint modules.
+    (should (= checked 6))))
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here

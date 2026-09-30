@@ -374,6 +374,12 @@ exec emacs --batch \
   -l a3madkour-publish-multi-pdf \
   -l a3madkour-publish-multi-word \
   -l a3madkour-publish-multi \
+  `# Both lint gates run INSIDE the emacs batch process, so each --skip-*` \
+  `# flag has to be translated into a setq on EVERY path that can publish.` \
+  `# The recipe line was missing here, which meant --skip-recipe-check did` \
+  `# nothing at all on this default path -- the flag was parsed and exported` \
+  `# and then never read.` \
+  --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
   --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"
