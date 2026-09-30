@@ -27,6 +27,12 @@
 
 ;;; Code:
 
+;; `cl-defun' (last-modified-cascade) and `cl-remove-if-not' (every
+;; allowed-key filter) are used throughout this file.  It loaded only because
+;; something earlier in the real load order happened to pull cl-lib in first:
+;; `emacs -Q --batch -L . --eval "(require 'a3madkour-publish-frontmatter)"'
+;; died on `cl-defun'.  Requiring it here removes the load-order dependency.
+(require 'cl-lib)
 (require 'a3madkour-publish-keywords)
 
 (defcustom a3madkour-pub-editorial-tags
