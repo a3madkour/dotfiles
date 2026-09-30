@@ -22,6 +22,9 @@
 (require 'a3madkour-publish-assets)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-works-lint)
+;; `a3madkour-pub/poetry-dir' (used by `a3madkour-pub-works--warn-stale-backlink')
+;; is defined in `a3madkour-publish-poetry', not `a3madkour-publish'.
+(require 'a3madkour-publish-poetry)
 
 (defconst a3madkour-pub-works--track-cols '("title" "duration")
   "Required columns of the `#+NAME: tracks' table, in any order.")
@@ -212,6 +215,24 @@ rest of the list."
            (setq out (assq-delete-all 'cover out)))))
       out)))
 
+(defun a3madkour-pub-works--warn-stale-backlink (poem-slug site-root)
+  "WARN when POEM-SLUG's published bundle lacks its set_to_music back-link.
+
+The org sources agree (the lint enforces that), but poetry publishes
+deliberately, so its bundle may legitimately lag.  A warning, not an error —
+naming the exact command to close the gap."
+  (let ((bundle (expand-file-name
+                 (format "content/works/poetry/%s/index.md" poem-slug) site-root)))
+    (when (and (file-exists-p bundle)
+               (not (with-temp-buffer
+                      (insert-file-contents bundle)
+                      (goto-char (point-min))
+                      (re-search-forward "^set_to_music:" nil t))))
+      (a3madkour-pub/warn
+       "works" bundle
+       "poem bundle lacks set_to_music; run: a3-pub.sh --publish-deliberate %s"
+       (expand-file-name (format "%s.org" poem-slug) a3madkour-pub/poetry-dir)))))
+
 (cl-defun a3madkour-pub-works/publish-works-file (file run &key on-done)
   "Publish a works/games or works/music FILE to content/works/<type>/<slug>/index.md.
 Pipeline: lint → parse tracks → rewrite links → ox-hugo → normalize →
@@ -270,7 +291,10 @@ inject tracks → render → asset-copy → write-if-different → record-publis
            (concat (a3madkour-pub-works--render-frontmatter final-fm) body))
           (a3madkour-pub-history/record-publish
            id new-url (or (plist-get md :state) 'live)
-           :last-modified (alist-get 'lastmod final-fm)))
+           :last-modified (alist-get 'lastmod final-fm))
+          (when (and (eq nsym 'works-music) (alist-get 'lyrics_poem final-fm))
+            (a3madkour-pub-works--warn-stale-backlink
+             (alist-get 'lyrics_poem final-fm) site-root)))
         (when on-done (funcall on-done 'ok)))
     (error
      (message "%s" (error-message-string err))

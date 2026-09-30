@@ -192,5 +192,68 @@ When JSON is nil, no vocabulary file is written."
           (should (null (a3madkour-works-lint/lint-file f)))
         (delete-file f)))))
 
+;;; lyrics_poem <-> set_to_music symmetry (Task 9)
+;;
+;; The brief's Step 1 test bodies do not wrap these in
+;; `a3madkour-works-lint-test--with-vocab', relying on the real
+;; `a3madkour-pub-yaml/site-root' to resolve `data/works-vocab.json' (rule 2,
+;; the `format' enum check, runs before the new symmetry rule and needs the
+;; vocab file regardless of what the symmetry rule tests).  That works when
+;; poking the function from a live Emacs pointed at the real site checkout,
+;; but `run-tests.sh' never sets `a3madkour-pub/site-data-dir', so
+;; `a3madkour-pub-yaml/site-root' signals `wrong-type-argument' before rule 5
+;; is ever reached.  Wrapped here in the same vocab mock every other
+;; `lint-file' test in this buffer already uses.
+
+(ert-deftest a3madkour-works-lint--requires-reciprocal-set-to-music ()
+  "A music item claiming a poem must find set_to_music in that poem's org."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let* ((dir (make-temp-file "a3-works-sym" t))
+           (poem (expand-file-name "tessellations.org" dir))
+           (music (a3madkour-works-lint-test--file
+                   (format "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026 :lyrics_poem tessellations
+"))))
+      (unwind-protect
+          (progn
+            (with-temp-file poem (insert "#+TITLE: Tessellations\n#+HUGO_SECTION: works/poetry\n"))
+            (let ((a3madkour-pub/poetry-dir dir))
+              (let ((errs (a3madkour-works-lint/lint-file music)))
+                (should (cl-some (lambda (e) (string-match-p "set_to_music" e)) errs)))))
+        (delete-file music) (delete-directory dir t)))))
+
+(ert-deftest a3madkour-works-lint--accepts-reciprocal-set-to-music ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let* ((dir (make-temp-file "a3-works-sym" t))
+           (poem (expand-file-name "tessellations.org" dir))
+           (music (a3madkour-works-lint-test--file "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026 :lyrics_poem tessellations
+")))
+      (unwind-protect
+          (progn
+            (with-temp-file poem
+              (insert "#+TITLE: Tessellations
+#+HUGO_SECTION: works/poetry
+#+HUGO_CUSTOM_FRONT_MATTER: :set_to_music m
+"))
+            (let ((a3madkour-pub/poetry-dir dir))
+              (should-not (cl-some (lambda (e) (string-match-p "set_to_music" e))
+                                   (a3madkour-works-lint/lint-file music)))))
+        (delete-file music) (delete-directory dir t)))))
+
+(ert-deftest a3madkour-works-lint--missing-poem-file-is-an-error ()
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((music (a3madkour-works-lint-test--file "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026 :lyrics_poem nonexistent
+")))
+      (unwind-protect
+          (let ((a3madkour-pub/poetry-dir (make-temp-file "a3-empty" t)))
+            (should (cl-some (lambda (e) (string-match-p "nonexistent" e))
+                             (a3madkour-works-lint/lint-file music))))
+        (delete-file music)))))
+
 (provide 'a3madkour-works-lint-test)
 ;;; a3madkour-works-lint-test.el ends here

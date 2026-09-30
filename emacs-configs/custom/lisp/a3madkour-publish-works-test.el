@@ -309,6 +309,64 @@
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+;;; --warn-stale-backlink (Task 9)
+
+(defmacro a3madkour-pub-works-test--capture-warnings (&rest body)
+  "Run BODY with `message' mocked; return (RESULT . WARNINGS)."
+  (declare (indent 0))
+  `(let ((warnings '()))
+     (let ((result (cl-letf (((symbol-function 'message)
+                              (lambda (fmt &rest args)
+                                (push (apply #'format fmt args) warnings))))
+                     ,@body)))
+       (cons result warnings))))
+
+(ert-deftest a3madkour-pub-works--warn-stale-backlink-fires-when-key-absent ()
+  "Bundle exists but lacks `set_to_music:' → a WARN naming the fix command."
+  (let* ((root (make-temp-file "a3-warn-stale" t))
+         (bundle-dir (expand-file-name "content/works/poetry/tessellations/" root)))
+    (unwind-protect
+        (progn
+          (make-directory bundle-dir t)
+          (with-temp-file (expand-file-name "index.md" bundle-dir)
+            (insert "---\ntitle: Tessellations\n---\nBody.\n"))
+          (let* ((a3madkour-pub/poetry-dir root)
+                 (out (a3madkour-pub-works-test--capture-warnings
+                        (a3madkour-pub-works--warn-stale-backlink "tessellations" root))))
+            (should (seq-some (lambda (m)
+                                (string-match-p
+                                 "lacks set_to_music.*--publish-deliberate.*tessellations\\.org"
+                                 m))
+                              (cdr out)))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-works--warn-stale-backlink-silent-when-key-present ()
+  "Bundle already carries `set_to_music:' → no WARN."
+  (let* ((root (make-temp-file "a3-warn-stale" t))
+         (bundle-dir (expand-file-name "content/works/poetry/tessellations/" root)))
+    (unwind-protect
+        (progn
+          (make-directory bundle-dir t)
+          (with-temp-file (expand-file-name "index.md" bundle-dir)
+            (insert "---\ntitle: Tessellations\nset_to_music: m\n---\nBody.\n"))
+          (let* ((a3madkour-pub/poetry-dir root)
+                 (out (a3madkour-pub-works-test--capture-warnings
+                        (a3madkour-pub-works--warn-stale-backlink "tessellations" root))))
+            (should-not (cdr out))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-works--warn-stale-backlink-silent-when-bundle-absent ()
+  "No published bundle yet (poem never deliberate-published) → no WARN.
+Not an error case: the lint already caught an org-source mismatch; a bundle
+that has simply never been published is not what this warning is for."
+  (let* ((root (make-temp-file "a3-warn-stale" t)))
+    (unwind-protect
+        (let* ((a3madkour-pub/poetry-dir root)
+               (out (a3madkour-pub-works-test--capture-warnings
+                      (a3madkour-pub-works--warn-stale-backlink "tessellations" root))))
+          (should-not (cdr out)))
+      (delete-directory root t))))
+
 (provide 'a3madkour-publish-works-test)
 
 ;;; a3madkour-publish-works-test.el ends here

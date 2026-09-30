@@ -15,6 +15,11 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'a3madkour-publish-yaml)
+;; `a3madkour-pub/poetry-dir' is defined in `a3madkour-publish-poetry', not
+;; `a3madkour-publish' -- the brief's requested `(require 'a3madkour-publish)'
+;; does not bring it in.  Requiring the poetry module directly is safe: it
+;; does not depend on this module or on `a3madkour-publish-works'.
+(require 'a3madkour-publish-poetry)
 
 (defvar a3madkour-works-lint-enabled t
   "When non-nil, the works handler runs this linter before publishing.")
@@ -107,6 +112,39 @@ title/date/lastmod/draft come from ox-hugo and are not authored here.")
   "Non-nil when V has a file extension."
   (and (stringp v) (string-match-p "\\.[A-Za-z0-9]+\\'" v)))
 
+(defun a3madkour-works-lint--poem-declares-set-to-music-p (poem-file)
+  "Non-nil when POEM-FILE's custom front matter declares `set_to_music'."
+  (with-temp-buffer
+    (insert-file-contents poem-file)
+    (org-mode)
+    (and (alist-get 'set_to_music
+                    (a3madkour-works-lint--cfm-cells (org-element-parse-buffer)))
+         t)))
+
+(defun a3madkour-works-lint--check-lyrics-symmetry (base cells)
+  "Return a list of symmetry errors for the music item described by CELLS.
+
+`check_works_links.py' enforces lyrics_poem <-> set_to_music in both
+directions, but the two ends are written by different handlers in different
+modes, so satisfying one never satisfies the other.  Catching it here turns a
+post-push CI failure into a file:line error."
+  (let* ((cell (alist-get 'lyrics_poem cells))
+         (slug (car cell))
+         (line (or (cdr cell) 1))
+         (errs '()))
+    (when slug
+      (let ((poem (expand-file-name (format "%s.org" slug) a3madkour-pub/poetry-dir)))
+        (cond
+         ((not (file-exists-p poem))
+          (push (format "%s:%d: :lyrics_poem %S has no org source at %s"
+                        base line slug poem)
+                errs))
+         ((not (a3madkour-works-lint--poem-declares-set-to-music-p poem))
+          (push (format "%s:%d: :lyrics_poem %S but %s does not declare :set_to_music"
+                        base line slug (file-name-nondirectory poem))
+                errs)))))
+    errs))
+
 (defun a3madkour-works-lint/lint-file (file)
   "Lint works FILE.  Return a list of \"FILE:LINE: message\" strings (empty = clean)."
   (with-temp-buffer
@@ -164,7 +202,11 @@ title/date/lastmod/draft come from ox-hugo and are not authored here.")
               (let ((raw (val k)))
                 (when (and raw (string-match-p "[^ \t]\\(?:[ \t]\\)[^ \t]*\\.[A-Za-z0-9]+\\'" raw)
                            (not (string-match-p "\\`[^ \t]+\\'" raw)))
-                  (add k ":%s value %S contains a space; filenames may not" k raw))))))
+                  (add k ":%s value %S contains a space; filenames may not" k raw))))
+            ;; 5 — lyrics_poem must have its reciprocal set_to_music
+            (unless games-p
+              (setq errs (append (a3madkour-works-lint--check-lyrics-symmetry base cells)
+                                 errs)))))
         (setq errs (nreverse errs)))
       errs)))
 
