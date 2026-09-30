@@ -818,6 +818,53 @@
           (should (null captured-source-note-id)))
       (delete-directory tmp t))))
 
+;;; asset-validate-and-copy: extra-refs (frontmatter-declared assets).
+
+(ert-deftest a3madkour-pub-assets--extra-refs-copied-and-kept ()
+  "A frontmatter-declared asset must land in the bundle AND survive cleanup-stale."
+  (let* ((root (make-temp-file "a3-assets-extra" t))
+         (org-dir (expand-file-name "notes/" root))
+         (asset-dir (expand-file-name "notes/assets/ID-1/" root))
+         (bundle (expand-file-name "bundle/" root))
+         (org-file (expand-file-name "g.org" org-dir)))
+    (unwind-protect
+        (progn
+          (make-directory asset-dir t)
+          (make-directory bundle t)
+          (with-temp-file org-file (insert "#+TITLE: G\n\nBody with no asset links.\n"))
+          (with-temp-file (expand-file-name "shot-1.png" asset-dir) (insert "png"))
+          (a3madkour-pub/asset-validate-and-copy org-file bundle "ID-1" nil '("shot-1.png"))
+          (should (file-exists-p (expand-file-name "shot-1.png" bundle))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-assets--extra-refs-missing-source-is-an-error ()
+  (let* ((root (make-temp-file "a3-assets-extra" t))
+         (org-dir (expand-file-name "notes/" root))
+         (bundle (expand-file-name "bundle/" root))
+         (org-file (expand-file-name "g.org" org-dir)))
+    (unwind-protect
+        (progn
+          (make-directory org-dir t) (make-directory bundle t)
+          (with-temp-file org-file (insert "#+TITLE: G\n"))
+          (let ((res (a3madkour-pub/asset-validate-and-copy
+                      org-file bundle "ID-1" nil '("missing.png"))))
+            (should (plist-get res :errors))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-assets--extra-refs-defaults-nil-unchanged ()
+  "Existing three-argument callers must behave exactly as before."
+  (let* ((root (make-temp-file "a3-assets-extra" t))
+         (org-dir (expand-file-name "notes/" root))
+         (bundle (expand-file-name "bundle/" root))
+         (org-file (expand-file-name "g.org" org-dir)))
+    (unwind-protect
+        (progn
+          (make-directory org-dir t) (make-directory bundle t)
+          (with-temp-file org-file (insert "#+TITLE: G\n"))
+          (let ((res (a3madkour-pub/asset-validate-and-copy org-file bundle "ID-1")))
+            (should-not (plist-get res :errors))))
+      (delete-directory root t))))
+
 ;;; rewrite-asset-link: nil source-note-id suppresses cross-namespace check.
 
 (ert-deftest a3madkour-pub-assets-test/rewrite-asset-nil-source-skips-cross-namespace ()
