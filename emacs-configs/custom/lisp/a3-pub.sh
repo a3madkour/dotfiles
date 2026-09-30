@@ -57,6 +57,12 @@ A3_PUB_SKIP_MATH_CHECK="${A3_PUB_SKIP_MATH_CHECK:-0}"
 A3_PUB_SKIP_RECIPE_CHECK="${A3_PUB_SKIP_RECIPE_CHECK:-0}"
 export A3_PUB_SKIP_RECIPE_CHECK
 
+# Slice A1: --skip-works-check flag init.  Default is on (run the works
+# lint).  Like the recipe lint, this is an elisp-side check, so the value
+# travels as an exported env var read by --eval, not as a shell branch.
+: "${A3_PUB_SKIP_WORKS_CHECK:=}"
+export A3_PUB_SKIP_WORKS_CHECK
+
 # C: invoke `org-math-lint check --root <dir>' against the org source
 # directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.  Exits
 # non-zero on validator failure or missing install (distinct exit codes
@@ -92,6 +98,7 @@ for a in "$@"; do
   case "$a" in
     --skip-math-check) A3_PUB_SKIP_MATH_CHECK=1 ;;
     --skip-recipe-check) A3_PUB_SKIP_RECIPE_CHECK=1 ;;
+    --skip-works-check) A3_PUB_SKIP_WORKS_CHECK=1 ;;
     *) parsed_args+=("$a") ;;
   esac
 done
@@ -193,9 +200,12 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-research \
     -l a3madkour-recipe-lint \
     -l a3madkour-publish-recipes \
+    -l a3madkour-works-lint \
+    -l a3madkour-publish-works \
     -l a3madkour-publish-bib \
     -l a3madkour-publish-citations \
     --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
+    --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
@@ -263,6 +273,8 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-research \
     -l a3madkour-recipe-lint \
     -l a3madkour-publish-recipes \
+    -l a3madkour-works-lint \
+    -l a3madkour-publish-works \
     -l a3madkour-publish-essays \
     -l a3madkour-publish-poetry \
     -l a3madkour-publish-bib \
@@ -272,6 +284,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-multi-word \
     -l a3madkour-publish-multi \
     --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
+    --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(condition-case err
@@ -354,10 +367,19 @@ exec emacs --batch \
   -l a3madkour-publish-research \
   -l a3madkour-recipe-lint \
   -l a3madkour-publish-recipes \
+  -l a3madkour-works-lint \
+  -l a3madkour-publish-works \
   -l a3madkour-publish-essays \
   -l a3madkour-publish-multi-filter \
   -l a3madkour-publish-multi-pdf \
   -l a3madkour-publish-multi-word \
   -l a3madkour-publish-multi \
+  `# Both lint gates run INSIDE the emacs batch process, so each --skip-*` \
+  `# flag has to be translated into a setq on EVERY path that can publish.` \
+  `# The recipe line was missing here, which meant --skip-recipe-check did` \
+  `# nothing at all on this default path -- the flag was parsed and exported` \
+  `# and then never read.` \
+  --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
+  --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
   --eval "(message \"[a3-pub] ready (v%s)\" a3madkour-pub/version)" \
   "$@"

@@ -499,7 +499,7 @@ Any other relative path is resolved against ORG-FILE's directory via
                         (file-name-directory (expand-file-name org-file))))))
 
 (defun a3madkour-pub/asset-validate-and-copy
-    (org-file bundle-dest-dir &optional source-note-id dry-run)
+    (org-file bundle-dest-dir &optional source-note-id dry-run extra-refs)
   "Walk ORG-FILE for asset links; copy referenced assets; remove stale per-page assets.
 
 For each `[[<path>][text]]' that is asset-shaped:
@@ -524,7 +524,15 @@ project B's per-section publishers thread their `:id' here; see
 `a3madkour-pub-essays/publish-essay-file' for the canonical caller.
 
 DRY-RUN, when non-nil, propagates to rewrite-asset-link's auto-remediation
-and suppresses file I/O for copies + cleanup."
+and suppresses file I/O for copies + cleanup.
+
+EXTRA-REFS is a list of bare filenames declared in frontmatter rather than
+linked from the body.  Each resolves to <org-dir>/assets/<SOURCE-NOTE-ID>/<name>.
+They are copied into BUNDLE-DEST-DIR and added to the cleanup-stale keep-set,
+so they are not deleted as strays.  This exists because `--extract-asset-refs'
+scans body links only; without it a frontmatter-declared asset is either never
+copied (recipes bug #4) or copied and then removed by cleanup-stale unless the
+caller carefully orders its copy after this call (poetry's audio constraint)."
   (let ((refs (a3madkour-pub--extract-asset-refs org-file))
         (copied nil)
         (warnings nil)
@@ -560,6 +568,27 @@ and suppresses file I/O for copies + cleanup."
                     (push basename referenced-basenames)))
               (error
                (push (format "copy failed: %s -> %s (%S)" src dest err) errors)))))))
+    ;; Frontmatter-declared assets: copy, and register so cleanup-stale keeps them.
+    (dolist (name extra-refs)
+      (let* ((basename (file-name-nondirectory name))
+             (src (expand-file-name
+                   basename
+                   (expand-file-name (format "assets/%s/" (or source-note-id ""))
+                                     (file-name-directory org-file))))
+             (dest (expand-file-name basename bundle-dest-dir)))
+        (cond
+         ((not (file-exists-p src))
+          (push (format "extra-ref not found: %s" src) errors))
+         (dry-run nil)
+         (t
+          (make-directory (file-name-directory dest) t)
+          (condition-case err
+              (progn
+                (copy-file src dest t)
+                (push dest copied)
+                (push basename referenced-basenames))
+            (error
+             (push (format "copy failed: %s -> %s (%S)" src dest err) errors)))))))
     (let ((removed (and (not dry-run)
                         (a3madkour-pub--asset-cleanup-stale
                          bundle-dest-dir referenced-basenames))))

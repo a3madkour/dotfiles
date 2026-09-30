@@ -27,7 +27,18 @@
 
 ;;; Code:
 
+;; `cl-defun' (last-modified-cascade) and `cl-remove-if-not' (every
+;; allowed-key filter) are used throughout this file.  It loaded only because
+;; something earlier in the real load order happened to pull cl-lib in first:
+;; `emacs -Q --batch -L . --eval "(require 'a3madkour-publish-frontmatter)"'
+;; died on `cl-defun'.  Requiring it here removes the load-order dependency.
+(require 'cl-lib)
 (require 'a3madkour-publish-keywords)
+;; The works emitted-field contract is read from the site repo's shared
+;; vocabulary, not transcribed here.  This module is deliberately a leaf that
+;; `emacs -Q --batch' can load, so `a3madkour-works-vocab' carries no
+;; load-time dependency of its own (it requires the site-root helper lazily).
+(require 'a3madkour-works-vocab)
 
 (defcustom a3madkour-pub-editorial-tags
   '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH")
@@ -84,6 +95,10 @@ known section; per-section logic lands in B.1+ (garden), B.2 (library),
     (a3madkour-pub-frontmatter--normalize-research-question raw-alist source-file))
    ((eq section 'works-poetry)
     (a3madkour-pub-frontmatter--normalize-works-poetry raw-alist source-file))
+   ((eq section 'works-games)
+    (a3madkour-pub-frontmatter--normalize-works-games raw-alist source-file))
+   ((eq section 'works-music)
+    (a3madkour-pub-frontmatter--normalize-works-music raw-alist source-file))
    ;; B.2+ slices add real branches here:
    ;;   ((memq section '(library-reading library-listening library-playing library-watching))
    ;;    (a3madkour-pub-frontmatter--normalize-library section raw-alist source-file))
@@ -573,6 +588,186 @@ in the per-section normalizer or the handler entry point."
       (let ((v (alist-get key out)))
         (when (or (null v) (and (stringp v) (string-empty-p v)))
           (setq out (assq-delete-all key out)))))
+    out))
+
+(defun a3madkour-pub-frontmatter--works-allowed-keys (section)
+  "Every key legal in emitted frontmatter for works SECTION.
+
+Read from the shared vocabulary (`data/works-vocab.json' in the site repo),
+which is the ONE home of this contract — `tools/check_works_fixtures.py'
+builds its `GAME_FIELDS' / `MUSIC_FIELDS' from the same file.
+
+This used to be two elisp defconsts transcribing the Python sets, plus a
+third transcription in the tests, and the tests compared copy 1 against
+copy 3 (both elisp), so a key added on the Python side left every elisp copy
+stale and green.  The filter below then dropped the new field out of every
+published page with no error at any layer, which is strictly worse than the
+unknown-field CI failure the filter exists to prevent.  Reading the contract
+is what makes that impossible rather than merely unlikely.
+
+Fails closed: a missing or malformed vocabulary signals, so a works publish
+aborts rather than emitting unfiltered frontmatter.
+
+The two flat authoring keys `platform_kind' / `platform_url' are deliberately
+NOT in the contract: they are inputs the music normalizer folds into
+`platform_embed', and filtering them out is what keeps them off the page.
+`tracks' IS in it although the handler injects it after `normalize' — the set
+is the contract, not a record of who writes each key."
+  (a3madkour-works-vocab/emitted-keys section))
+
+(defconst a3madkour-pub-frontmatter--works-comma-keys
+  '(collaborators tech_stack made_with)
+  "Works list keys holding free text, split on comma rather than whitespace.
+A collaborator named \"Alice Example\" is one person, not two.")
+
+(defconst a3madkour-pub-frontmatter--works-path-keys
+  '((research_questions . "/research/questions/%s/")
+    (related_essays     . "/essays/%s/")
+    (related_notes      . "/garden/%s/")
+    (related_works      . "/works/%s/"))
+  "Works slug-list keys and the site-path template each expands to.")
+
+(defun a3madkour-pub-frontmatter--split-commas (raw)
+  "Split RAW on commas, trimming each field.  Drops empty fields."
+  (cond
+   ((null raw) nil)
+   ((listp raw) raw)
+   ((stringp raw)
+    (delq nil (mapcar (lambda (s)
+                        (let ((trimmed (string-trim s)))
+                          (unless (string-empty-p trimmed) trimmed)))
+                      (split-string raw "," t))))
+   (t nil)))
+
+(defun a3madkour-pub-frontmatter--normalize-works-common (raw file allowed)
+  "Normalization shared by works-games and works-music.
+
+ALLOWED is the per-type list of legal emitted keys (see
+`a3madkour-pub-frontmatter--works-allowed-keys').  RAW is filtered to it
+first, which is how ox-hugo's
+own `author' and `slug' keys are kept off the page -- every sibling
+normalizer does the same, and works was the one that did not."
+  (let ((out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
+                               (copy-alist raw))))
+    ;; summary: `#+HUGO_SUMMARY:' is not an ox-hugo keyword, so it never
+    ;; reaches RAW and the allowed-key filter above cannot put it back.  Read
+    ;; it from the source exactly as the essays and recipes normalizers do.
+    ;;
+    ;; Without this the key was silently dropped on the documented authoring
+    ;; path: the design's own §3.1 example org file carries
+    ;; `#+HUGO_SUMMARY:', `layouts/partials/works/tile.html' renders `summary'
+    ;; as the tile pull-quote, and the shipped
+    ;; `content/works/games/example-playable-full-release/index.md' declares
+    ;; it — so migrating that fixture to org lost its pull-quote with no error
+    ;; anywhere.  Unlike essays/recipes it is injected only when PRESENT:
+    ;; `summary' is optional for both works types, and an unconditional `""'
+    ;; would emit an empty key on every game and release.
+    (when-let ((s (a3madkour-pub-frontmatter--read-org-keyword file "HUGO_SUMMARY")))
+      (setf (alist-get 'summary out) s))
+    ;; year → integer (check_works_fixtures.py rejects a string).
+    (let ((y (alist-get 'year out)))
+      (when (stringp y) (setf (alist-get 'year out) (string-to-number y))))
+    ;; Free-text lists split on comma.
+    (dolist (k a3madkour-pub-frontmatter--works-comma-keys)
+      (when (assq k out)
+        (let ((v (a3madkour-pub-frontmatter--split-commas (alist-get k out))))
+          (if v (setf (alist-get k out) v) (setq out (assq-delete-all k out))))))
+    ;; Slug lists split on whitespace and expand to site paths.
+    (dolist (cell a3madkour-pub-frontmatter--works-path-keys)
+      (let ((k (car cell)) (tmpl (cdr cell)))
+        (when (assq k out)
+          (let ((slugs (a3madkour-pub-frontmatter--coerce-slug-list (alist-get k out))))
+            (if slugs
+                (setf (alist-get k out)
+                      (mapcar (lambda (s) (format tmpl s)) slugs))
+              (setq out (assq-delete-all k out)))))))
+    ;; featured is a bool on both types.  `--coerce-bool' maps both a false
+    ;; VALUE and (implicitly) an absent key to nil, so a nil coercion result
+    ;; is indistinguishable from "not set" — delete the key rather than
+    ;; write `(featured . nil)', which would render a broken `featured:'
+    ;; line with no value.
+    (when (assq 'featured out)
+      (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'featured out))
+          (setf (alist-get 'featured out) t)
+        (setq out (assq-delete-all 'featured out))))
+    ;; lastmod via the shared cascade, exactly as essays / garden / research /
+    ;; poetry do it: drawer -> #+HUGO_LASTMOD: keyword -> git-mtime ->
+    ;; P2.14 manifest-recorded -> filesystem mtime -> today.
+    ;;
+    ;; `check_works_fixtures.py' lists `lastmod' in both GAME_REQUIRED and
+    ;; MUSIC_REQUIRED, and ox-hugo only emits it when `#+HUGO_LASTMOD:' or
+    ;; `HUGO_AUTO_SET_LASTMOD' is set -- which the works authoring surface
+    ;; never sets.  Without this the key was absent from every real publish
+    ;; and the site linter failed every one of them.
+    ;;
+    ;; The drawer/keyword slots read from RAW, not OUT: `last_modified' is not
+    ;; an emitted works key (and is filtered out downstream), but an author who
+    ;; sets it must still be able to feed the cascade.  The P2.14 slot needs no
+    ;; argument here -- `publish-works-file' let-binds
+    ;; `a3madkour-pub-frontmatter--prior-last-modified' around this call, and
+    ;; the cascade reads that ambient value, so a republish of a never-committed
+    ;; note keeps its recorded date instead of churning to today.
+    (let* ((drawer-lm (alist-get 'last_modified raw))
+           (kw-lm     (alist-get 'lastmod raw))
+           (kw-trim   (when (and (stringp kw-lm) (>= (length kw-lm) 10))
+                        (substring kw-lm 0 10))))
+      (setq out (assq-delete-all 'lastmod out))
+      (setq out (assq-delete-all 'last_modified out))
+      (setf (alist-get 'lastmod out)
+            (a3madkour-pub-frontmatter/last-modified-cascade
+             file :drawer drawer-lm :keyword kw-trim)))
+    out))
+
+(defun a3madkour-pub-frontmatter--normalize-works-games (raw file)
+  "Normalize a works-games RAW alist.  `screenshots' is a filename list here."
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common
+              raw file (a3madkour-pub-frontmatter--works-allowed-keys 'works-games))))
+    ;; screenshots: whitespace-split, left as bare filenames (no path expansion).
+    (when (assq 'screenshots out)
+      (let ((v (a3madkour-pub-frontmatter--coerce-slug-list (alist-get 'screenshots out))))
+        (if v (setf (alist-get 'screenshots out) v)
+          (setq out (assq-delete-all 'screenshots out)))))
+    out))
+
+(defun a3madkour-pub-frontmatter--normalize-works-music (raw file)
+  "Normalize a works-music RAW alist.  `hero' is a BOOL here (Bento directive).
+
+`platform_embed' is the one field where the design's \"org keys mirror emitted
+keys exactly\" principle cannot hold.  The site wants a nested map
+\(`{ kind: ..., url: ... }'), but `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips
+every custom value as a FLAT scalar, so an authored
+`:platform_embed { kind: bandcamp, url: \"...\" }' arrived as the plain string
+`\"{ kind: bandcamp, url: ... }\"'.  The works key-hook only renders a real
+list, so it hit its `:omit' branch every time and the field silently never
+appeared on any page -- with no error anywhere in the pipeline.
+
+It is therefore authored as TWO flat keys, `:platform_kind' and
+`:platform_url', and assembled here.  A documented exception beats a field
+that does nothing.  `a3madkour-works-lint' enforces both-or-neither and checks
+`platform_kind' against the shared vocabulary's `platform_kinds', and rejects
+a directly-authored `:platform_embed' so the silent-drop cannot recur."
+  (let ((out (a3madkour-pub-frontmatter--normalize-works-common
+              raw file (a3madkour-pub-frontmatter--works-allowed-keys 'works-music))))
+    ;; Same nil-vs-absent reasoning as `featured' above: delete rather than
+    ;; write a nil value.
+    (when (assq 'hero out)
+      (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'hero out))
+          (setf (alist-get 'hero out) t)
+        (setq out (assq-delete-all 'hero out))))
+    ;; Assemble platform_embed from the two flat authoring keys.  Deleted
+    ;; unconditionally first: a flat `platform_embed' string survives the
+    ;; allowed-key filter (the key IS in the contract), and passing it through
+    ;; would render `platform_embed: "{ kind: ... }"' -- a quoted scalar where
+    ;; the linter demands a dict.  `platform_kind'/`platform_url' are absent
+    ;; from the allowed set, so the filter has already kept them off the page.
+    (setq out (assq-delete-all 'platform_embed out))
+    (let ((kind (alist-get 'platform_kind raw))
+          (url  (alist-get 'platform_url raw)))
+      (when (and (stringp kind) (not (string-empty-p (string-trim kind)))
+                 (stringp url)  (not (string-empty-p (string-trim url))))
+        (setf (alist-get 'platform_embed out)
+              (list (cons 'kind (string-trim kind))
+                    (cons 'url  (string-trim url))))))
     out))
 
 (provide 'a3madkour-publish-frontmatter)

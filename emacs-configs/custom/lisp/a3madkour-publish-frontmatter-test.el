@@ -5,6 +5,11 @@
 
 (require 'ert)
 (require 'a3madkour-publish-frontmatter)
+;; `a3madkour-works-vocab-test--with-root' / `--json': the one vocabulary
+;; fixture, shared with the works lint + handler test files.  The works
+;; normalizer reads its allowed-key contract from that file, so every
+;; works normalize call below needs a site root that carries one.
+(require 'a3madkour-works-vocab-fixture)
 
 (ert-deftest a3madkour-pub-fm-test/normalize-returns-alist-with-section ()
   "B.0 — `normalize' returns the input alist annotated with section symbol.
@@ -16,13 +21,18 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
     (should (equal '("a" "b") (alist-get 'tags result)))))
 
 (ert-deftest a3madkour-pub-fm-test/normalize-accepts-all-known-sections ()
-  "B.0 — `normalize' dispatches without error for every section enum value."
-  (dolist (section '(garden essays research-themes research-questions
-                     works-games works-music works-poetry
-                     streams about
-                     library-reading library-listening
-                     library-playing library-watching))
-    (should (a3madkour-pub-frontmatter/normalize section '((title . "X")) "/tmp/x.org"))))
+  "B.0 — `normalize' dispatches without error for every section enum value.
+
+Wrapped in the vocabulary fixture because works-games / works-music read
+their allowed-key contract from `data/works-vocab.json' and fail closed
+without it."
+  (a3madkour-works-vocab-test--with-root a3madkour-works-vocab-test--json
+    (dolist (section '(garden essays research-themes research-questions
+                       works-games works-music works-poetry
+                       streams about
+                       library-reading library-listening
+                       library-playing library-watching))
+      (should (a3madkour-pub-frontmatter/normalize section '((title . "X")) "/tmp/x.org")))))
 
 (ert-deftest a3madkour-pub-fm-test/normalize-errors-on-unknown-section ()
   "B.0 — `normalize' signals an error for unknown section symbol."
@@ -835,6 +845,372 @@ must read it from the source file and coerce to int."
           (let ((out (a3madkour-pub-frontmatter/normalize 'recipes '((title . "X")) f)))
             (should (equal (alist-get 'date out) (alist-get 'lastmod out)))))
       (delete-file f))))
+
+;;; --- works/games + works/music -------------------------------------------
+;;
+;; Every normalize call below goes through the shared vocabulary, because the
+;; emitted-field contract lives there (`data/works-vocab.json' in the site
+;; repo) and no longer in an elisp defconst.  The macro supplies a site root
+;; carrying the fixture, the way production supplies one.
+;;
+;; That is also why there is no longer a `-key-set-matches-contract' pair
+;; here.  Those two tests compared an elisp defconst against an elisp test
+;; constant — both copies of a Python set — so a key added on the Python side
+;; left all three stale and green, and the normalizer then filtered the new
+;; field out of every page silently.  What replaces them is
+;; `--works-<type>-keeps-exactly-the-vocabulary-keys': the expectation is read
+;; back out of the vocabulary FILE, so there is one thing to be right.
+
+(defmacro a3madkour-pub-frontmatter-test--with-works-vocab (&rest body)
+  "Run BODY with a temp site root carrying the shared vocabulary fixture."
+  (declare (indent 0))
+  `(a3madkour-works-vocab-test--with-root a3madkour-works-vocab-test--json
+     ,@body))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-comma-vs-whitespace ()
+  "Review Focus: free-text lists split on comma, slug lists on whitespace."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026")
+                  (collaborators . "Alice Example, Bob Example")
+                  (tech_stack . "Godot, GDScript")
+                  (research_questions . "example-question-one example-question-two"))
+                "/tmp/g.org")))
+      (should (equal (alist-get 'collaborators out) '("Alice Example" "Bob Example")))
+      (should (equal (alist-get 'tech_stack out) '("Godot" "GDScript")))
+      (should (equal (alist-get 'research_questions out)
+                     '("/research/questions/example-question-one/"
+                       "/research/questions/example-question-two/")))
+      (should (equal (alist-get 'year out) 2026)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-bool-coercion ()
+  "hero and featured must emit real booleans, not strings."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album")
+                  (hero . "t") (featured . "t"))
+                "/tmp/m.org")))
+      (should (eq (alist-get 'hero out) t))
+      (should (eq (alist-get 'featured out) t)))))
+
+;; Review Focus #1 — every optional absent must produce no keys at all.
+(ert-deftest a3madkour-pub-frontmatter--works-games-minimal-emits-no-empty-keys ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (status . "playable")
+                  (game_kind . "jam") (tagline . "T"))
+                "/tmp/g.org")))
+      (dolist (k '(screenshots collaborators tech_stack hero featured
+                   research_questions related_essays related_notes summary))
+        (should-not (assq k out))))))
+
+;; Review Focus #1, present-but-false variant: `--coerce-bool' maps a false
+;; VALUE to nil the same way it maps an absent key to nil, so a naive
+;; `(setf (alist-get k out) (coerce-bool v))' would leave `(k . nil)' in the
+;; alist when the author explicitly wrote "false" — a leaked empty key that
+;; `works-games-minimal-emits-no-empty-keys' (whose input omits the keys
+;; entirely) cannot catch.
+(ert-deftest a3madkour-pub-frontmatter--works-music-false-bool-deletes-key ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album")
+                  (hero . "false") (featured . "nil"))
+                "/tmp/m.org")))
+      (should-not (assq 'hero out))
+      (should-not (assq 'featured out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-false-featured-deletes-key ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (featured . "false"))
+                "/tmp/g.org")))
+      (should-not (assq 'featured out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-screenshots-stay-filenames ()
+  "screenshots split on whitespace but are NOT expanded to site paths."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (screenshots . "a.png b.png"))
+                "/tmp/g.org")))
+      (should (equal (alist-get 'screenshots out) '("a.png" "b.png"))))))
+
+
+;;; Defect 3 (task-12 E2E) — the works normalizer never resolved `lastmod'.
+;;
+;; `check_works_fixtures.py' lists it in GAME_REQUIRED and MUSIC_REQUIRED, and
+;; nothing in the works authoring surface sets `#+HUGO_LASTMOD:', so the key was
+;; absent from every real publish and the site linter failed all of them.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-emits-lastmod ()
+  "A games publish with no date input anywhere still emits a YYYY-MM-DD lastmod."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (status . "playable")
+                  (game_kind . "jam") (tagline . "T"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should (assq 'lastmod out))
+      (should (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'"
+                              (alist-get 'lastmod out))))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-emits-lastmod ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should (assq 'lastmod out))
+      (should (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'"
+                              (alist-get 'lastmod out))))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-lastmod-prefers-drawer ()
+  "The cascade's top slot wins, so an explicit :LAST_MODIFIED: is honoured
+and is not re-emitted under its own name (`last_modified' is not a works key)."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (last_modified . "2024-01-02"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should (equal (alist-get 'lastmod out) "2024-01-02"))
+      (should-not (assq 'last_modified out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-lastmod-honours-p2-14-prior ()
+  "P2.14: with no drawer, keyword or git history, the handler-bound
+manifest-recorded value beats the filesystem mtime, so a republish of a
+never-committed works note does not churn its date to today."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let* ((f (make-temp-file "a3-works-p214-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f (insert "#+TITLE: G\n"))
+            ;; The temp file is not in any git repo, so git-mtime is nil and the
+            ;; next live slot would be the fs mtime (= today).
+            (let* ((a3madkour-pub-frontmatter--prior-last-modified "2023-04-05")
+                   (out (a3madkour-pub-frontmatter/normalize
+                         'works-music
+                         '((title . "M") (year . "2026") (format . "album")) f)))
+              (should (equal (alist-get 'lastmod out) "2023-04-05"))))
+        (delete-file f)))))
+
+
+;;; Defect 4 (task-12 E2E) — the works normalizers never filtered to an
+;;; allowed-key set, so ox-hugo's own auto-emitted `author' and `slug' reached
+;;; the page and `check_works_fixtures.py' rejected both as unknown fields on
+;;; every real publish.  Garden and essays already stripped exactly these two.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-strips-ox-hugo-noise ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026") (status . "playable")
+                  (game_kind . "jam") (tagline . "T")
+                  (author . ("Abdelrahman Madkour")) (slug . "a-game")
+                  (export_file_name . "x") (aliases . ("/y/")))
+                "/tmp/a3-works-no-such-file.org")))
+      (should-not (assq 'author out))
+      (should-not (assq 'slug out))
+      ;; Not a closed list of two: anything outside the contract goes.
+      (should-not (assq 'export_file_name out))
+      (should-not (assq 'aliases out))
+      ;; ...and the filter did not eat the real fields on its way past.
+      (should (equal (alist-get 'status out) "playable")))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-strips-ox-hugo-noise ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album")
+                  (author . ("Abdelrahman Madkour")) (slug . "a-release"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should-not (assq 'author out))
+      (should-not (assq 'slug out))
+      (should (equal (alist-get 'format out) "album")))))
+
+;; The other half of an allowed-key filter: it must not be over-tight.  A set
+;; missing one legal field would silently drop author data with no linter
+;; complaint anywhere, which is the harder failure to notice.
+;;
+;; The expected set is read back out of the vocabulary FILE, not written out
+;; here.  A literal list would be the third copy of the contract, which is
+;; exactly how the deleted `-key-set-matches-contract' tests managed to pin
+;; nothing.  This is not circular: the assertion is that a fully-populated
+;; input survives `normalize' with every key the FILE declares legal and
+;; nothing else, so a normalizer that ignored the file (or hardcoded its own
+;; set) fails as soon as the two differ.
+
+(defun a3madkour-pub-frontmatter-test--emitted-key-names (out)
+  (sort (mapcar (lambda (c) (symbol-name (car c))) out) #'string<))
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-keeps-exactly-the-vocabulary-keys ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let* ((input '((title . "G") (date . "2026-01-01") (draft . nil)
+                    (status . "playable") (game_kind . "jam") (tagline . "T")
+                    (year . "2026") (tags . ("a")) (summary . "S")
+                    (hero . "hero.png") (embed_url . "https://e")
+                    (source_url . "https://s") (itch_url . "https://i")
+                    (collaborators . "Alice Example") (tech_stack . "Godot")
+                    (length . "3 hours") (screenshots . "a.png b.png")
+                    (research_questions . "q-one") (related_essays . "e-one")
+                    (related_notes . "n-one") (source_stream . "2026-01-01-s")
+                    (tile_size . "large") (featured . "t")))
+           (out (a3madkour-pub-frontmatter/normalize
+                 'works-games input "/tmp/a3-works-no-such-file.org")))
+      (should (equal (a3madkour-pub-frontmatter-test--emitted-key-names out)
+                     (sort (mapcar #'symbol-name
+                                   (a3madkour-works-vocab/emitted-keys 'works-games))
+                           #'string<))))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-keeps-exactly-the-vocabulary-keys ()
+  "Same, minus `platform_embed', which is assembled rather than passed through
+\(it has its own tests below) and so cannot be supplied in the input alist."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let* ((input '((title . "M") (date . "2026-01-01") (draft . nil)
+                    (format . "album") (year . "2026") (tags . ("a"))
+                    (summary . "S") (tagline . "T") (cover . "cover.png")
+                    (duration . "13:19")
+                    (tracks . (((title . "One") (duration . "3:14"))))
+                    (audio_url . "https://a") (lyrics_poem . "a-poem")
+                    (related_works . "w-one") (related_essays . "e-one")
+                    (made_with . "Ableton Live") (collaborators . "Alice Example")
+                    (source_stream . "2026-01-01-s")
+                    (tile_size . "large") (featured . "t") (hero . "t")))
+           (out (a3madkour-pub-frontmatter/normalize
+                 'works-music input "/tmp/a3-works-no-such-file.org")))
+      (should (equal (a3madkour-pub-frontmatter-test--emitted-key-names out)
+                     (sort (mapcar #'symbol-name
+                                   (remq 'platform_embed
+                                         (a3madkour-works-vocab/emitted-keys
+                                          'works-music)))
+                           #'string<))))))
+
+;; A key the vocabulary does not declare is filtered out, and a key it DOES
+;; declare survives — asserted against a vocabulary the test mutates, so the
+;; filter provably consults the file rather than a compiled-in list.
+(ert-deftest a3madkour-pub-frontmatter--works-filter-follows-the-vocabulary ()
+  (a3madkour-works-vocab-test--with-root
+      (replace-regexp-in-string
+       "\"length\"" "\"playtime\"" a3madkour-works-vocab-test--json)
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-games
+                '((title . "G") (year . "2026")
+                  (length . "3 hours") (playtime . "3 hours"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should-not (assq 'length out))
+      (should (equal (alist-get 'playtime out) "3 hours")))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-fails-closed-without-a-vocabulary ()
+  "No vocabulary means no publish: emitting unfiltered frontmatter would put
+ox-hugo's `author'/`slug' on the page and fail the site linter."
+  (a3madkour-works-vocab-test--with-root nil
+    (should-error (a3madkour-pub-frontmatter/normalize
+                   'works-games '((title . "G")) "/tmp/g.org"))
+    (should-error (a3madkour-pub-frontmatter/normalize
+                   'works-music '((title . "M")) "/tmp/m.org"))))
+
+
+;;; `#+HUGO_SUMMARY:' (final-review finding 1) — silently dropped for both
+;;; sections.  `summary' is in both allowed key sets, but ox-hugo does not
+;;; emit it from that keyword and nothing injected it, so the documented
+;;; authoring path lost the works tile's pull-quote with no error anywhere.
+;;; The real-export proof lives in `a3madkour-publish-works-test.el'; these
+;;; two pin the normalizer unit.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-injects-hugo-summary ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f
+              (insert "#+TITLE: G\n#+HUGO_SUMMARY: A memory-palace roguelike.\n"))
+            (let ((out (a3madkour-pub-frontmatter/normalize
+                        'works-games '((title . "G") (year . "2026")) f)))
+              (should (equal (alist-get 'summary out)
+                             "A memory-palace roguelike."))))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-injects-hugo-summary ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f
+              (insert "#+TITLE: M\n#+HUGO_SUMMARY: Forty-two minutes of drone.\n"))
+            (let ((out (a3madkour-pub-frontmatter/normalize
+                        'works-music
+                        '((title . "M") (year . "2026") (format . "album")) f)))
+              (should (equal (alist-get 'summary out)
+                             "Forty-two minutes of drone."))))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-summary-absent-emits-no-key ()
+  "`summary' is optional for works, unlike essays/recipes where the linter
+requires the key — so an absent keyword must emit nothing, not `summary: \"\"'."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((f (make-temp-file "a3-works-summary-" nil ".org")))
+      (unwind-protect
+          (progn
+            (with-temp-file f (insert "#+TITLE: G\n"))
+            (should-not (assq 'summary
+                              (a3madkour-pub-frontmatter/normalize
+                               'works-games '((title . "G") (year . "2026")) f))))
+        (delete-file f)))))
+
+
+;;; Defect 6 (task-12 E2E) — `platform_embed' could not be authored at all.
+;;
+;; `#+HUGO_CUSTOM_FRONT_MATTER:' round-trips custom values as flat scalars, so
+;; the nested map arrived as a string, failed the render key-hook's `listp'
+;; test, and was silently omitted from every page.  Authored now as two flat
+;; keys and assembled here.
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-assembles-platform-embed ()
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album")
+                  (platform_kind . "bandcamp")
+                  (platform_url . "https://example.bandcamp.com/album/x"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should (equal (alist-get 'platform_embed out)
+                     '((kind . "bandcamp")
+                       (url . "https://example.bandcamp.com/album/x"))))
+      ;; A LIST, which is what the render key-hook tests for -- the string the
+      ;; old authoring path produced is exactly what it rejected.
+      (should (listp (alist-get 'platform_embed out)))
+      ;; The two authoring keys are inputs, not emitted fields.
+      (should-not (assq 'platform_kind out))
+      (should-not (assq 'platform_url out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-platform-embed-needs-both ()
+  "One half alone emits nothing -- a half-map fails the site linter."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (dolist (half '(((platform_kind . "bandcamp"))
+                    ((platform_url . "https://example.com/x"))))
+      (let ((out (a3madkour-pub-frontmatter/normalize
+                  'works-music
+                  (append '((title . "M") (year . "2026") (format . "album")) half)
+                  "/tmp/a3-works-no-such-file.org")))
+        (should-not (assq 'platform_embed out))))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-drops-flat-platform-embed ()
+  "A directly-authored `platform_embed' arrives as a string and must not ship.
+
+`platform_embed' IS in the allowed key set, so the filter alone lets the
+string through; emitting it would render a quoted scalar where the linter
+demands a dict."
+  (a3madkour-pub-frontmatter-test--with-works-vocab
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-music
+                '((title . "M") (year . "2026") (format . "album")
+                  (platform_embed . "{ kind: bandcamp, url: \"https://x\" }"))
+                "/tmp/a3-works-no-such-file.org")))
+      (should-not (assq 'platform_embed out)))))
 
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
