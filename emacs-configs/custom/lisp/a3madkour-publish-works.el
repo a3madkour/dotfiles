@@ -16,6 +16,12 @@
 (require 'org-element)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-export)
+(require 'a3madkour-publish-frontmatter)
+(require 'a3madkour-publish-rewrite)
+(require 'a3madkour-publish-assets)
+(require 'a3madkour-publish-history)
+(require 'a3madkour-works-lint)
 
 (defconst a3madkour-pub-works--track-cols '("title" "duration")
   "Required columns of the `#+NAME: tracks' table, in any order.")
@@ -99,10 +105,134 @@ not render an empty track list."
    :key-hook #'a3madkour-pub-works--key-hook
    :value-fn #'a3madkour-pub-yaml/render-value))
 
+(defconst a3madkour-pub-works--sections
+  '(("works/games" . works-games)
+    ("works/music" . works-music))
+  "Sections this handler serves, mapping the slash form to the hyphen form.")
+
+(defun a3madkour-pub-works--bundle-subdir (section)
+  "Content subdirectory for SECTION.  Signals for an unserved section."
+  (unless (assoc section a3madkour-pub-works--sections)
+    (error "a3madkour-pub-works: unserved section %S" section))
+  section)
+
+(defun a3madkour-pub-works--normalize-symbol (section)
+  "Hyphen-form normalize symbol for slash-form SECTION."
+  (or (cdr (assoc section a3madkour-pub-works--sections))
+      (error "a3madkour-pub-works: unserved section %S" section)))
+
+(defun a3madkour-pub-works--claim-slug (table slug file)
+  "Claim SLUG in TABLE for FILE.  Signals when SLUG is already taken.
+Two org titles that slugify identically would otherwise write the same
+bundle, and the second would silently overwrite the first."
+  (let ((prior (gethash slug table)))
+    (when (and prior (not (equal prior file)))
+      (error "a3madkour-pub-works: slug %S claimed by both %s and %s"
+             slug prior file))
+    (puthash slug file table)
+    t))
+
+(defvar a3madkour-pub-works--slugs-seen (make-hash-table :test #'equal)
+  "Slug -> file, for the duration of ONE publish run.
+
+MUST be cleared at the start of each run, not left to accumulate for the life
+of the Emacs session: otherwise renaming a works org file leaves the old
+file's claim in the table forever, and the renamed file errors as a duplicate
+until Emacs restarts.  A guard that blocks correct work is worse than the bug
+it prevents.  Cleared by `a3madkour-pub-works--maybe-reset-slugs-seen', keyed
+on the identity of the RUN struct passed into `publish-works-file' -- see
+that function's docstring for why the reset is scoped to the run rather than
+to each individual file.")
+
+(defvar a3madkour-pub-works--slugs-seen-run 'a3madkour-pub-works--no-run-yet
+  "Identity of the RUN object `a3madkour-pub-works--slugs-seen' was last
+cleared for.  A sentinel distinct from any real RUN value (including nil,
+which ad hoc callers may pass) so the very first call always resets.")
+
+(defun a3madkour-pub-works--maybe-reset-slugs-seen (run)
+  "Clear the slug-claim table iff RUN differs (by `eq') from the last-seen run.
+
+`a3-publish-living' shares one RUN struct (from `a3-pub-async/begin-publish')
+across every file it dispatches in a single walk, so this only fires once per
+publish run -- not once per file, which would defeat the duplicate-slug guard
+entirely (every file would see an empty table and no collision within the
+same run would ever be caught).  Each call to `begin-publish' allocates a
+fresh `a3-pub-async-run' struct, so `eq' reliably distinguishes one run from
+the next."
+  (unless (eq run a3madkour-pub-works--slugs-seen-run)
+    (clrhash a3madkour-pub-works--slugs-seen)
+    (setq a3madkour-pub-works--slugs-seen-run run)))
+
+(defun a3madkour-pub-works--asset-names (section fm)
+  "Bare asset filenames declared in frontmatter FM for SECTION."
+  (let ((names '()))
+    (pcase section
+      ("works/games"
+       (when-let ((h (alist-get 'hero fm))) (when (stringp h) (push h names)))
+       (dolist (s (alist-get 'screenshots fm)) (push s names)))
+      ("works/music"
+       (when-let ((c (alist-get 'cover fm))) (when (stringp c) (push c names)))))
+    (nreverse names)))
+
 (cl-defun a3madkour-pub-works/publish-works-file (file run &key on-done)
-  "Publish a works FILE.  Filled in by Task 7."
-  (ignore file run)
-  (when on-done (funcall on-done 'err)))
+  "Publish a works/games or works/music FILE to content/works/<type>/<slug>/index.md.
+Pipeline: lint → parse tracks → rewrite links → ox-hugo → normalize →
+inject tracks → render → asset-copy → write-if-different → record-publish."
+  (condition-case err
+      (progn
+        (a3madkour-pub-works--maybe-reset-slugs-seen run)
+        (when a3madkour-works-lint-enabled
+          (let ((errs (a3madkour-works-lint/lint-file file)))
+            (when errs
+              (error "a3madkour-pub-works: lint failed for %s:\n%s"
+                     file (mapconcat #'identity errs "\n")))))
+        (let* ((section   (a3madkour-pub/note-section file))
+               (subdir    (a3madkour-pub-works--bundle-subdir section))
+               (nsym      (a3madkour-pub-works--normalize-symbol section))
+               (md        (a3madkour-pub/note-metadata file))
+               (id        (plist-get md :id))
+               (slug      (a3madkour-pub/note-slug file))
+               (new-url   (a3madkour-pub/note-url file))
+               (site-root (a3madkour-pub-yaml/site-root))
+               (bundle-dir (expand-file-name
+                            (format "content/%s/%s/" subdir slug) site-root))
+               (out-path   (expand-file-name "index.md" bundle-dir))
+               (src-ast    (with-temp-buffer
+                             (insert-file-contents file) (org-mode)
+                             (org-element-parse-buffer)))
+               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                            file id "a3-pub-works"))
+               (exported   (unwind-protect
+                               (a3madkour-pub-export/export-file tmp-src)
+                             (when (file-exists-p tmp-src) (delete-file tmp-src))))
+               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
+                             (a3madkour-pub-frontmatter/normalize
+                              nsym (plist-get exported :frontmatter) file)))
+               (final-fm   (let ((out (copy-alist normalized)))
+                             (when (eq nsym 'works-music)
+                               (when-let ((tr (a3madkour-pub-works--parse-tracks src-ast)))
+                                 (setf (alist-get 'tracks out) tr)))
+                             out))
+               (body       (plist-get exported :body)))
+          (a3madkour-pub-works--claim-slug a3madkour-pub-works--slugs-seen slug file)
+          (a3madkour-pub/asset-validate-and-copy
+           file bundle-dir id nil
+           (a3madkour-pub-works--asset-names section final-fm))
+          (a3madkour-pub-yaml/write-if-different
+           out-path
+           (concat (a3madkour-pub-works--render-frontmatter final-fm) body))
+          (a3madkour-pub-history/record-publish
+           id new-url (or (plist-get md :state) 'live)
+           :last-modified (alist-get 'lastmod final-fm)))
+        (when on-done (funcall on-done 'ok)))
+    (error
+     (message "%s" (error-message-string err))
+     (when on-done (funcall on-done 'err)))))
+
+(defun a3madkour-pub-works/planned-steps (_file)
+  "Return rough step count for the works handler."
+  3)
 
 (provide 'a3madkour-publish-works)
 

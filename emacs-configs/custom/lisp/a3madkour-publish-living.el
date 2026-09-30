@@ -107,6 +107,13 @@ parallel, and calls finish-publish once after the barrier reports done."
   (add-to-list 'a3madkour-pub-living--handlers
                '("recipes" . a3madkour-pub-recipes/publish-recipe-file)))
 
+;; Slice A1: works/games + works/music registration (one entry point, two
+;; sections — mirrors library.el's four media and research.el's two types).
+(with-eval-after-load 'a3madkour-publish-works
+  (dolist (section '("works/games" "works/music"))
+    (add-to-list 'a3madkour-pub-living--handlers
+                 (cons section 'a3madkour-pub-works/publish-works-file))))
+
 (provide 'a3madkour-publish-living)
 
 ;;; a3madkour-publish-living.el ends here
