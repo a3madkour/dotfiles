@@ -100,6 +100,13 @@ When JSON is nil, no vocabulary file is written."
             (should (cl-some (lambda (e) (string-match-p "hero" e)) errs)))
         (delete-file f)))))
 
+;; Defect 1 (task-12 E2E): these asset-existence fixtures used to author the
+;; note ID as a `#+ID:' KEYWORD, which is not a convention this codebase uses
+;; anywhere.  The lint read that keyword, so the tests certified a reader that
+;; false-failed every real (drawer-authored) file.  All ID-bearing fixtures
+;; below now author the file-level `:PROPERTIES: :ID: ... :END:' drawer, the
+;; form the design spec and every handler actually use.
+
 ;; Fix round 1: `rejects-bool-in-games-hero' above passes even with rule 3's
 ;; games branch disabled, because rule 4 independently emits a "hero entry
 ;; ... not found" message for the same non-existent asset "t" — both
@@ -109,8 +116,10 @@ When JSON is nil, no vocabulary file is written."
 (ert-deftest a3madkour-works-lint--rejects-bool-in-games-hero-isolated ()
   (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
     (let* ((slug (make-temp-name "a3wl"))
-           (f (a3madkour-works-lint-test--file (format "#+TITLE: G
-#+ID: %s
+           (f (a3madkour-works-lint-test--file (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+TITLE: G
 #+HUGO_SECTION: works/games
 #+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T :hero t
 " slug)))
@@ -152,8 +161,10 @@ When JSON is nil, no vocabulary file is written."
 (ert-deftest a3madkour-works-lint--rejects-missing-asset-file ()
   (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
     (let* ((slug (make-temp-name "a3wl"))
-           (f (a3madkour-works-lint-test--file (format "#+TITLE: G
-#+ID: %s
+           (f (a3madkour-works-lint-test--file (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+TITLE: G
 #+HUGO_SECTION: works/games
 #+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T :hero cover.png
 " slug))))
@@ -165,8 +176,10 @@ When JSON is nil, no vocabulary file is written."
 (ert-deftest a3madkour-works-lint--accepts-existing-asset-file ()
   (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
     (let* ((slug (make-temp-name "a3wl"))
-           (f (a3madkour-works-lint-test--file (format "#+TITLE: G
-#+ID: %s
+           (f (a3madkour-works-lint-test--file (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+TITLE: G
 #+HUGO_SECTION: works/games
 #+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T :hero cover.png
 " slug)))
@@ -190,6 +203,41 @@ When JSON is nil, no vocabulary file is written."
 ")))
       (unwind-protect
           (should (null (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--reads-id-from-property-drawer ()
+  "The asset directory resolves from the file-level :ID: DRAWER.
+
+Defect 1: the lint read a `#+ID:' keyword, so for a file authored the
+documented way the id came back nil, the asset dir collapsed to
+`<dir>/assets/', and every present asset was reported missing.  This file
+declares the drawer only -- no `#+ID:' keyword anywhere -- and its one
+declared asset genuinely exists, so a correct reader finds it."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let* ((slug (make-temp-name "a3wl"))
+           (f (a3madkour-works-lint-test--file (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T
+#+HUGO_CUSTOM_FRONT_MATTER: :hero hero.png
+" slug)))
+           (asset-dir (expand-file-name (format "assets/%s/" slug)
+                                        (file-name-directory f))))
+      (unwind-protect
+          (progn
+            (make-directory asset-dir t)
+            (with-temp-file (expand-file-name "hero.png" asset-dir) (insert "x"))
+            (let ((errs (a3madkour-works-lint/lint-file f)))
+              ;; Assert on rule 4's distinct wording, not merely on emptiness:
+              ;; a future unrelated rule going quiet must not be able to make
+              ;; this test pass for the wrong reason.
+              (should-not (cl-some (lambda (e) (string-match-p "hero entry" e)) errs))
+              (should (null errs))))
+        (delete-directory (expand-file-name (format "assets/%s" slug)
+                                            (file-name-directory f))
+                          t)
         (delete-file f)))))
 
 ;;; lyrics_poem <-> set_to_music symmetry (Task 9)

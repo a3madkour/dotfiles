@@ -15,9 +15,15 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'a3madkour-publish-yaml)
+;; `a3madkour-pub--extract-id' lives here.  The note ID must be read from the
+;; file-level `:PROPERTIES: :ID: ... :END:' drawer, which is the documented
+;; authoring convention (design spec §3.1) and what the handler itself uses
+;; via `a3madkour-pub/note-metadata'.  Reading a `#+ID:' KEYWORD instead made
+;; the asset directory resolve to `<dir>/assets/' for every real file, so
+;; every declared hero/screenshots/cover false-failed rule 4.
+(require 'a3madkour-publish)
 ;; `a3madkour-pub/poetry-dir' is defined in `a3madkour-publish-poetry', not
-;; `a3madkour-publish' -- the brief's requested `(require 'a3madkour-publish)'
-;; does not bring it in.  Requiring the poetry module directly is safe: it
+;; `a3madkour-publish'.  Requiring the poetry module directly is safe: it
 ;; does not depend on this module or on `a3madkour-publish-works'.
 (require 'a3madkour-publish-poetry)
 
@@ -158,7 +164,13 @@ post-push CI failure into a file:line error."
         (let* ((games-p (string-equal section "works/games"))
                (sym     (if games-p 'works-games 'works-music))
                (cells   (a3madkour-works-lint--cfm-cells ast))
-               (id      (a3madkour-works-lint--kw ast "ID"))
+               ;; Position-robust file-level `:ID:' drawer read, via the SAME
+               ;; helper `a3madkour-pub/note-metadata' uses.  Sharing the
+               ;; handler's own reader (rather than adding a third drawer
+               ;; parser beside recipes' `--drawer-alist') makes it impossible
+               ;; for the lint's asset directory to drift from the one the
+               ;; handler copies assets out of.
+               (id      (a3madkour-pub--extract-id))
                (asset-dir (expand-file-name
                            (format "assets/%s/" (or id ""))
                            (file-name-directory file))))
