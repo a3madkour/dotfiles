@@ -632,7 +632,32 @@ A collaborator named \"Alice Example\" is one person, not two.")
       (if (a3madkour-pub-frontmatter--coerce-bool (alist-get 'featured out))
           (setf (alist-get 'featured out) t)
         (setq out (assq-delete-all 'featured out))))
-    (ignore file)
+    ;; lastmod via the shared cascade, exactly as essays / garden / research /
+    ;; poetry do it: drawer -> #+HUGO_LASTMOD: keyword -> git-mtime ->
+    ;; P2.14 manifest-recorded -> filesystem mtime -> today.
+    ;;
+    ;; `check_works_fixtures.py' lists `lastmod' in both GAME_REQUIRED and
+    ;; MUSIC_REQUIRED, and ox-hugo only emits it when `#+HUGO_LASTMOD:' or
+    ;; `HUGO_AUTO_SET_LASTMOD' is set -- which the works authoring surface
+    ;; never sets.  Without this the key was absent from every real publish
+    ;; and the site linter failed every one of them.
+    ;;
+    ;; The drawer/keyword slots read from RAW, not OUT: `last_modified' is not
+    ;; an emitted works key (and is filtered out downstream), but an author who
+    ;; sets it must still be able to feed the cascade.  The P2.14 slot needs no
+    ;; argument here -- `publish-works-file' let-binds
+    ;; `a3madkour-pub-frontmatter--prior-last-modified' around this call, and
+    ;; the cascade reads that ambient value, so a republish of a never-committed
+    ;; note keeps its recorded date instead of churning to today.
+    (let* ((drawer-lm (alist-get 'last_modified raw))
+           (kw-lm     (alist-get 'lastmod raw))
+           (kw-trim   (when (and (stringp kw-lm) (>= (length kw-lm) 10))
+                        (substring kw-lm 0 10))))
+      (setq out (assq-delete-all 'lastmod out))
+      (setq out (assq-delete-all 'last_modified out))
+      (setf (alist-get 'lastmod out)
+            (a3madkour-pub-frontmatter/last-modified-cascade
+             file :drawer drawer-lm :keyword kw-trim)))
     out))
 
 (defun a3madkour-pub-frontmatter--normalize-works-games (raw file)

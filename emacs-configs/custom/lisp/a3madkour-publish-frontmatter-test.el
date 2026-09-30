@@ -903,5 +903,59 @@ must read it from the source file and coerce to int."
               "/tmp/g.org")))
     (should (equal (alist-get 'screenshots out) '("a.png" "b.png")))))
 
+
+;;; Defect 3 (task-12 E2E) — the works normalizer never resolved `lastmod'.
+;;
+;; `check_works_fixtures.py' lists it in GAME_REQUIRED and MUSIC_REQUIRED, and
+;; nothing in the works authoring surface sets `#+HUGO_LASTMOD:', so the key was
+;; absent from every real publish and the site linter failed all of them.
+
+(ert-deftest a3madkour-pub-frontmatter--works-games-emits-lastmod ()
+  "A games publish with no date input anywhere still emits a YYYY-MM-DD lastmod."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (status . "playable")
+                (game_kind . "jam") (tagline . "T"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should (assq 'lastmod out))
+    (should (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'"
+                            (alist-get 'lastmod out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-music-emits-lastmod ()
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-music
+              '((title . "M") (year . "2026") (format . "album"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should (assq 'lastmod out))
+    (should (string-match-p "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'"
+                            (alist-get 'lastmod out)))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-lastmod-prefers-drawer ()
+  "The cascade's top slot wins, so an explicit :LAST_MODIFIED: is honoured
+and is not re-emitted under its own name (`last_modified' is not a works key)."
+  (let ((out (a3madkour-pub-frontmatter/normalize
+              'works-games
+              '((title . "G") (year . "2026") (last_modified . "2024-01-02"))
+              "/tmp/a3-works-no-such-file.org")))
+    (should (equal (alist-get 'lastmod out) "2024-01-02"))
+    (should-not (assq 'last_modified out))))
+
+(ert-deftest a3madkour-pub-frontmatter--works-lastmod-honours-p2-14-prior ()
+  "P2.14: with no drawer, keyword or git history, the handler-bound
+manifest-recorded value beats the filesystem mtime, so a republish of a
+never-committed works note does not churn its date to today."
+  (let* ((f (make-temp-file "a3-works-p214-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert "#+TITLE: G\n"))
+          ;; The temp file is not in any git repo, so git-mtime is nil and the
+          ;; next live slot would be the fs mtime (= today).
+          (let* ((a3madkour-pub-frontmatter--prior-last-modified "2023-04-05")
+                 (out (a3madkour-pub-frontmatter/normalize
+                       'works-music
+                       '((title . "M") (year . "2026") (format . "album")) f)))
+            (should (equal (alist-get 'lastmod out) "2023-04-05"))))
+      (delete-file f))))
+
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here
