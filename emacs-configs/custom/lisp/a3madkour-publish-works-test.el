@@ -4,6 +4,9 @@
 (require 'a3madkour-publish-living)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-async)
+;; The works normalizer reads its allowed-key contract from the site repo's
+;; `data/works-vocab.json', so every temp site root below has to carry one.
+(require 'a3madkour-works-vocab-fixture)
 
 (defun a3madkour-pub-works-test--parse (org-text)
   "Parse ORG-TEXT and return its element AST."
@@ -206,7 +209,7 @@
          (src       (expand-file-name "example-game.org" notes-dir)))
     (unwind-protect
         (progn
-          (make-directory (expand-file-name "data" site-dir))
+          (a3madkour-works-vocab-test/write site-dir)
           (make-directory (expand-file-name "content/works/games" site-dir) t)
           (a3madkour-pub-works-test--write-game-fixture src site-dir)
           (let ((a3madkour-pub/site-data-dir
@@ -261,7 +264,7 @@
          (assets-dir (expand-file-name (format "assets/%s/" id) notes-dir)))
     (unwind-protect
         (progn
-          (make-directory (expand-file-name "data" site-dir))
+          (a3madkour-works-vocab-test/write site-dir)
           (make-directory (expand-file-name "content/works/games" site-dir) t)
           (make-directory assets-dir t)
           ;; present-shot.png exists on disk; missing-hero.png does not.
@@ -420,7 +423,7 @@ that has simply never been published is not what this warning is for."
          (src       (expand-file-name "example-release.org" notes-dir)))
     (unwind-protect
         (progn
-          (make-directory (expand-file-name "data" site-dir))
+          (a3madkour-works-vocab-test/write site-dir)
           (make-directory (expand-file-name "content/works/music" site-dir) t)
           (a3madkour-pub-works-test--write-music-fixture src site-dir)
           (let ((a3madkour-pub/site-data-dir
@@ -468,7 +471,8 @@ that has simply never been published is not what this warning is for."
 ;; so it passed while the field was unreachable.  Chaining normalize into
 ;; render is what pins the authoring path end to end.
 (ert-deftest a3madkour-pub-works--platform-embed-round-trips-from-flat-keys ()
-  (let* ((fm (a3madkour-pub-frontmatter/normalize
+  (a3madkour-works-vocab-test--with-root a3madkour-works-vocab-test--json
+   (let* ((fm (a3madkour-pub-frontmatter/normalize
               'works-music
               '((title . "M") (year . "2026") (format . "album")
                 (platform_kind . "bandcamp")
@@ -479,7 +483,8 @@ that has simply never been published is not what this warning is for."
              "platform_embed: { kind: bandcamp, url: \"https://example\\.bandcamp\\.com/album/x\" }"
              yaml))
     ;; Not the `:omit' branch, and not a quoted scalar.
-    (should-not (string-match-p "platform_embed: \"" yaml))))
+    (should-not (string-match-p "platform_embed: \"" yaml)))))
+
 
 (provide 'a3madkour-publish-works-test)
 

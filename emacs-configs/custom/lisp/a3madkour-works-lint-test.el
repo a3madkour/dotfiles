@@ -1,6 +1,9 @@
 ;;; a3madkour-works-lint-test.el --- tests for works pre-publish lint  -*- lexical-binding: t; -*-
 (require 'ert)
 (require 'a3madkour-works-lint)
+;; `a3madkour-works-vocab-test--json' — the one vocabulary fixture, shared so
+;; the works test files do not each carry their own literal copy.
+(require 'a3madkour-works-vocab-fixture)
 
 (defmacro a3madkour-works-lint-test--with-vocab (json &rest body)
   "Run BODY with a temp site root whose data/works-vocab.json holds JSON.
@@ -20,10 +23,9 @@ When JSON is nil, no vocabulary file is written."
        (delete-directory root t))))
 
 (ert-deftest a3madkour-works-lint--vocab-reads-file ()
-  (a3madkour-works-lint-test--with-vocab
-      "{\"game_statuses\":[\"playable\"],\"game_kinds\":[\"jam\"],\"music_formats\":[\"album\"],\"platform_kinds\":[\"bandcamp\"]}"
-    (should (equal (a3madkour-works-lint/vocab "game_statuses") '("playable")))
-    (should (equal (a3madkour-works-lint/vocab "game_kinds") '("jam")))))
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (should (member "playable" (a3madkour-works-lint/vocab "game_statuses")))
+    (should (member "jam" (a3madkour-works-lint/vocab "game_kinds")))))
 
 (ert-deftest a3madkour-works-lint--vocab-fails-closed-when-missing ()
   (a3madkour-works-lint-test--with-vocab nil
@@ -38,8 +40,7 @@ When JSON is nil, no vocabulary file is written."
     (should-error (a3madkour-works-lint/vocab "game_kinds"))))
 
 (ert-deftest a3madkour-works-lint--vocab-fails-closed-on-unknown-key ()
-  (a3madkour-works-lint-test--with-vocab
-      "{\"game_statuses\":[\"playable\"],\"game_kinds\":[\"jam\"],\"music_formats\":[\"album\"],\"platform_kinds\":[\"bandcamp\"]}"
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
     (should-error (a3madkour-works-lint/vocab "not_a_real_key"))))
 
 ;;; lint-file rule tests
@@ -49,11 +50,11 @@ When JSON is nil, no vocabulary file is written."
   (let ((f (make-temp-file "a3-works-lint" nil ".org")))
     (with-temp-file f (insert text)) f))
 
-(defconst a3madkour-works-lint-test--vocab
-  "{\"game_statuses\":[\"playable\",\"in-progress\",\"archived\"],
-    \"game_kinds\":[\"full-release\",\"jam\",\"research-prototype\",\"experiment\"],
-    \"music_formats\":[\"album\",\"track\",\"experiment\",\"live\"],
-    \"platform_kinds\":[\"bandcamp\",\"soundcloud\",\"youtube\"]}")
+(defvaralias 'a3madkour-works-lint-test--vocab
+  'a3madkour-works-vocab-test--json
+  "The shared vocabulary fixture, which now also carries the emitted-field
+sets the frontmatter normalizer reads.  Aliased rather than re-written here:
+a second literal would be a second thing to keep in step.")
 
 (ert-deftest a3madkour-works-lint--rejects-unknown-status ()
   (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab

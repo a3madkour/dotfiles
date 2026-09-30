@@ -34,6 +34,11 @@
 ;; died on `cl-defun'.  Requiring it here removes the load-order dependency.
 (require 'cl-lib)
 (require 'a3madkour-publish-keywords)
+;; The works emitted-field contract is read from the site repo's shared
+;; vocabulary, not transcribed here.  This module is deliberately a leaf that
+;; `emacs -Q --batch' can load, so `a3madkour-works-vocab' carries no
+;; load-time dependency of its own (it requires the site-root helper lazily).
+(require 'a3madkour-works-vocab)
 
 (defcustom a3madkour-pub-editorial-tags
   '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH")
@@ -585,33 +590,30 @@ in the per-section normalizer or the handler entry point."
           (setq out (assq-delete-all key out)))))
     out))
 
-(defconst a3madkour-pub-frontmatter--works-games-keys
-  '(collaborators date draft embed_url featured game_kind hero itch_url
-    lastmod length related_essays related_notes research_questions
-    screenshots source_stream source_url status summary tagline tags
-    tech_stack tile_size title year)
-  "Every key legal in emitted works/games frontmatter (24).
+(defun a3madkour-pub-frontmatter--works-allowed-keys (section)
+  "Every key legal in emitted frontmatter for works SECTION.
 
-Mirrors `GAME_REQUIRED | GAME_OPTIONAL' in the site repo's
-`tools/check_works_fixtures.py' (GAME_OPTIONAL already unions
-UMBRELLA_OPTIONAL, so featured/hero/tile_size are included here).  The
-normalizer filters to this set because ox-hugo auto-emits keys of its own --
-`author' (from `#+author:' / `:AUTHOR:') and `slug' (from `:CUSTOM_ID:' /
-`#+HUGO_SLUG:' / title derivation) -- which the linter rejects as unknown
-fields.  Garden and essays strip exactly these two for the same reason.")
+Read from the shared vocabulary (`data/works-vocab.json' in the site repo),
+which is the ONE home of this contract — `tools/check_works_fixtures.py'
+builds its `GAME_FIELDS' / `MUSIC_FIELDS' from the same file.
 
-(defconst a3madkour-pub-frontmatter--works-music-keys
-  '(audio_url collaborators cover date draft duration featured format hero
-    lastmod lyrics_poem made_with platform_embed related_essays related_works
-    source_stream summary tagline tags tile_size title tracks year)
-  "Every key legal in emitted works/music frontmatter (23).
+This used to be two elisp defconsts transcribing the Python sets, plus a
+third transcription in the tests, and the tests compared copy 1 against
+copy 3 (both elisp), so a key added on the Python side left every elisp copy
+stale and green.  The filter below then dropped the new field out of every
+published page with no error at any layer, which is strictly worse than the
+unknown-field CI failure the filter exists to prevent.  Reading the contract
+is what makes that impossible rather than merely unlikely.
 
-Mirrors `MUSIC_REQUIRED | MUSIC_OPTIONAL' in `check_works_fixtures.py'.
-`tracks' is listed although the handler injects it AFTER `normalize' -- the
-set is the contract, not a record of who writes each key.  The two flat
-authoring keys `platform_kind' / `platform_url' are deliberately ABSENT:
-they are inputs the music normalizer folds into `platform_embed', and
-filtering them out here is what keeps them off the page.")
+Fails closed: a missing or malformed vocabulary signals, so a works publish
+aborts rather than emitting unfiltered frontmatter.
+
+The two flat authoring keys `platform_kind' / `platform_url' are deliberately
+NOT in the contract: they are inputs the music normalizer folds into
+`platform_embed', and filtering them out is what keeps them off the page.
+`tracks' IS in it although the handler injects it after `normalize' — the set
+is the contract, not a record of who writes each key."
+  (a3madkour-works-vocab/emitted-keys section))
 
 (defconst a3madkour-pub-frontmatter--works-comma-keys
   '(collaborators tech_stack made_with)
@@ -641,8 +643,8 @@ A collaborator named \"Alice Example\" is one person, not two.")
   "Normalization shared by works-games and works-music.
 
 ALLOWED is the per-type list of legal emitted keys (see
-`a3madkour-pub-frontmatter--works-games-keys' /
-`--works-music-keys').  RAW is filtered to it first, which is how ox-hugo's
+`a3madkour-pub-frontmatter--works-allowed-keys').  RAW is filtered to it
+first, which is how ox-hugo's
 own `author' and `slug' keys are kept off the page -- every sibling
 normalizer does the same, and works was the one that did not."
   (let ((out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
@@ -704,7 +706,7 @@ normalizer does the same, and works was the one that did not."
 (defun a3madkour-pub-frontmatter--normalize-works-games (raw file)
   "Normalize a works-games RAW alist.  `screenshots' is a filename list here."
   (let ((out (a3madkour-pub-frontmatter--normalize-works-common
-              raw file a3madkour-pub-frontmatter--works-games-keys)))
+              raw file (a3madkour-pub-frontmatter--works-allowed-keys 'works-games))))
     ;; screenshots: whitespace-split, left as bare filenames (no path expansion).
     (when (assq 'screenshots out)
       (let ((v (a3madkour-pub-frontmatter--coerce-slug-list (alist-get 'screenshots out))))
@@ -730,7 +732,7 @@ that does nothing.  `a3madkour-works-lint' enforces both-or-neither and checks
 `platform_kind' against the shared vocabulary's `platform_kinds', and rejects
 a directly-authored `:platform_embed' so the silent-drop cannot recur."
   (let ((out (a3madkour-pub-frontmatter--normalize-works-common
-              raw file a3madkour-pub-frontmatter--works-music-keys)))
+              raw file (a3madkour-pub-frontmatter--works-allowed-keys 'works-music))))
     ;; Same nil-vs-absent reasoning as `featured' above: delete rather than
     ;; write a nil value.
     (when (assq 'hero out)

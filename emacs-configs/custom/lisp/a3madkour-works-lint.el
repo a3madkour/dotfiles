@@ -6,15 +6,20 @@
 ;; org `FILE:LINE: message' strings, mirroring a3madkour-recipe-lint.el.
 ;;
 ;; The four enum vocabularies are NOT defined here.  They live in the site
-;; repo at data/works-vocab.json and are shared with
-;; tools/check_works_fixtures.py, so the two languages cannot drift.  A
-;; missing or malformed vocabulary is an error, never a skipped check.
+;; repo at data/works-vocab.json, are read by `a3madkour-works-vocab' and are
+;; shared with tools/check_works_fixtures.py, so the two languages cannot
+;; drift.  A missing or malformed vocabulary is an error, never a skipped
+;; check.
 
 ;;; Code:
 
 (require 'cl-lib)
 (require 'org-element)
-(require 'a3madkour-publish-yaml)
+;; `a3madkour-works-vocab/list' — the vocabulary reader, which is a separate
+;; module because the frontmatter normalizer needs the same file and sits
+;; upstream of this one (via `a3madkour-publish-poetry'), so it cannot
+;; `require' this module back.
+(require 'a3madkour-works-vocab)
 ;; `a3madkour-pub--extract-id' lives here.  The note ID must be read from the
 ;; file-level `:PROPERTIES: :ID: ... :END:' drawer, which is the documented
 ;; authoring convention (design spec §3.1) and what the handler itself uses
@@ -30,46 +35,19 @@
 (defvar a3madkour-works-lint-enabled t
   "When non-nil, the works handler runs this linter before publishing.")
 
-(defconst a3madkour-works-lint--vocab-rel "data/works-vocab.json"
-  "Vocabulary path, relative to the site root.")
-
-(defconst a3madkour-works-lint--vocab-keys
-  '("game_statuses" "game_kinds" "music_formats" "platform_kinds")
-  "Keys every vocabulary file must define.")
-
-(defvar a3madkour-works-lint--vocab-cache nil
-  "Cons of (PATH . ALIST) for the last vocabulary read, or nil.")
-
-(defun a3madkour-works-lint--read-vocab ()
-  "Read and validate the vocabulary.  Signal `error' on any problem."
-  (let ((path (expand-file-name a3madkour-works-lint--vocab-rel
-                                (a3madkour-pub-yaml/site-root))))
-    (if (and a3madkour-works-lint--vocab-cache
-             (equal (car a3madkour-works-lint--vocab-cache) path))
-        (cdr a3madkour-works-lint--vocab-cache)
-      (unless (file-exists-p path)
-        (error "a3madkour-works-lint: vocabulary not found at %s" path))
-      (let* ((text (with-temp-buffer (insert-file-contents path) (buffer-string)))
-             (parsed (condition-case err
-                         (json-parse-string text :object-type 'alist
-                                                 :array-type 'list)
-                       (error
-                        (error "a3madkour-works-lint: vocabulary at %s is not valid JSON: %S"
-                               path err)))))
-        ;; `json-parse-string' with :object-type 'alist returns object keys
-        ;; as symbols, not strings, so lookups below intern KEY before
-        ;; probing the alist.
-        (dolist (k a3madkour-works-lint--vocab-keys)
-          (unless (assq (intern k) parsed)
-            (error "a3madkour-works-lint: vocabulary at %s missing key %s" path k)))
-        (setq a3madkour-works-lint--vocab-cache (cons path parsed))
-        parsed))))
+(defvaralias 'a3madkour-works-lint--vocab-cache 'a3madkour-works-vocab--cache
+  "Compatibility alias for the reader's cache, which now lives in
+`a3madkour-works-vocab'.  Kept so callers and tests that rebind the cache by
+its historical name still reach the one real cache.")
 
 (defun a3madkour-works-lint/vocab (key)
-  "Return the list of allowed values for KEY (a string)."
-  (unless (member key a3madkour-works-lint--vocab-keys)
-    (error "a3madkour-works-lint: unknown vocabulary key %s" key))
-  (cdr (assq (intern key) (a3madkour-works-lint--read-vocab))))
+  "Return the list of allowed values for KEY (a string).
+
+A thin accessor over `a3madkour-works-vocab/list'.  The reader moved into its
+own module because the frontmatter normalizer needs the same file for the
+emitted-field sets and cannot `require' this one (it sits upstream of it via
+`a3madkour-publish-poetry')."
+  (a3madkour-works-vocab/list key))
 
 (defconst a3madkour-works-lint--required
   '((works-games . (status game_kind tagline year))
