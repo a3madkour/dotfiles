@@ -5008,6 +5008,8 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
  "fc" `((lambda () (interactive) (find-file ,(expand-file-name "config.org" user-emacs-directory))) :which-key "config")
  "ff"
  '(find-file :which-key "find file")
+ "fg"
+ '(magit-find-file :which-key "magit find file")
  "fd"
  '(dired :which-key "dired")
  "fr"
