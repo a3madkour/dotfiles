@@ -8,6 +8,16 @@
 
 * Bootstrap
 ** Early Init
+=early-init.el= is generated, so its =lexical-binding= cookie has to be tangled
+in ahead of the body, the same way =config.el= gets one below. =:comments no= is
+what makes it work: the file-wide =:comments link= would otherwise prepend a
+=[[file:config.org...]]= link comment, taking line 1 and pushing the cookie out
+of the only position Emacs reads it from. Keep this the first block that tangles
+to =early-init.el=.
+#+begin_src emacs-lisp :tangle "./early-init.el" :comments no
+;;; early-init.el --- Tangled from config.org -*- lexical-binding: t; -*-
+#+end_src
+
 Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-start.el][Doom Emacs's startup optimizations]] and [[https://github.com/jamescherti/minimal-emacs.d][jamescherti/minimal-emacs.d]]; the Android/Termux branch is original.
 #+begin_src emacs-lisp :tangle "./early-init.el"
 ;;Phone config
@@ -51,6 +61,41 @@ Adapted from [[https://github.com/doomemacs/doomemacs/blob/master/lisp/doom-star
 	      (lambda ()
 					(setq file-name-handler-alist default-file-name-handler-alist)))
 #+end_src
+** Native-compilation deny list
+Neither of these two files can be native-compiled, and because a failed
+compilation never writes an =.eln=, Emacs retries both on every boot and refills
+=*Async-native-compile-log*=.
+
+Native compilation runs in an =emacs -Q --batch= subprocess, which has no
+straight.el and whose =user-emacs-directory= is =~/.emacs.d/=. Expanding this
+file's =use-package= forms there sends =package.el= out to =elpa.gnu.org= over
+the network on every boot, and it fails regardless. =org-media-note-core.el=
+fails separately: its =(rx (eval ...))= form reads =org-media-note--video-types=
+at compile time, and that =defconst= is not bound in the subprocess -- an
+upstream bug, not a local one.
+
+Both files load fine as byte-code, so only native compilation is denied.
+Set plainly rather than after =(require 'comp-run)=: the =defcustom= will not
+overwrite a value that already exists, and requiring =comp-run= this early would
+itself queue =comp-run.el= for native compilation on every boot.
+#+begin_src emacs-lisp :tangle "./early-init.el"
+(setq native-comp-jit-compilation-deny-list
+      (list (concat "\\`"
+                    (regexp-quote (expand-file-name "config.el"
+                                                    user-emacs-directory))
+                    "\\'")
+            "/org-media-note-core\\.el\\'"))
+#+end_src
+
+** Lexical binding
+=config.el= is generated, so the cookie has to be tangled in rather than typed
+at the top of the file. =:comments no= is what makes it work: the file-wide
+=:comments link= would otherwise prepend a =[[file:config.org...]]= link
+comment, taking line 1 and pushing the cookie out of the only position Emacs
+reads it from. Keep this the first block that tangles to =config.el=.
+#+begin_src emacs-lisp :comments no
+;;; config.el --- Tangled from config.org -*- lexical-binding: t; -*-
+#+end_src
 ** Compile-angel
 Sourced from the [[https://github.com/jamescherti/compile-angel.el][compile-angel README]] by jamescherti.
 #+begin_src emacs-lisp
@@ -58,9 +103,10 @@ Sourced from the [[https://github.com/jamescherti/compile-angel.el][compile-ange
   :ensure t
   :demand t
   :config
-  ;; Set `compile-angel-verbose' to nil to disable compile-angel messages.
-  ;; (When set to nil, compile-angel won't show which file is being compiled.)
-  (setq compile-angel-verbose t)
+  ;; nil so compile-angel stays quiet about which file it is compiling; the
+  ;; per-file chatter was the bulk of the startup log. Flip to t when a
+  ;; compilation problem needs tracing back to a specific file.
+  (setq compile-angel-verbose nil)
 
   ;; Uncomment the line below to compile automatically when an Elisp file is saved
   ;; (add-hook 'emacs-lisp-mode-hook #'compile-angel-on-save-local-mode)
@@ -74,6 +120,36 @@ Sourced from the [[https://github.com/jamescherti/compile-angel.el][compile-ange
   ;; at the top of your init file.
   (push "/init.el" compile-angel-excluded-files)
   (push "/early-init.el" compile-angel-excluded-files)
+
+  ;; org-media-note-core.el does not byte-compile: its `rx' form evaluates
+  ;; `org-media-note--video-types' at compile time, when the defconst earlier in
+  ;; the same file is not yet in scope. The error pops *Compile-Log* into a
+  ;; window on every startup, and since the failed compile never produces an
+  ;; .elc, compile-angel retries it every boot. The file loads fine as source,
+  ;; so leave it uncompiled. Upstream bug, not a local one.
+  (push "/org-media-note-core.el" compile-angel-excluded-files)
+
+  ;; config.el is this file, tangled.  Native compilation runs it through an
+  ;; `emacs -Q --batch' subprocess that has no straight.el, so expanding the
+  ;; `use-package' forms sends package.el out to elpa.gnu.org over the network
+  ;; on every boot and then fails anyway.  `native-comp-jit-compilation-deny-list'
+  ;; does not cover this: compile-angel calls `native-compile-async' directly
+  ;; rather than going through deferred compilation, so the exclusion has to be
+  ;; stated here too.  Matched by full path so other packages' config.el are
+  ;; untouched.
+  (push (concat "\\`"
+                (regexp-quote (expand-file-name "config.el" user-emacs-directory))
+                "\\'")
+        compile-angel-excluded-files-regexps)
+
+  ;; Never compile Emacs's own bundled lisp.  It lives inside
+  ;; /Applications/Emacs.app, a signed bundle, and writing .elc there breaks the
+  ;; code signature -- `codesign --verify' then reports "a sealed resource is
+  ;; missing or invalid", and macOS refuses the app a clean launch from the
+  ;; dock while a terminal launch of the binary still works.  Emacs ships its
+  ;; own .elc for these files and native-compiles them into `eln-cache', so
+  ;; there was never anything to gain here.
+  (compile-angel-exclude-directory (file-name-parent-directory data-directory))
 
   ;; A global mode that compiles .el files before they are loaded
   ;; using `load' or `require'.
@@ -120,8 +196,12 @@ login shell so =exec-path= matches the terminal.
 * General configuration
 #+begin_src emacs-lisp
 (require 'bibtex)
-(add-to-list 'load-path (expand-file-name "~/emacs-configs/custom"))
-(require 'boox-core)
+;; boox-core.el is tangled next to this file, at the root of
+;; `user-emacs-directory'. Load it by explicit path rather than pushing that
+;; directory onto `load-path' -- Emacs warns at startup when `load-path'
+;; contains `user-emacs-directory' itself, and that warning pops *Warnings*
+;; into a window on every boot.
+(require 'boox-core (expand-file-name "boox-core" user-emacs-directory))
 (defvar a3madkour/org-base-dir
   (if (eq system-type 'android)
       "/sdcard/org"
@@ -711,7 +791,7 @@ Bindings and configuration adapted from the [[https://github.com/minad/consult][
   (setq consult-narrow-key "<")
   (defun a3madkour/consult-line-evil-sync (&rest _)
   "Sync the last consult-line query to evil's search state."
-  (when-let ((query (car consult--line-history)))
+  (when-let* ((query (car consult--line-history)))
     (save-excursion
       (evil-search query t t))
     (isearch-update-ring query)
@@ -1306,8 +1386,15 @@ left alone.
 
 Under evil, =gd= reaches this and =M-.= does not — evil binds =M-.= to
 =evil-repeat-pop-next= in normal state.
-#+begin_src emacs-lisp
+
+Disabled with =:tangle no= for now — the checkout only exists on the machine
+that has =/Stuff= mounted. Note for whenever it comes back: =:straight nil= is
+required, or =straight-use-package-by-default= tries to resolve
+=godot-signals= against the recipe repositories, fails hard, and aborts the
+rest of this file.
+#+begin_src emacs-lisp :tangle no
 (use-package godot-signals
+  :straight nil
   :load-path "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp"
   :demand t)
 #+end_src
@@ -1683,7 +1770,7 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
           (let* ((entry (citar-get-entry key))
                  (title (alist-get "title" entry nil nil #'string=))
                  (author (alist-get "author" entry nil nil #'string=))
-                 (year (when-let ((date (alist-get "date" entry nil nil #'string=)))
+                 (year (when-let* ((date (alist-get "date" entry nil nil #'string=)))
                          (substring date 0 4)))
                  (display (format "%s (%s)" (or title "Untitled") (or year "")))
                  (text (format "* TODO Read %s :active:toread:\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
@@ -2451,7 +2538,7 @@ key stays stable across future runs."
 (defun a3madkour/boox--reading-file-source (file)
   "Return the library original FILE in the reading directory was pushed from.
 FILE may be a bare name or a full path; only its key half is used."
-  (when-let ((key (a3madkour/boox--key-from-filename file)))
+  (when-let* ((key (a3madkour/boox--key-from-filename file)))
     (a3madkour/boox--source-for-key key)))
 
 (defun a3madkour/boox--pushed-files ()
@@ -2733,7 +2820,7 @@ so a reduction is never applied without asking."
 (defun a3madkour/boox-import-toggle ()
   "Toggle selection of the candidate at point."
   (interactive)
-  (when-let ((i (get-text-property (point) 'boox-index)))
+  (when-let* ((i (get-text-property (point) 'boox-index)))
     (let ((c (nth i a3madkour/boox--candidates)))
       (when (eq (plist-get c :status) 'ready)
         (setf (nth i a3madkour/boox--candidates)
@@ -2755,7 +2842,7 @@ so a reduction is never applied without asking."
 #+begin_src emacs-lisp
 (defun a3madkour/boox--source-for-key (key)
   "Return the original source file for KEY, paper or book."
-  (or (when-let ((entry (ignore-errors (citar-get-entry key))))
+  (or (when-let* ((entry (ignore-errors (citar-get-entry key))))
         (when-let* ((file (alist-get "file" entry nil nil #'string=))
                     (raw (car (seq-filter
                                (lambda (p) (string-match-p "\\.\\(pdf\\|epub\\)\\'"
@@ -2877,7 +2964,7 @@ because the source could not be resolved or because the annotation-loss
 guard was refused.  Shared by `a3madkour/boox-import-execute' and
 `a3madkour/boox-retire-document' so there is one implementation of what
 importing a PDF means."
-  (when-let ((dest (a3madkour/boox--file-annotated-pdf key file)))
+  (when-let* ((dest (a3madkour/boox--file-annotated-pdf key file)))
     (let ((marks (a3madkour/boox--pdf-annotations file)))
       ;; Highlights first: inserting them may create the ref note, and note
       ;; creation rewrites the file wholesale.  Properties go last so nothing
@@ -2930,7 +3017,7 @@ so embedding more annotations later makes the file importable again."
   "Return the reading-directory file pushed for KEY, or nil."
   (let ((dir (file-name-as-directory a3madkour/boox-reading-directory)))
     (when (file-directory-p dir)
-      (when-let ((name (seq-find
+      (when-let* ((name (seq-find
                         (lambda (f) (equal (a3madkour/boox--key-from-filename f) key))
                         (directory-files dir nil "\\`[^.]" t))))
         (expand-file-name name dir)))))
@@ -2972,7 +3059,7 @@ you do want its highlights."
       (message "Refresh cancelled — library copy left intact"))
      (t
       (copy-file src dest t)
-      (when-let ((buf (find-buffer-visiting dest)))
+      (when-let* ((buf (find-buffer-visiting dest)))
         (with-current-buffer buf (revert-buffer t t t)))
       (org-entry-put (point-min) "LAST_MODIFIED" (format-time-string "[%Y-%m-%d %a]"))
       (save-buffer)
@@ -3000,7 +3087,7 @@ you do want its highlights."
   "Return the current note's `:ANNOTATED_DOCUMENT:' if it is readable.
 Nil means no archive exists, which is the condition retirement refuses on:
 deleting the tablet copy would then destroy the only annotated version."
-  (when-let ((p (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
+  (when-let* ((p (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
     (and (file-readable-p p) p)))
 
 (defun a3madkour/boox--stale-p (key file)
@@ -4836,7 +4923,7 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
                                 (old-text (or (map-elt raw-input 'oldString) "")))
                       (append (list (cons :old old-text)
                                     (cons :new new-text))
-                              (when-let ((path (or (map-elt raw-input 'filePath)
+                              (when-let* ((path (or (map-elt raw-input 'filePath)
                                                    (map-elt raw-input 'filepath))))
                                 (list (cons :file path))))))))
 
