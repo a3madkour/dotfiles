@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-08-08 Sat]
+:LAST_MODIFIED: [2026-10-08 Thu]
 :END:
 
 * Bootstrap
@@ -1373,6 +1373,12 @@ of bug to notice, since every later file works. The bet is not worth making:
 =subr-x=, and reaches the client, the xref backend and the view through
 =autoload=, so demanding it costs one small file at startup and nothing else.
 
+=:straight nil= is not optional here. [[file:init.el::straight-use-package-by-default][=straight-use-package-by-default= is =t=]],
+so without it =use-package= hands the name to straight, straight looks for a
+recipe called =godot-signals= in MELPA and friends, finds nothing, and Emacs
+fails to start — which is exactly what happened the first time this block was
+written. =:load-path= alone does not opt out; the package manager still runs.
+
 Local checkout rather than a remote recipe, since this is unreleased. Opening
 any =.gd= file in a Godot project starts a daemon for that project half a
 second later, on an idle timer so the open never blocks; =M-x
@@ -1387,16 +1393,13 @@ left alone.
 Under evil, =gd= reaches this and =M-.= does not — evil binds =M-.= to
 =evil-repeat-pop-next= in normal state.
 
-Disabled with =:tangle no= for now — the checkout only exists on the machine
-that has =/Stuff= mounted. Note for whenever it comes back: =:straight nil= is
-required, or =straight-use-package-by-default= tries to resolve
-=godot-signals= against the recipe repositories, fails hard, and aborts the
-rest of this file.
-#+begin_src emacs-lisp :tangle no
+#+begin_src emacs-lisp
+
 (use-package godot-signals
   :straight nil
   :load-path "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp"
-  :demand t)
+  :demand t
+  :custom (godot-signals-markers-idle-delay 0))
 #+end_src
 Snippets for GDScript 2.0, verified to compile against the installed Godot binary. Straight pulls the elisp and the snippet tables from the
 [[https://github.com/a3madkour/gdscript-yasnippets][gdscript-yasnippets]] repo over SSH (the repo is private, so =:protocol ssh=). The
@@ -5074,6 +5077,8 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
  "fc" `((lambda () (interactive) (find-file ,(expand-file-name "config.org" user-emacs-directory))) :which-key "config")
  "ff"
  '(find-file :which-key "find file")
+ "fg"
+ '(magit-find-file :which-key "magit find file")
  "fd"
  '(dired :which-key "dired")
  "fr"
