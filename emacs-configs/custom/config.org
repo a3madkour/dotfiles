@@ -5110,6 +5110,25 @@ Meta advises =agent-shell-start= globally to add a system prompt to each Claude 
   (setq agent-shell-path-resolver-function #'a3madkour-agents-circus-resolve-path))
 #+end_src
 
+*** Slack (agent-shell-to-go)
+[[https://github.com/ElleNajt/agent-shell-to-go][agent-shell-to-go]] mirrors each shell to a Slack thread: you can prompt from your phone, approve permissions with reactions, and use =!yolo= / =!safe= / =!stop=. It **never connects at startup**, because anyone in that Slack thread could drive this Emacs. =SPC a S c= loads the tokens from the Keychain and connects. Only your own Slack user ID is authorized.
+
+One-time setup:
+1. Create a Slack app from the repo's =slack-app-manifest.yaml= and install it to the workspace.
+2. Store four Keychain items under the service =agent-shell-to-go= with =security add-generic-password -s agent-shell-to-go -a <account> -w <value>=. The accounts are =bot-token= (xoxb), =app-token= (xapp), =channel-id= and =user-id=.
+#+begin_src emacs-lisp
+(use-package agent-shell-to-go
+  :straight (agent-shell-to-go :type git :host github :repo "ElleNajt/agent-shell-to-go")
+  :after agent-shell
+  :commands (agent-shell-to-go-setup agent-shell-to-go-reconnect-buffer
+             agent-shell-to-go-reconnect-all agent-shell-to-go-list-threads
+             agent-shell-to-go-send-image agent-shell-to-go-cleanup-old-threads)
+  :custom
+  (agent-shell-to-go-env-file "/dev/null"))
+#+end_src
+
+=env-file= is =/dev/null= rather than nil because =agent-shell-to-go--load-env= calls =file-exists-p= on it unguarded. =file-exists-p= on nil signals a =wrong-type-argument= error, while on =/dev/null= it reads an empty file.
+
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the

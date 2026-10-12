@@ -356,5 +356,63 @@ Affects shells started afterwards; restart running ones (SPC a n R)."
              (if (member root a3madkour-agents-circus-projects) "ON" "OFF")
              root)))
 
+;;;; Slack (agent-shell-to-go)
+;;
+;; Slack can drive this Emacs remotely, so nothing connects at startup:
+;; `a3madkour-agents-slack-connect' (SPC a S c) is the only way in.
+;; Credentials live in the macOS Keychain, never in the repo:
+;;   security add-generic-password -s agent-shell-to-go -a bot-token -w xoxb-…
+;; (likewise app-token, channel-id, user-id).
+
+(declare-function agent-shell-to-go-setup "agent-shell-to-go")
+
+(defun a3madkour-agents--slack-available-p ()
+  "Non-nil if agent-shell-to-go can be loaded."
+  (require 'agent-shell-to-go nil t))
+
+(defcustom a3madkour-agents-slack-keychain-service "agent-shell-to-go"
+  "Keychain service name holding the agent-shell-to-go credentials."
+  :type 'string
+  :group 'a3madkour-agents)
+
+(defconst a3madkour-agents-slack-accounts
+  '((agent-shell-to-go-bot-token . "bot-token")
+    (agent-shell-to-go-app-token . "app-token")
+    (agent-shell-to-go-channel-id . "channel-id")
+    (agent-shell-to-go-user-id . "user-id"))
+  "agent-shell-to-go variable -> Keychain account name.")
+
+(defun a3madkour-agents-keychain-secret (account)
+  "Return the Keychain generic password for ACCOUNT, or nil if absent."
+  (car (ignore-errors
+         (process-lines "security" "find-generic-password"
+                        "-s" a3madkour-agents-slack-keychain-service
+                        "-a" account "-w"))))
+
+(defun a3madkour-agents-slack-load-credentials ()
+  "Set agent-shell-to-go's credentials from the Keychain.
+Only the user's own Slack ID is authorized.  Return missing account names."
+  (let (missing)
+    (pcase-dolist (`(,var . ,account) a3madkour-agents-slack-accounts)
+      (if-let* ((secret (a3madkour-agents-keychain-secret account)))
+          (set var secret)
+        (push account missing)))
+    (unless missing
+      (set 'agent-shell-to-go-authorized-users
+           (list (symbol-value 'agent-shell-to-go-user-id))))
+    (nreverse missing)))
+
+(defun a3madkour-agents-slack-connect ()
+  "Load Slack credentials and start mirroring agent-shell sessions to Slack."
+  (interactive)
+  (unless (a3madkour-agents--slack-available-p)
+    (user-error "agent-shell-to-go is not installed"))
+  (when-let* ((missing (a3madkour-agents-slack-load-credentials)))
+    (user-error "Missing Keychain items (service %s): %s"
+                a3madkour-agents-slack-keychain-service
+                (string-join missing ", ")))
+  (agent-shell-to-go-setup)
+  (message "agent-shell-to-go connected; agent-shell buffers now mirror to Slack"))
+
 (provide 'a3madkour-agents)
 ;;; a3madkour-agents.el ends here

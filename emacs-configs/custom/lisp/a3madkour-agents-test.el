@@ -355,5 +355,60 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
       (a3madkour-agents-circus-toggle)
       (should-not (member "/p/" a3madkour-agents-circus-projects)))))
 
+;;;; Slack (agent-shell-to-go)
+
+(defvar agent-shell-to-go-bot-token nil)
+(defvar agent-shell-to-go-app-token nil)
+(defvar agent-shell-to-go-channel-id nil)
+(defvar agent-shell-to-go-user-id nil)
+(defvar agent-shell-to-go-authorized-users nil)
+
+(defmacro a3madkour-agents-test--with-keychain (items &rest body)
+  "Run BODY with Keychain stubbed to ITEMS (alist account -> secret)."
+  (declare (indent 1))
+  `(let ((agent-shell-to-go-bot-token nil) (agent-shell-to-go-app-token nil)
+         (agent-shell-to-go-channel-id nil) (agent-shell-to-go-user-id nil)
+         (agent-shell-to-go-authorized-users nil))
+     (cl-letf (((symbol-function 'a3madkour-agents-keychain-secret)
+                (lambda (account) (cdr (assoc account ,items)))))
+       ,@body)))
+
+(ert-deftest a3madkour-agents-test/slack-load-all ()
+  (a3madkour-agents-test--with-keychain
+      '(("bot-token" . "xoxb-1") ("app-token" . "xapp-1")
+        ("channel-id" . "C1") ("user-id" . "U1"))
+    (should-not (a3madkour-agents-slack-load-credentials))
+    (should (equal "xoxb-1" agent-shell-to-go-bot-token))
+    (should (equal "xapp-1" agent-shell-to-go-app-token))
+    (should (equal "C1" agent-shell-to-go-channel-id))
+    (should (equal '("U1") agent-shell-to-go-authorized-users))))
+
+(ert-deftest a3madkour-agents-test/slack-partial-refuses-connect ()
+  (a3madkour-agents-test--with-keychain '(("bot-token" . "xoxb-1"))
+    (let (setup-called)
+      (cl-letf (((symbol-function 'a3madkour-agents--slack-available-p) (lambda () t))
+                ((symbol-function 'agent-shell-to-go-setup)
+                 (lambda () (setq setup-called t))))
+        (let ((err (should-error (a3madkour-agents-slack-connect) :type 'user-error)))
+          (should (string-match-p "app-token" (cadr err)))
+          (should (string-match-p "user-id" (cadr err))))
+        (should-not setup-called)
+        (should-not agent-shell-to-go-authorized-users)))))
+
+(ert-deftest a3madkour-agents-test/slack-connect-calls-setup ()
+  (a3madkour-agents-test--with-keychain
+      '(("bot-token" . "b") ("app-token" . "a") ("channel-id" . "c") ("user-id" . "u"))
+    (let (setup-called)
+      (cl-letf (((symbol-function 'a3madkour-agents--slack-available-p) (lambda () t))
+                ((symbol-function 'agent-shell-to-go-setup)
+                 (lambda () (setq setup-called t))))
+        (a3madkour-agents-slack-connect)
+        (should setup-called)))))
+
+(ert-deftest a3madkour-agents-test/keychain-secret-missing-is-nil ()
+  (cl-letf (((symbol-function 'process-lines)
+             (lambda (&rest _) (error "security: item not found"))))
+    (should-not (a3madkour-agents-keychain-secret "bot-token"))))
+
 (provide 'a3madkour-agents-test)
 ;;; a3madkour-agents-test.el ends here
