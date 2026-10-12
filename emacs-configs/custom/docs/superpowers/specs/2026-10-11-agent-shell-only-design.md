@@ -292,7 +292,7 @@ Each package is installed so that a missing prerequisite produces a warning from
 - **Install:** `:straight (agent-shell-to-go :host github :repo "ElleNajt/agent-shell-to-go")`. `websocket` is already present.
 - **Credentials:** read with `auth-source` from macOS Keychain (`auth-source-macos-keychain-*`): bot token (xoxb), app token (xapp), channel ID and user ID. Nothing secret goes in the repo.
   - `-authorized-users` is set to only the user's own Slack ID.
-  - `-env-file nil`.
+  - `-env-file "/dev/null"` (its loader calls `file-exists-p` unguarded, so nil would error).
 - **Never auto-connects.** `a3madkour-agents-slack-connect` loads the credentials, sets the variables and calls `agent-shell-to-go-setup`. Nothing in init calls setup, because Slack can drive Emacs remotely.
 - **Manual steps** (go in the config.org prose): create the Slack app from `slack-app-manifest.yaml`, install it to the workspace, and store the tokens in Keychain.
 
@@ -303,7 +303,7 @@ Each package is installed so that a missing prerequisite produces a warning from
 - `agent-shell-command-prefix` is set to `a3madkour-agents-circus-command-prefix (buffer)`:
   - It returns nil when circus is off for that buffer's project. Stock behaviour, so devcontainer still works.
   - Otherwise it returns `("agent-circus" "exec" SERVICE "--")`.
-  - SERVICE comes from `(map-elt (agent-shell-get-config buffer) :identifier)`: `claude-code`→`claude`, `codex`→`codex`, `opencode`→`opencode`; anything else is `user-error`.
+  - SERVICE comes from `(map-elt (agent-shell-get-config buffer) :identifier)`: `claude-code`→`"claude-code"`, `codex`→`"codex"`, `opencode`→`"opencode"`, `mistral-vibe`→`"mistral-vibe"` (agent-circus service names); anything else is `user-error`.
 - `agent-shell-path-resolver-function` is set to `a3madkour-agents-circus-resolve-path (path)`. When circus is on it maps between `/workspace/…` and `<project-root>/…` in both directions; otherwise it returns PATH unchanged.
 
 ---
