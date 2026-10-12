@@ -265,6 +265,11 @@ spawn must not stop at the session prompt."
                   :session-strategy 'new
                   :outgoing-request-decorator
                   (bound-and-true-p meta-agent-shell--pending-decorator))))
+    ;; The ACP session/new request runs after we return, so the let
+    ;; above has expired; keep the directory in the buffer.
+    (when (eq arg 'use-current-dir)
+      (with-current-buffer buffer
+        (setq-local agent-shell-cwd-function (lambda () dir))))
     (when buffer-name
       (with-current-buffer buffer
         (rename-buffer buffer-name t)))
@@ -316,10 +321,22 @@ meta-agent-shell only knows projectile."
     (or a3madkour-agents-circus-enabled
         (and (member (a3madkour-agents--circus-root) a3madkour-agents-circus-projects) t))))
 
+(defvar a3madkour-agents--starting-config nil
+  "Config of the agent-shell being started; see `a3madkour-agents--bind-starting-config'.")
+
+(defun a3madkour-agents--bind-starting-config (orig-fn &rest args)
+  "`:around' advice for `agent-shell--start': expose its :config to the prefix.
+agent-shell builds the command before storing the config in its state,
+so `agent-shell-get-config' is still nil at that point."
+  (let ((a3madkour-agents--starting-config (plist-get args :config)))
+    (apply orig-fn args)))
+
 (defun a3madkour-agents-circus-command-prefix (buffer)
   "`agent-shell-command-prefix' function: agent-circus exec for BUFFER, or nil."
   (when (a3madkour-agents-circus-active-p buffer)
-    (let* ((id (map-elt (agent-shell-get-config buffer) :identifier))
+    (let* ((id (map-elt (or (agent-shell-get-config buffer)
+                            a3madkour-agents--starting-config)
+                        :identifier))
            (service (or (alist-get id a3madkour-agents-circus-services)
                         (user-error "agent-circus has no service for agent `%s'" id))))
       (list "agent-circus" "exec" service "--"))))

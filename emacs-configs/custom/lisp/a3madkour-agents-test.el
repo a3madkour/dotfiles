@@ -279,6 +279,17 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
       (a3madkour-agents-meta-start)
       (should (eq #'identity (plist-get start-args :outgoing-request-decorator))))))
 
+(ert-deftest a3madkour-agents-test/meta-start-cwd-persists-buffer-locally ()
+  (let ((a3madkour-agents-meta-config-function #'ignore)
+        (default-directory "/tmp/proj/sub/"))
+    (a3madkour-agents-test--with-fake-start
+      (let ((buf (a3madkour-agents-meta-start 'use-current-dir "W")))
+        (should (equal "/tmp/proj/sub/"
+                       (with-current-buffer buf (funcall agent-shell-cwd-function))))
+        (should-not agent-shell-cwd-function))
+      (let ((buf (a3madkour-agents-meta-start nil "V")))
+        (should-not (local-variable-p 'agent-shell-cwd-function buf))))))
+
 (ert-deftest a3madkour-agents-test/meta-project-path-prefers-project-el ()
   (cl-letf (((symbol-function 'project-current) (lambda (&rest _) 'proj))
             ((symbol-function 'project-root) (lambda (_) "/tmp/root/")))
@@ -346,6 +357,22 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
       (should (equal "/workspace/" (a3madkour-agents-circus-resolve-path "/p")))
       (should (equal "/etc/hosts" (a3madkour-agents-circus-resolve-path "/etc/hosts")))
       (should-error (a3madkour-agents-circus-resolve-path "/workspace/../etc/passwd")))))
+
+(ert-deftest a3madkour-agents-test/circus-prefix-uses-starting-config ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (let ((a3madkour-agents--starting-config '((:identifier . codex))))
+        (cl-letf (((symbol-function 'agent-shell-get-config) (lambda (_) nil)))
+          (should (equal '("agent-circus" "exec" "codex" "--")
+                         (a3madkour-agents-circus-command-prefix (current-buffer)))))))))
+
+(ert-deftest a3madkour-agents-test/circus-bind-starting-config-advice ()
+  (let (seen)
+    (a3madkour-agents--bind-starting-config
+     (lambda (&rest _) (setq seen a3madkour-agents--starting-config))
+     :config '((:identifier . codex)))
+    (should (equal '((:identifier . codex)) seen))
+    (should-not a3madkour-agents--starting-config)))
 
 (ert-deftest a3madkour-agents-test/circus-toggle-flips-project ()
   (a3madkour-agents-test--with-circus "/p/" nil
