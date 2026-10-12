@@ -67,7 +67,9 @@ tool call was announced instead."
   '(("claude-agent-acp" . "npm i -g @zed-industries/claude-agent-acp")
     ("codex-acp" . "install the Codex ACP adapter (codex-acp) for SPC a n c")
     ("terminal-notifier" . "brew install terminal-notifier (optional: macext banners)")
-    ("agent-shell-send" . "add straight/repos/meta-agent-shell/bin to PATH (meta-agent-shell)"))
+    ("agent-shell-send" . "add straight/repos/meta-agent-shell/bin to PATH (meta-agent-shell)")
+    ("agent-circus" . "uv tool install agent-circus (SPC a C)")
+    (("docker" "podman") . "Docker Desktop or Podman (agent-circus)"))
   "External programs the agent setup expects, as (NAMES . HINT).
 NAMES is a program name, or a list of names any one of which suffices."
   :type '(repeat (cons (choice string (repeat string)) string))
@@ -275,6 +277,84 @@ meta-agent-shell only knows projectile."
   (or (when-let* ((project (project-current)))
         (expand-file-name (project-root project)))
       (apply orig-fn args)))
+
+;;;; agent-circus
+;;
+;; Per project, run agents inside agent-circus containers.  Off by
+;; default so the built-in devcontainer setup keeps working: both use
+;; `agent-shell-command-prefix' and `agent-shell-path-resolver-function'.
+
+(declare-function agent-shell-cwd "agent-shell-project")
+(declare-function agent-shell-get-config "agent-shell")
+
+(defcustom a3madkour-agents-circus-services
+  '((claude-code . "claude-code")
+    (codex . "codex")
+    (opencode . "opencode")
+    (mistral-vibe . "mistral-vibe"))
+  "agent-shell identifier -> agent-circus service name."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'a3madkour-agents)
+
+(defconst a3madkour-agents-circus-workspace "/workspace/"
+  "Project mount point inside agent-circus containers.")
+
+(defvar a3madkour-agents-circus-projects nil
+  "Project roots (directory names) whose agents run in agent-circus.")
+
+(defvar-local a3madkour-agents-circus-enabled nil
+  "Non-nil runs this buffer's agents in agent-circus (settable in .dir-locals.el).")
+(put 'a3madkour-agents-circus-enabled 'safe-local-variable #'booleanp)
+
+(defun a3madkour-agents--circus-root ()
+  "The current agent-shell project root as a directory name."
+  (file-name-as-directory (expand-file-name (agent-shell-cwd))))
+
+(defun a3madkour-agents-circus-active-p (&optional buffer)
+  "Non-nil if agents for BUFFER (default current) run in agent-circus."
+  (with-current-buffer (or buffer (current-buffer))
+    (or a3madkour-agents-circus-enabled
+        (and (member (a3madkour-agents--circus-root) a3madkour-agents-circus-projects) t))))
+
+(defun a3madkour-agents-circus-command-prefix (buffer)
+  "`agent-shell-command-prefix' function: agent-circus exec for BUFFER, or nil."
+  (when (a3madkour-agents-circus-active-p buffer)
+    (let* ((id (map-elt (agent-shell-get-config buffer) :identifier))
+           (service (or (alist-get id a3madkour-agents-circus-services)
+                        (user-error "agent-circus has no service for agent `%s'" id))))
+      (list "agent-circus" "exec" service "--"))))
+
+(defun a3madkour-agents-circus-resolve-path (path)
+  "`agent-shell-path-resolver-function': map PATH between host and container.
+Identity unless circus is active for the current buffer."
+  (if (not (a3madkour-agents-circus-active-p))
+      path
+    (let* ((root (a3madkour-agents--circus-root))
+           (workspace a3madkour-agents-circus-workspace))
+      (cond
+       ((equal path (directory-file-name root)) workspace)
+       ((equal path (directory-file-name workspace)) root)
+       ((string-prefix-p root path)
+        (concat workspace (substring path (length root))))
+       ((string-prefix-p workspace path)
+        (let ((local (expand-file-name (substring path (length workspace)) root)))
+          (if (string-prefix-p root local)
+              local
+            (error "Container path resolves outside the project: %s" path))))
+       (t path)))))
+
+(defun a3madkour-agents-circus-toggle ()
+  "Toggle agent-circus for the current project.
+Affects shells started afterwards; restart running ones (SPC a n R)."
+  (interactive)
+  (let ((root (a3madkour-agents--circus-root)))
+    (if (member root a3madkour-agents-circus-projects)
+        (setq a3madkour-agents-circus-projects
+              (delete root a3madkour-agents-circus-projects))
+      (push root a3madkour-agents-circus-projects))
+    (message "agent-circus %s for %s (new shells only)"
+             (if (member root a3madkour-agents-circus-projects) "ON" "OFF")
+             root)))
 
 (provide 'a3madkour-agents)
 ;;; a3madkour-agents.el ends here

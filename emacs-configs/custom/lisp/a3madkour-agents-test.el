@@ -290,5 +290,70 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
     (should (equal "/fallback/"
                    (a3madkour-agents--meta-project-path (lambda () "/fallback/"))))))
 
+;;;; agent-circus
+
+(defmacro a3madkour-agents-test--with-circus (root on &rest body)
+  "Run BODY with agent-shell stubbed: cwd ROOT, circus ON for ROOT if non-nil."
+  (declare (indent 2))
+  `(let ((a3madkour-agents-circus-projects (and ,on (list ,root))))
+     (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () ,root)))
+       ,@body)))
+
+(ert-deftest a3madkour-agents-test/circus-prefix-off-is-nil ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (with-temp-buffer
+      (should-not (a3madkour-agents-circus-command-prefix (current-buffer))))))
+
+(ert-deftest a3madkour-agents-test/circus-prefix-maps-identifiers ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (dolist (pair '((claude-code . "claude-code") (codex . "codex") (opencode . "opencode")))
+        (cl-letf (((symbol-function 'agent-shell-get-config)
+                   (lambda (_) `((:identifier . ,(car pair))))))
+          (should (equal (list "agent-circus" "exec" (cdr pair) "--")
+                         (a3madkour-agents-circus-command-prefix (current-buffer)))))))))
+
+(ert-deftest a3madkour-agents-test/circus-prefix-unknown-agent-errors ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'agent-shell-get-config)
+                 (lambda (_) '((:identifier . gemini-cli)))))
+        (should-error (a3madkour-agents-circus-command-prefix (current-buffer))
+                      :type 'user-error)))))
+
+(ert-deftest a3madkour-agents-test/circus-dir-local-enables ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (with-temp-buffer
+      (setq-local a3madkour-agents-circus-enabled t)
+      (should (a3madkour-agents-circus-active-p (current-buffer))))))
+
+(ert-deftest a3madkour-agents-test/circus-resolve-identity-when-off ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (with-temp-buffer
+      (should (equal "/p/a.el" (a3madkour-agents-circus-resolve-path "/p/a.el")))
+      (should (equal "/workspace/a.el" (a3madkour-agents-circus-resolve-path "/workspace/a.el"))))))
+
+(ert-deftest a3madkour-agents-test/circus-resolve-round-trip ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (should (equal "/workspace/src/a.el" (a3madkour-agents-circus-resolve-path "/p/src/a.el")))
+      (should (equal "/p/src/a.el" (a3madkour-agents-circus-resolve-path "/workspace/src/a.el"))))))
+
+(ert-deftest a3madkour-agents-test/circus-resolve-edges ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (should (equal "/p/" (a3madkour-agents-circus-resolve-path "/workspace")))
+      (should (equal "/workspace/" (a3madkour-agents-circus-resolve-path "/p")))
+      (should (equal "/etc/hosts" (a3madkour-agents-circus-resolve-path "/etc/hosts")))
+      (should-error (a3madkour-agents-circus-resolve-path "/workspace/../etc/passwd")))))
+
+(ert-deftest a3madkour-agents-test/circus-toggle-flips-project ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (with-temp-buffer
+      (a3madkour-agents-circus-toggle)
+      (should (member "/p/" a3madkour-agents-circus-projects))
+      (a3madkour-agents-circus-toggle)
+      (should-not (member "/p/" a3madkour-agents-circus-projects)))))
+
 (provide 'a3madkour-agents-test)
 ;;; a3madkour-agents-test.el ends here

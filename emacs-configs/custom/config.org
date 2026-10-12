@@ -5102,6 +5102,14 @@ Meta advises =agent-shell-start= globally to add a system prompt to each Claude 
                (expand-file-name "straight/repos/meta-agent-shell/bin" user-emacs-directory)))
 #+end_src
 
+*** Containers (agent-circus)
+[[https://github.com/Embedded-Focus/agent-circus][agent-circus]] runs agents in firewalled Docker or Podman containers with the project mounted at =/workspace=. It is a Python CLI (=uv tool install agent-circus=, then =agent-circus build=), not an Emacs package. It is off everywhere until =SPC a C= turns it on for the current project, or a project's =.dir-locals.el= sets =a3madkour-agents-circus-enabled= to =t=. It only applies to shells started after the toggle. When it is off, both hooks below behave as stock, so the built-in devcontainer setup keeps working.
+#+begin_src emacs-lisp
+(with-eval-after-load 'agent-shell
+  (setq agent-shell-command-prefix #'a3madkour-agents-circus-command-prefix)
+  (setq agent-shell-path-resolver-function #'a3madkour-agents-circus-resolve-path))
+#+end_src
+
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
