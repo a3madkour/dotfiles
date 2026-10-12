@@ -5081,6 +5081,27 @@ The three advice functions patch OpenCode's non-standard ACP payloads and projec
       (kbd "p") #'agent-shell-macext-yank
       (kbd "P") #'agent-shell-macext-yank)))
 #+end_src
+*** Meta agent shell
+[[https://github.com/ElleNajt/meta-agent-shell][meta-agent-shell]] handles multi-agent orchestration. A meta session (=SPC a M m=) gets periodic heartbeats about every shell. Per-project dispatchers (=SPC a M d=) spawn and coordinate named agents, and agents talk to each other through the =bin/= scripts, which call =emacsclient=, hence =server-start= above. =SPC a I= interrupts every shell.
+
+Meta calls its start function with two arguments, which stock =agent-shell= can't take, so =a3madkour-agents-meta-start= stands in. Spawns are always Claude Code with a new session, never the session prompt. Project detection goes through project.el instead of projectile. The heartbeat (every 15 minutes) stays off until =SPC a M h=.
+
+Meta advises =agent-shell-start= globally to add a system prompt to each Claude session. Other agents ignore it.
+#+begin_src emacs-lisp
+(use-package meta-agent-shell
+  :straight (meta-agent-shell :type git :host github :repo "ElleNajt/meta-agent-shell"
+                              :files ("meta-agent-shell.el"))
+  :after agent-shell
+  :demand t
+  :custom
+  (meta-agent-shell-start-function #'a3madkour-agents-meta-start)
+  :config
+  (advice-add 'meta-agent-shell--get-project-path :around
+              #'a3madkour-agents--meta-project-path)
+  (add-to-list 'exec-path
+               (expand-file-name "straight/repos/meta-agent-shell/bin" user-emacs-directory)))
+#+end_src
+
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the

@@ -222,5 +222,73 @@ Binds `switched' to the name passed to `persp-switch', if any."
       (dolist (binding (nth 2 entry))
         (should (kbd (car binding)))))))
 
+;;;; meta-agent-shell
+
+(defvar agent-shell-cwd-function nil)
+(defvar meta-agent-shell--pending-decorator nil)
+
+(defmacro a3madkour-agents-test--with-fake-start (&rest body)
+  "Run BODY with `agent-shell--start' stubbed.
+Binds `start-args' (keyword plist received) and `start-cwd' (value of
+`agent-shell-cwd-function' at call time, funcalled), and `made' (buffers)."
+  (declare (indent 0))
+  `(let (start-args start-cwd made)
+     (cl-letf (((symbol-function 'agent-shell--start)
+                (lambda (&rest args)
+                  (setq start-args args
+                        start-cwd (and agent-shell-cwd-function
+                                       (funcall agent-shell-cwd-function)))
+                  (car (push (generate-new-buffer "*fake-agent*") made)))))
+       (unwind-protect (progn ,@body)
+         (mapc #'kill-buffer (seq-filter #'buffer-live-p made))))))
+
+(ert-deftest a3madkour-agents-test/meta-start-defaults ()
+  (let ((a3madkour-agents-meta-config-function (lambda () '((:identifier . claude-code)))))
+    (a3madkour-agents-test--with-fake-start
+      (let ((buf (a3madkour-agents-meta-start)))
+        (should (bufferp buf))
+        (should (eq buf (current-buffer)))
+        (should (equal '((:identifier . claude-code)) (plist-get start-args :config)))
+        (should (eq t (plist-get start-args :new-session)))
+        (should (eq 'new (plist-get start-args :session-strategy)))
+        (should-not start-cwd)))))
+
+(ert-deftest a3madkour-agents-test/meta-start-use-current-dir-and-name ()
+  (let ((a3madkour-agents-meta-config-function #'ignore)
+        (default-directory "/tmp/proj/sub/"))
+    (a3madkour-agents-test--with-fake-start
+      (let ((buf (a3madkour-agents-meta-start 'use-current-dir "Worker")))
+        (should (equal "/tmp/proj/sub/" start-cwd))
+        (should (equal "Worker" (buffer-name buf)))))))
+
+(ert-deftest a3madkour-agents-test/meta-start-name-collision-is-unique ()
+  (let ((a3madkour-agents-meta-config-function #'ignore)
+        (taken (get-buffer-create "Dispatcher")))
+    (unwind-protect
+        (a3madkour-agents-test--with-fake-start
+          (let ((buf (a3madkour-agents-meta-start nil "Dispatcher")))
+            (should (buffer-live-p buf))
+            (should-not (eq buf taken))
+            (should (string-prefix-p "Dispatcher" (buffer-name buf)))))
+      (kill-buffer taken))))
+
+(ert-deftest a3madkour-agents-test/meta-start-passes-pending-decorator ()
+  (let ((a3madkour-agents-meta-config-function #'ignore)
+        (meta-agent-shell--pending-decorator #'identity))
+    (a3madkour-agents-test--with-fake-start
+      (a3madkour-agents-meta-start)
+      (should (eq #'identity (plist-get start-args :outgoing-request-decorator))))))
+
+(ert-deftest a3madkour-agents-test/meta-project-path-prefers-project-el ()
+  (cl-letf (((symbol-function 'project-current) (lambda (&rest _) 'proj))
+            ((symbol-function 'project-root) (lambda (_) "/tmp/root/")))
+    (should (equal "/tmp/root/"
+                   (a3madkour-agents--meta-project-path (lambda () "/fallback/"))))))
+
+(ert-deftest a3madkour-agents-test/meta-project-path-falls-back ()
+  (cl-letf (((symbol-function 'project-current) (lambda (&rest _) nil)))
+    (should (equal "/fallback/"
+                   (a3madkour-agents--meta-project-path (lambda () "/fallback/"))))))
+
 (provide 'a3madkour-agents-test)
 ;;; a3madkour-agents-test.el ends here

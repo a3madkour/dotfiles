@@ -66,7 +66,8 @@ tool call was announced instead."
 (defcustom a3madkour-agents-required-executables
   '(("claude-agent-acp" . "npm i -g @zed-industries/claude-agent-acp")
     ("codex-acp" . "install the Codex ACP adapter (codex-acp) for SPC a n c")
-    ("terminal-notifier" . "brew install terminal-notifier (optional: macext banners)"))
+    ("terminal-notifier" . "brew install terminal-notifier (optional: macext banners)")
+    ("agent-shell-send" . "add straight/repos/meta-agent-shell/bin to PATH (meta-agent-shell)"))
   "External programs the agent setup expects, as (NAMES . HINT).
 NAMES is a program name, or a list of names any one of which suffices."
   :type '(repeat (cons (choice string (repeat string)) string))
@@ -230,6 +231,50 @@ See `a3madkour-agents-evil-bindings'."
     (let ((map (symbol-value map-symbol)))
       (pcase-dolist (`(,key . ,command) bindings)
         (evil-define-key* 'normal map (kbd key) command)))))
+
+;;;; meta-agent-shell
+
+(defvar agent-shell-cwd-function)
+(defvar meta-agent-shell--pending-decorator)
+(declare-function agent-shell--start "agent-shell")
+(declare-function project-root "project")
+
+(defcustom a3madkour-agents-meta-config-function
+  #'agent-shell-anthropic-make-claude-code-config
+  "Function returning the agent config meta-agent-shell spawns.
+Spawns are unattended, so this must not prompt."
+  :type 'function
+  :group 'a3madkour-agents)
+
+(defun a3madkour-agents-meta-start (&optional arg buffer-name)
+  "Start a new agent shell for meta-agent-shell; return it, left current.
+Meant for `meta-agent-shell-start-function', which calls it with
+\(ARG BUFFER-NAME).  ARG `use-current-dir' starts in `default-directory'
+instead of the project root.  BUFFER-NAME, when non-nil, names the
+buffer (uniquified if taken).  Sessions are always new: an unattended
+spawn must not stop at the session prompt."
+  (let* ((dir default-directory)
+         (agent-shell-cwd-function (if (eq arg 'use-current-dir)
+                                       (lambda () dir)
+                                     agent-shell-cwd-function))
+         (buffer (agent-shell--start
+                  :config (funcall a3madkour-agents-meta-config-function)
+                  :new-session t
+                  :session-strategy 'new
+                  :outgoing-request-decorator
+                  (bound-and-true-p meta-agent-shell--pending-decorator))))
+    (when buffer-name
+      (with-current-buffer buffer
+        (rename-buffer buffer-name t)))
+    (set-buffer buffer)
+    buffer))
+
+(defun a3madkour-agents--meta-project-path (orig-fn &rest args)
+  "Prefer project.el's root; else call ORIG-FN with ARGS.
+meta-agent-shell only knows projectile."
+  (or (when-let* ((project (project-current)))
+        (expand-file-name (project-root project)))
+      (apply orig-fn args)))
 
 (provide 'a3madkour-agents)
 ;;; a3madkour-agents.el ends here
