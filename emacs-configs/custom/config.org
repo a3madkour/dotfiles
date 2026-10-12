@@ -4919,56 +4919,21 @@ Setting the pipeline for exporting the notes to the website dir
 	  (dash-docs-install-docset lang))))
 #+end_src
 * "AI" "Agents"
-** Claude code
-The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and the Monet integration hook) is from [[https://github.com/stevemolitor/claude-code.el][stevemolitor/claude-code.el]]'s README. The =inheritenv=, =monet=, and =eat= installs follow the README's documented dependency setup. The =a3madkour/eat-send-escape= function is personal.
+agent-shell is the only agent front-end here. claude-code.el, along with its eat, monet and inheritenv stack, was retired on 2026-10-11 (see [[file:docs/superpowers/specs/2026-10-11-agent-shell-only-design.md][the design spec]]). The helpers live in [[file:lisp/a3madkour-agents.el][a3madkour-agents.el]] so they can be tested; this heading only wires them up.
+
+The Emacs server has to be running, because emacs-skills and meta-agent-shell drive this Emacs through =emacsclient=. It is skipped in batch so a boot check doesn't take the socket.
 #+begin_src emacs-lisp
-;; install required inheritenv dependency:
-(use-package inheritenv
-  :straight (:type git :host github :repo "purcell/inheritenv"))
-
-(use-package monet
-  :straight (:type git :host github :repo "stevemolitor/monet"))
-;; for eat terminal backend:
-(use-package eat
-  :straight (:type git
-                   :host codeberg
-                   :repo "akib/emacs-eat"
-                   :files ("*.el" ("term" "term/*.el") "*.texi"
-                           "*.ti" ("terminfo/e" "terminfo/e/*")
-                           ("terminfo/65" "terminfo/65/*")
-                           ("integration" "integration/*")
-                           (:exclude ".dir-locals.el" "*-tests.el"))))
-
-(use-package claude-code
-  :straight (:type git :host github :repo "stevemolitor/claude-code.el" :branch "main" :depth 1
-                   :files ("*.el" (:exclude "images/*")))
-  :bind-keymap
-  ("C-c c" . claude-code-command-map) ;; or your preferred key
-  ;; Optionally define a repeat map so that "M" will cycle thru Claude auto-accept/plan/confirm modes after invoking claude-code-cycle-mode / C-c M.
-  :bind
-  (:repeat-map my-claude-code-map ("M" . claude-code-cycle-mode))
-  :config
-  ;; optional IDE integration with Monet
-  (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
-  (monet-mode 1)
-
-  (claude-code-mode))
-
-(defun a3madkour/eat-send-escape ()
-  "Send a literal ESC to the eat terminal."
-  (interactive)
-  (eat-self-input 1 ?\e))
-
-(with-eval-after-load 'eat
-  (evil-define-key 'insert eat-semi-char-mode-map
-    (kbd "C-c <escape>") #'a3madkour/eat-send-escape
-    ;; evil insert state shadows eat's C-y -> eat-yank with
-    ;; evil-copy-from-above, so re-bind the paste commands here.
-    (kbd "C-y") #'eat-yank
-    (kbd "M-y") #'eat-yank-from-kill-ring
-    (kbd "s-v") #'eat-yank))
+(require 'a3madkour-agents)
+(require 'server)
+(unless (or noninteractive (server-running-p))
+  (server-start))
 #+end_src
 ** Agent shell
+Claude Code and Codex authenticate with their own CLI logins; OpenCode uses its CLI-stored credentials. The shell runs as the comint buffer, not the viewport (more reliable for diffs). The real setting is =agent-shell-prefer-viewport-interaction=; the =agent-shell-prefer-viewport= that used to be set here never existed.
+
+The three advice functions patch OpenCode's non-standard ACP payloads and project.el's blindness to symlinked directories. They are named rather than inline lambdas so they can be tested and removed.
+
+=a3madkour-agents-check-prereqs= warns once if an ACP adapter is missing from =exec-path=. Otherwise the first sign would be a failed shell.
 #+begin_src emacs-lisp
 (use-package shell-maker)
 (use-package acp)
@@ -4979,16 +4944,19 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
 
   (setq agent-shell-anthropic-authentication
 		(agent-shell-anthropic-make-authentication :login t))
-  (setq agent-shell-display-action
-		'(display-buffer-pop-up-window))
+  (setq agent-shell-openai-authentication
+		(agent-shell-openai-make-authentication :login t))
   ;; ── OpenCode auth (use CLI-stored credentials) ──
   (setq agent-shell-opencode-authentication '((:none . t)))
+
+  (setq agent-shell-display-action
+		'(display-buffer-pop-up-window))
 
   ;; ── Enable @ file completion ──
   (setq agent-shell-file-completion-enabled t)
 
   ;; ── Use comint mode (more reliable for diffs) ──
-  (setq agent-shell-prefer-viewport nil)
+  (setq agent-shell-prefer-viewport-interaction nil)
 
   ;; ── Suppress interfering modes during edits ──
   (setopt agent-shell-write-inhibit-minor-modes
@@ -5001,7 +4969,6 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
       (kbd "RET") #'comint-send-input)
     (evil-define-key 'normal agent-shell-mode-map
       (kbd "RET") #'comint-send-input))
-
 
   ;; Diff/permission buffers in emacs state so y/n/p/q just work
   (add-hook 'diff-mode-hook
@@ -5020,45 +4987,15 @@ The =claude-code= =use-package= block (with =:bind-keymap=, =:repeat-map=, and t
 							agent-shell--file-completion-at-point))
               (corfu-mode 1)))
 
-  ;; ── Fix: symlinked project dirs not found by project.el ──
+  ;; ── Fixes (see lisp/a3madkour-agents.el) ──
   (advice-add 'agent-shell--project-files :around
-              (lambda (orig-fn &rest args)
-                (let ((default-directory (file-truename default-directory)))
-                  (apply orig-fn args))))
-
-  ;; ── Fix: OpenCode sends oldString/newString/filePath instead of
-  ;;    old_str/new_str/path that agent-shell expects ──
+              #'a3madkour-agents--project-files-truename)
   (advice-add 'agent-shell--make-diff-info :around
-              (lambda (orig-fn &rest args)
-                (or (apply orig-fn args)
-                    (when-let* ((acp-tool-call (plist-get args :acp-tool-call))
-                                (raw-input (map-elt acp-tool-call 'rawInput))
-                                (new-text (map-elt raw-input 'newString))
-                                (old-text (or (map-elt raw-input 'oldString) "")))
-                      (append (list (cons :old old-text)
-                                    (cons :new new-text))
-                              (when-let* ((path (or (map-elt raw-input 'filePath)
-                                                   (map-elt raw-input 'filepath))))
-                                (list (cons :file path))))))))
-
-  ;; ── Fix: OpenCode sends empty rawInput in bash permission requests ──
+              #'a3madkour-agents--opencode-diff-info)
   (advice-add 'agent-shell--permission-title :around
-              (lambda (orig-fn &rest args)
-				(let ((result (apply orig-fn args)))
-                  (if (and result
-                           (not (string= result "bash"))
-                           (not (string= result "execute")))
-                      result
-					;; Original returned a generic name, try saved state
-					(when-let* ((acp-request (plist-get args :acp-request))
-								(tool-call-id (map-nested-elt acp-request
-                                                              '(params toolCall toolCallId)))
-								(saved (map-nested-elt agent-shell--state
-                                                       (list :tool-calls tool-call-id)))
-								(command (map-elt saved :command)))
-                      (if (equal (map-elt saved :kind) "execute")
-                          (concat "```console\n" command "\n```")
-						command)))))))
+              #'a3madkour-agents--opencode-permission-title)
+
+  (a3madkour-agents-check-prereqs))
 #+end_src
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
@@ -5231,26 +5168,6 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
  '(describe-key :which-key "des. key")
  "hi"
  '(info :which-key "info")
-
-
-
- ;; claude
- "k"
- '(nil :which-key "claude code")
- "ko"
- '(claude-code :which-key "open claude code")
- "kr"
- '(claude-code-send-region :which-key "send claude code region")
- "kt"
- '(claude-code-toggle :which-key "claude code toggle")
- "km"
- '(claude-code-transient :which-key "claude code transient menu")
- "kd"
- '(claude-code-start-in-directory :which-key "open claude code in dir")
- "kk"
- '(claude-code-kill :which-key "kill claude code")
- "kc"
- '(claude-code-send-command-with-context :which-key "send a command to claude code with region context")
 
  ;; Git
  "g"
