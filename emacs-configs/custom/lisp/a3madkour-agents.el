@@ -131,18 +131,6 @@ SPECS defaults to `a3madkour-agents-required-executables'."
   meta-agent-shell-big-red-button "meta-agent-shell")
 (a3madkour-agents-define-optional a3madkour-agents-slack-connect-cmd
   a3madkour-agents-slack-connect "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-slack-reconnect-buffer
-  agent-shell-to-go-reconnect-buffer "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-slack-reconnect-all
-  agent-shell-to-go-reconnect-all "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-slack-list-threads
-  agent-shell-to-go-list-threads "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-slack-send-image
-  agent-shell-to-go-send-image "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-slack-cleanup
-  agent-shell-to-go-cleanup-old-threads "agent-shell-to-go")
-(a3madkour-agents-define-optional a3madkour-agents-circus-toggle-cmd
-  a3madkour-agents-circus-toggle "agent-circus")
 
 ;;;; Perspectives
 ;;
@@ -390,6 +378,15 @@ lie in the project or the container workspace, else it is an error."
             (error "Container path resolves outside the project: %s" path))))
        (t (error "agent-circus: path outside the project: %s" path))))))
 
+(defun a3madkour-agents--circus-state-label (root)
+  "Effective circus state for project ROOT in the current buffer, as a string.
+The dir-local `a3madkour-agents-circus-enabled' wins over the project list."
+  (let ((listed (and (member root a3madkour-agents-circus-projects) t)))
+    (cond (listed "ON")
+          (a3madkour-agents-circus-enabled
+           "still ON (dir-local a3madkour-agents-circus-enabled)")
+          (t "OFF"))))
+
 (defun a3madkour-agents-circus-toggle ()
   "Toggle agent-circus for the current project.
 Affects shells started afterwards; restart running ones (SPC a n R)."
@@ -400,8 +397,11 @@ Affects shells started afterwards; restart running ones (SPC a n R)."
               (delete root a3madkour-agents-circus-projects))
       (push root a3madkour-agents-circus-projects))
     (message "agent-circus %s for %s (new shells only)"
-             (if (member root a3madkour-agents-circus-projects) "ON" "OFF")
-             root)))
+             (a3madkour-agents--circus-state-label root) root)
+    (unless (executable-find "agent-circus")
+      (display-warning 'a3madkour-agents
+                       "agent-circus not found on exec-path (uv tool install agent-circus)"
+                       :warning))))
 
 ;;;; Slack (agent-shell-to-go)
 ;;
@@ -449,6 +449,31 @@ Only the user's own Slack ID is authorized.  Return missing account names."
            (list (symbol-value 'agent-shell-to-go-user-id))))
     (nreverse missing)))
 
+(defvar a3madkour-agents--slack-connected nil
+  "Non-nil once `a3madkour-agents-slack-connect' has loaded credentials and set up.")
+
+(defmacro a3madkour-agents-define-slack (name target)
+  "Define command NAME that runs agent-shell-to-go's TARGET once connected.
+Autoloads make TARGET callable before the Keychain credentials are
+loaded, so refuse until `a3madkour-agents-slack-connect' has run."
+  `(defun ,name ()
+     ,(format "Run `%s' after `a3madkour-agents-slack-connect'." target)
+     (interactive)
+     (unless a3madkour-agents--slack-connected
+       (user-error "Run SPC a S c (a3madkour-agents-slack-connect) first"))
+     (call-interactively ',target)))
+
+(a3madkour-agents-define-slack a3madkour-agents-slack-reconnect-buffer
+  agent-shell-to-go-reconnect-buffer)
+(a3madkour-agents-define-slack a3madkour-agents-slack-reconnect-all
+  agent-shell-to-go-reconnect-all)
+(a3madkour-agents-define-slack a3madkour-agents-slack-list-threads
+  agent-shell-to-go-list-threads)
+(a3madkour-agents-define-slack a3madkour-agents-slack-send-image
+  agent-shell-to-go-send-image)
+(a3madkour-agents-define-slack a3madkour-agents-slack-cleanup
+  agent-shell-to-go-cleanup-old-threads)
+
 (defun a3madkour-agents-slack-connect ()
   "Load Slack credentials and start mirroring agent-shell sessions to Slack."
   (interactive)
@@ -459,6 +484,7 @@ Only the user's own Slack ID is authorized.  Return missing account names."
                 a3madkour-agents-slack-keychain-service
                 (string-join missing ", ")))
   (agent-shell-to-go-setup)
+  (setq a3madkour-agents--slack-connected t)
   (message "agent-shell-to-go connected; agent-shell buffers now mirror to Slack"))
 
 (provide 'a3madkour-agents)

@@ -5112,7 +5112,7 @@ Meta advises =agent-shell-start= globally to add a system prompt to each Claude 
 #+end_src
 
 *** Slack (agent-shell-to-go)
-[[https://github.com/ElleNajt/agent-shell-to-go][agent-shell-to-go]] mirrors each shell to a Slack thread: you can prompt from your phone, approve permissions with reactions, and use =!yolo= / =!safe= / =!stop=. It **never connects at startup**, because anyone in that Slack thread could drive this Emacs. =SPC a S c= loads the tokens from the Keychain and connects. Only your own Slack user ID is authorized.
+[[https://github.com/ElleNajt/agent-shell-to-go][agent-shell-to-go]] mirrors each shell to a Slack thread: you can prompt from your phone, approve permissions with reactions, and use =!yolo= / =!safe= / =!stop=. It **never connects at startup**, because anyone in that Slack thread could drive this Emacs. =SPC a S c= loads the tokens from the Keychain and connects. Only your own Slack user ID is authorized. The other =SPC a S= keys refuse to run until that connect has succeeded, since the package's autoloads would otherwise let them run without credentials.
 
 One-time setup:
 1. Create a Slack app from the repo's =slack-app-manifest.yaml= and install it to the workspace.
@@ -5195,7 +5195,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
  "ao" '(agent-shell-other-buffer :which-key "shell <-> viewport")
  "ab" '(bookmark-set :which-key "bookmark session")
  "ar" '(agent-review :which-key "review diff")
- "aC" '(a3madkour-agents-circus-toggle-cmd :which-key "toggle circus (project)")
+ "aC" '(a3madkour-agents-circus-toggle :which-key "toggle circus (project)")
  "a?" '(agent-shell-help-menu :which-key "help menu")
 
  "an" '(nil :which-key "new")

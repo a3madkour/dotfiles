@@ -138,7 +138,6 @@
 
 (ert-deftest a3madkour-agents-test/define-optional-makes-command ()
   (should (commandp 'a3madkour-agents-meta-session))
-  (should (commandp 'a3madkour-agents-circus-toggle-cmd))
   (should (commandp 'a3madkour-agents-slack-connect-cmd)))
 
 ;;;; Perspectives
@@ -449,6 +448,25 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
       (a3madkour-agents-circus-toggle)
       (should-not (member "/p/" a3madkour-agents-circus-projects)))))
 
+(ert-deftest a3madkour-agents-test/circus-toggle-reports-effective-state ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (should (equal "ON" (a3madkour-agents--circus-state-label "/p/")))
+      (setq-local a3madkour-agents-circus-enabled t)
+      (setq a3madkour-agents-circus-projects nil)
+      (should (string-match-p "still ON" (a3madkour-agents--circus-state-label "/p/")))
+      (setq-local a3madkour-agents-circus-enabled nil)
+      (should (equal "OFF" (a3madkour-agents--circus-state-label "/p/"))))))
+
+(ert-deftest a3madkour-agents-test/circus-toggle-warns-without-binary ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (with-temp-buffer
+      (let (warned)
+        (cl-letf (((symbol-function 'executable-find) (lambda (&rest _) nil))
+                  ((symbol-function 'display-warning) (lambda (&rest _) (setq warned t))))
+          (a3madkour-agents-circus-toggle))
+        (should warned)))))
+
 ;;;; Slack (agent-shell-to-go)
 
 (defvar agent-shell-to-go-bot-token nil)
@@ -488,6 +506,27 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
           (should (string-match-p "user-id" (cadr err))))
         (should-not setup-called)
         (should-not agent-shell-to-go-authorized-users)))))
+
+(ert-deftest a3madkour-agents-test/slack-secondary-refuses-before-connect ()
+  (let ((a3madkour-agents--slack-connected nil) called)
+    (cl-letf (((symbol-function 'agent-shell-to-go-list-threads)
+               (lambda () (interactive) (setq called t))))
+      (let ((err (should-error (a3madkour-agents-slack-list-threads)
+                               :type 'user-error)))
+        (should (string-match-p "slack-connect" (cadr err))))
+      (should-not called))))
+
+(ert-deftest a3madkour-agents-test/slack-secondary-runs-after-connect ()
+  (let ((a3madkour-agents--slack-connected nil) called)
+    (a3madkour-agents-test--with-keychain '(("bot-token" . "xoxb") ("app-token" . "xapp")
+                                            ("channel-id" . "C1") ("user-id" . "U1"))
+      (cl-letf (((symbol-function 'a3madkour-agents--slack-available-p) (lambda () t))
+                ((symbol-function 'agent-shell-to-go-setup) #'ignore)
+                ((symbol-function 'agent-shell-to-go-list-threads)
+                 (lambda () (interactive) (setq called t))))
+        (a3madkour-agents-slack-connect)
+        (a3madkour-agents-slack-list-threads)
+        (should called)))))
 
 (ert-deftest a3madkour-agents-test/slack-connect-calls-setup ()
   (a3madkour-agents-test--with-keychain
