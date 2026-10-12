@@ -5118,25 +5118,85 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 
 
 
- ;; Agents
- "a" 
- '(nil  :which-key "agents")
- "ao"
- '(agent-shell-opencode-start-agent :which-key "opencode")
- "ak"
- '(agent-shell-anthropic-start-claude-code  :which-key "claude")
- "ar"
- '(agent-shell-send-region-to :which-key "send region")
- "ad"
- '(agent-shell-send-dwim :which-key "send dwim")
- "af"
- '(agent-shell-send-file :which-key "send file")
- "ac"
- '(agent-shell-prompt-compose :which-key "prompt compose")
- "ah"
- '(agent-shell-help-menu :which-key "help menu")
- "ab"
- '(agent-shell-other-buffer :which-key "switch to the between viewport and shell")
+ ;; Agents (agent-shell + extensions; see * "AI" "Agents")
+ "a"
+ '(nil :which-key "agents")
+ "aa" '(agent-shell :which-key "agent-shell dwim")
+ "at" '(agent-shell-toggle :which-key "toggle shell")
+ "aj" '(agent-shell-attention-jump :which-key "jump to waiting")
+ "aJ" '(agent-shell-attention-jump-idle :which-key "jump to idle")
+ "al" '(agent-shell-manager-toggle :which-key "session manager")
+ "aL" '(agent-shell-attention-dashboard :which-key "attention dashboard")
+ "as" '(agent-shell-sidebar-toggle :which-key "sidebar")
+ "af" '(agent-shell-sidebar-toggle-focus :which-key "sidebar focus")
+ "ac" '(agent-shell-prompt-compose :which-key "prompt compose")
+ "ap" '(agent-shell-jump-to-latest-permission-button-row :which-key "latest permission")
+ "ai" '(agent-shell-interrupt :which-key "interrupt")
+ "aI" '(a3madkour-agents-meta-big-red-button :which-key "interrupt ALL (meta)")
+ "ao" '(agent-shell-other-buffer :which-key "shell <-> viewport")
+ "ab" '(bookmark-set :which-key "bookmark session")
+ "ar" '(agent-review :which-key "review diff")
+ "aC" '(a3madkour-agents-circus-toggle-cmd :which-key "toggle circus (project)")
+ "a?" '(agent-shell-help-menu :which-key "help menu")
+
+ "an" '(nil :which-key "new")
+ "ank" '(agent-shell-anthropic-start-claude-code :which-key "claude")
+ "ano" '(agent-shell-opencode-start-agent :which-key "opencode")
+ "anc" '(agent-shell-openai-start-codex :which-key "codex")
+ "ann" '(agent-shell-new-shell :which-key "new (pick agent)")
+ "anw" '(agent-shell-new-worktree-shell :which-key "worktree")
+ "ant" '(agent-shell-new-temp-shell :which-key "temp dir")
+ "anD" '(agent-shell-new-downloads-shell :which-key "~/Downloads")
+ "anf" '(agent-shell-fork :which-key "fork session")
+ "anr" '(agent-shell-resume-session :which-key "resume session")
+ "anR" '(agent-shell-restart :which-key "restart (clear)")
+ "anl" '(agent-shell-reload :which-key "reload (same session)")
+ "anP" '(agent-shell-sidebar-change-provider :which-key "sidebar provider")
+ "anX" '(agent-shell-sidebar-reset :which-key "sidebar reset")
+
+ "ax" '(nil :which-key "send")
+ "axd" '(agent-shell-send-dwim :which-key "dwim")
+ "axr" '(agent-shell-send-region-to :which-key "region to…")
+ "axf" '(agent-shell-send-file :which-key "file")
+ "axF" '(agent-shell-send-other-file :which-key "other file")
+ "axs" '(agent-shell-send-screenshot :which-key "screenshot")
+ "axi" '(agent-shell-send-clipboard-image :which-key "clipboard image")
+ "ax!" '(agent-shell-insert-shell-command-output :which-key "shell cmd output")
+ "axy" '(agent-shell-macext-yank :which-key "Finder-aware yank")
+
+ "am" '(nil :which-key "mode/model")
+ "amm" '(agent-shell-set-session-mode :which-key "set mode")
+ "amv" '(agent-shell-set-session-model :which-key "set model")
+ "am TAB" '(agent-shell-cycle-session-mode :which-key "cycle mode")
+
+ "aq" '(nil :which-key "queue")
+ "aqq" '(agent-shell-queue-request :which-key "queue request")
+ "aqr" '(agent-shell-resume-pending-requests :which-key "resume pending")
+ "aqd" '(agent-shell-remove-pending-request :which-key "remove pending")
+
+ "aM" '(nil :which-key "meta")
+ "aMm" '(a3madkour-agents-meta-session :which-key "meta session")
+ "aMd" '(a3madkour-agents-meta-dispatcher :which-key "dispatcher")
+ "aMk" '(a3madkour-agents-meta-close-dispatcher :which-key "close dispatcher")
+ "aMh" '(a3madkour-agents-meta-heartbeat-start :which-key "heartbeat start")
+ "aMH" '(a3madkour-agents-meta-heartbeat-stop :which-key "heartbeat stop")
+ "aMs" '(a3madkour-agents-meta-heartbeat-now :which-key "heartbeat now")
+
+ "aS" '(nil :which-key "slack")
+ "aSc" '(a3madkour-agents-slack-connect-cmd :which-key "connect")
+ "aSr" '(a3madkour-agents-slack-reconnect-buffer :which-key "reconnect buffer")
+ "aSR" '(a3madkour-agents-slack-reconnect-all :which-key "reconnect all")
+ "aSl" '(a3madkour-agents-slack-list-threads :which-key "list threads")
+ "aSi" '(a3madkour-agents-slack-send-image :which-key "send image")
+ "aSx" '(a3madkour-agents-slack-cleanup :which-key "cleanup old threads")
+
+ "ad" '(nil :which-key "debug")
+ "adt" '(agent-shell-view-traffic :which-key "traffic")
+ "ada" '(agent-shell-view-acp-logs :which-key "acp logs")
+ "adl" '(agent-shell-toggle-logging :which-key "toggle logging")
+ "adu" '(agent-shell-show-usage :which-key "usage")
+ "adT" '(agent-shell-open-transcript :which-key "transcript")
+ "ady" '(agent-shell-copy-session-id :which-key "copy session id")
  
  ;; Defaults and debugging
  "d"
