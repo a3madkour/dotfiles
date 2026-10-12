@@ -61,5 +61,85 @@ tool call was announced instead."
             (concat "```console\n" command "\n```")
           command)))))
 
+;;;; Prerequisites
+
+(defcustom a3madkour-agents-required-executables
+  '(("claude-agent-acp" . "npm i -g @zed-industries/claude-agent-acp")
+    ("codex-acp" . "install the Codex ACP adapter (codex-acp) for SPC a n c")
+    ("terminal-notifier" . "brew install terminal-notifier (optional: macext banners)"))
+  "External programs the agent setup expects, as (NAMES . HINT).
+NAMES is a program name, or a list of names any one of which suffices."
+  :type '(repeat (cons (choice string (repeat string)) string))
+  :group 'a3madkour-agents)
+
+(defvar a3madkour-agents--prereqs-checked nil
+  "Non-nil once `a3madkour-agents-check-prereqs' has run this session.")
+
+(defun a3madkour-agents-missing-executables (&optional specs)
+  "Return the entries of SPECS whose programs are all missing from `exec-path'.
+SPECS defaults to `a3madkour-agents-required-executables'."
+  (seq-remove (lambda (spec)
+                (seq-some #'executable-find (ensure-list (car spec))))
+              (or specs a3madkour-agents-required-executables)))
+
+(defun a3madkour-agents-check-prereqs ()
+  "Warn once per session about each missing external program."
+  (unless a3madkour-agents--prereqs-checked
+    (setq a3madkour-agents--prereqs-checked t)
+    (dolist (spec (a3madkour-agents-missing-executables))
+      (display-warning 'a3madkour-agents
+                       (format "%s not found: %s"
+                               (string-join (ensure-list (car spec)) "/")
+                               (cdr spec))
+                       :warning))))
+
+;;;; Optional commands
+;;
+;; Phase 2 packages are bound in the leader map from Phase 1 on.  Until
+;; they load, these say so instead of signalling `void-function'.
+
+(defun a3madkour-agents--call-optional (target package)
+  "Call TARGET interactively if defined, else explain PACKAGE is missing."
+  (if (fboundp target)
+      (call-interactively target)
+    (user-error "%s is not installed/configured yet (Phase 2 of the agent-shell spec)"
+                package)))
+
+(defmacro a3madkour-agents-define-optional (name target package)
+  "Define command NAME that runs TARGET from PACKAGE when it is available."
+  `(defun ,name ()
+     ,(format "Run `%s' (%s), or say it is not set up yet." target package)
+     (interactive)
+     (a3madkour-agents--call-optional ',target ,package)))
+
+(a3madkour-agents-define-optional a3madkour-agents-meta-session
+  meta-agent-shell-start "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-dispatcher
+  meta-agent-shell-start-or-dispatcher "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-close-dispatcher
+  meta-agent-shell-close-dispatcher "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-heartbeat-start
+  meta-agent-shell-heartbeat-start "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-heartbeat-stop
+  meta-agent-shell-heartbeat-stop "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-heartbeat-now
+  meta-agent-shell-heartbeat-send-now "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-meta-big-red-button
+  meta-agent-shell-big-red-button "meta-agent-shell")
+(a3madkour-agents-define-optional a3madkour-agents-slack-connect-cmd
+  a3madkour-agents-slack-connect "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-slack-reconnect-buffer
+  agent-shell-to-go-reconnect-buffer "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-slack-reconnect-all
+  agent-shell-to-go-reconnect-all "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-slack-list-threads
+  agent-shell-to-go-list-threads "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-slack-send-image
+  agent-shell-to-go-send-image "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-slack-cleanup
+  agent-shell-to-go-cleanup-old-threads "agent-shell-to-go")
+(a3madkour-agents-define-optional a3madkour-agents-circus-toggle-cmd
+  a3madkour-agents-circus-toggle "agent-circus")
+
 (provide 'a3madkour-agents)
 ;;; a3madkour-agents.el ends here

@@ -87,5 +87,59 @@
       (delete-file link)
       (delete-directory real))))
 
+;;;; Prerequisites
+
+(ert-deftest a3madkour-agents-test/missing-executables ()
+  (cl-letf (((symbol-function 'executable-find)
+             (lambda (name &rest _) (member name '("present" "podman")))))
+    (should (equal '(("absent" . "install absent"))
+                   (a3madkour-agents-missing-executables
+                    '(("present" . "x")
+                      ("absent" . "install absent")
+                      (("docker" "podman") . "any one is fine")))))))
+
+(ert-deftest a3madkour-agents-test/check-prereqs-warns-once ()
+  (let ((a3madkour-agents--prereqs-checked nil)
+        (a3madkour-agents-required-executables '(("absent" . "install it")))
+        (warnings nil))
+    (cl-letf (((symbol-function 'executable-find) (lambda (&rest _) nil))
+              ((symbol-function 'display-warning)
+               (lambda (type msg &rest _) (push (cons type msg) warnings))))
+      (a3madkour-agents-check-prereqs)
+      (a3madkour-agents-check-prereqs)
+      (should (= 1 (length warnings)))
+      (should (eq 'a3madkour-agents (caar warnings)))
+      (should (string-match-p "absent.*install it" (cdar warnings))))))
+
+(ert-deftest a3madkour-agents-test/check-prereqs-silent-when-all-present ()
+  (let ((a3madkour-agents--prereqs-checked nil)
+        (a3madkour-agents-required-executables '(("here" . "x")))
+        (warned nil))
+    (cl-letf (((symbol-function 'executable-find) (lambda (&rest _) "/bin/here"))
+              ((symbol-function 'display-warning) (lambda (&rest _) (setq warned t))))
+      (a3madkour-agents-check-prereqs)
+      (should-not warned))))
+
+;;;; Optional commands
+
+(ert-deftest a3madkour-agents-test/optional-missing-command-errors ()
+  (let ((err (should-error (a3madkour-agents--call-optional
+                            'a3madkour-agents-test--does-not-exist "fake-pkg")
+                           :type 'user-error)))
+    (should (string-match-p "fake-pkg" (cadr err)))))
+
+(ert-deftest a3madkour-agents-test/optional-calls-through-with-prefix ()
+  (let (seen)
+    (cl-letf (((symbol-function 'a3madkour-agents-test--target)
+               (lambda (arg) (interactive "P") (setq seen (list 'called arg)))))
+      (let ((current-prefix-arg '(4)))
+        (a3madkour-agents--call-optional 'a3madkour-agents-test--target "x"))
+      (should (equal '(called (4)) seen)))))
+
+(ert-deftest a3madkour-agents-test/define-optional-makes-command ()
+  (should (commandp 'a3madkour-agents-meta-session))
+  (should (commandp 'a3madkour-agents-circus-toggle-cmd))
+  (should (commandp 'a3madkour-agents-slack-connect-cmd)))
+
 (provide 'a3madkour-agents-test)
 ;;; a3madkour-agents-test.el ends here
