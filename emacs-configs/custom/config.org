@@ -1462,7 +1462,9 @@ recipe called =godot-signals= in MELPA and friends, finds nothing, and Emacs
 fails to start — which is exactly what happened the first time this block was
 written. =:load-path= alone does not opt out; the package manager still runs.
 
-Local checkout rather than a remote recipe, since this is unreleased. Opening
+Local checkout rather than a remote recipe, since this is unreleased. The
+checkout only exists on the Linux machine, so =:if= skips the block wherever
+that directory is missing instead of failing with "Cannot load". Opening
 any =.gd= file in a Godot project starts a daemon for that project half a
 second later, on an idle timer so the open never blocks; =M-x
 godot-signals-shutdown-all= stops them, and they die with Emacs.
@@ -1480,6 +1482,7 @@ Under evil, =gd= reaches this and =M-.= does not — evil binds =M-.= to
 
 (use-package godot-signals
   :straight nil
+  :if (file-directory-p "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp")
   :load-path "/Stuff/a3madkour/Sync/Workspace/godot-emacs-signals/lisp"
   :demand t
   :custom (godot-signals-markers-idle-delay 0))
