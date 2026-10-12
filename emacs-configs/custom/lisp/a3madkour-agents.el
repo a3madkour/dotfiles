@@ -173,11 +173,18 @@ Nil when `persp-mode' is off or the current perspective holds BUFFER."
   (when-let* ((name (a3madkour-agents-persp-owner buffer)))
     (persp-switch name)))
 
-(defun a3madkour-agents--manager-goto-persp (&rest _)
-  "Before `agent-shell-manager-goto': switch to the row buffer's perspective."
-  (let ((buffer (tabulated-list-get-id)))
-    (when (bufferp buffer)
-      (a3madkour-agents-switch-to-owner-persp buffer))))
+(defun a3madkour-agents--manager-goto-persp (orig-fn &rest args)
+  "`:around' advice for `agent-shell-manager-goto'.
+Read the row's buffer first: `persp-switch' changes the current buffer,
+so ORIG-FN would no longer find the manager's row.  When another
+perspective owns the buffer, switch there and show it; else call
+ORIG-FN with ARGS."
+  (let* ((buffer (tabulated-list-get-id))
+         (owner (and (bufferp buffer) (a3madkour-agents-persp-owner buffer))))
+    (if owner
+        (progn (persp-switch owner)
+               (pop-to-buffer buffer))
+      (apply orig-fn args))))
 
 ;;;; Evil remaps for extension list buffers
 ;;

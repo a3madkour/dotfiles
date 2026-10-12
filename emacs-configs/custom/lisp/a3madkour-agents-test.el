@@ -191,6 +191,36 @@ Binds `switched' to the name passed to `persp-switch', if any."
           (should-not switched))
       (kill-buffer buf))))
 
+(ert-deftest a3madkour-agents-test/manager-goto-switches-then-pops-buffer ()
+  (let ((buf (generate-new-buffer " a3ag"))
+        (other (generate-new-buffer " a3other"))
+        popped orig-called)
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" `(("main") ("work" ,buf))
+          (cl-letf (((symbol-function 'tabulated-list-get-id) (lambda () buf))
+                    ((symbol-function 'persp-switch)
+                     (lambda (name &rest _) (setq switched name) (set-buffer other)))
+                    ((symbol-function 'pop-to-buffer)
+                     (lambda (b &rest _) (setq popped b))))
+            (a3madkour-agents--manager-goto-persp
+             (lambda (&rest _) (setq orig-called t))))
+          (should (equal "work" switched))
+          (should (eq buf popped))
+          (should-not orig-called))
+      (kill-buffer buf)
+      (kill-buffer other))))
+
+(ert-deftest a3madkour-agents-test/manager-goto-falls-through-without-owner ()
+  (let ((buf (generate-new-buffer " a3ag")) orig-called)
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" `(("main" ,buf) ("work"))
+          (cl-letf (((symbol-function 'tabulated-list-get-id) (lambda () buf)))
+            (a3madkour-agents--manager-goto-persp
+             (lambda (&rest _) (setq orig-called t))))
+          (should-not switched)
+          (should orig-called))
+      (kill-buffer buf))))
+
 ;;;; Evil remaps
 
 (require 'evil)
