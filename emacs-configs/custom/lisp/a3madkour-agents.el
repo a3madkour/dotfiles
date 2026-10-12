@@ -141,5 +141,95 @@ SPECS defaults to `a3madkour-agents-required-executables'."
 (a3madkour-agents-define-optional a3madkour-agents-circus-toggle-cmd
   a3madkour-agents-circus-toggle "agent-circus")
 
+;;;; Perspectives
+;;
+;; Manager and attention list sessions from every perspective.  Jumping
+;; should land in the session's own perspective rather than pull its
+;; buffer into the current one.
+
+(defvar persp-mode)
+(declare-function persp-current-name "perspective")
+(declare-function persp-names "perspective")
+(declare-function persp-get-buffers "perspective")
+(declare-function persp-switch "perspective")
+(declare-function tabulated-list-get-id "tabulated-list")
+
+(defun a3madkour-agents-persp-owner (buffer)
+  "Name of a perspective other than the current one holding BUFFER, or nil.
+Nil when `persp-mode' is off or the current perspective holds BUFFER."
+  (when (and (bound-and-true-p persp-mode) (buffer-live-p buffer))
+    (let ((current (persp-current-name)))
+      (unless (memq buffer (persp-get-buffers current))
+        (seq-find (lambda (name)
+                    (and (not (equal name current))
+                         (memq buffer (persp-get-buffers name))))
+                  (persp-names))))))
+
+(defun a3madkour-agents-switch-to-owner-persp (buffer)
+  "Switch to the perspective owning BUFFER, if it is not the current one."
+  (when-let* ((name (a3madkour-agents-persp-owner buffer)))
+    (persp-switch name)))
+
+(defun a3madkour-agents--manager-goto-persp (&rest _)
+  "Before `agent-shell-manager-goto': switch to the row buffer's perspective."
+  (let ((buffer (tabulated-list-get-id)))
+    (when (bufferp buffer)
+      (a3madkour-agents-switch-to-owner-persp buffer))))
+
+;;;; Evil remaps for extension list buffers
+;;
+;; evil-collection starts tabulated-list buffers in normal state, which
+;; shadows the packages' single-letter keys.  Rebind them in normal
+;; state; keys that collide with evil movement move (k -> x, j -> J).
+
+(declare-function evil-define-key* "evil-core")
+(declare-function evil-set-initial-state "evil-core")
+
+(defconst a3madkour-agents-evil-bindings
+  '((agent-shell-manager-mode-map
+     agent-shell-manager-mode
+     (("RET" . agent-shell-manager-goto)
+      ("x" . agent-shell-manager-kill)
+      ("c" . agent-shell-manager-new)
+      ("r" . agent-shell-manager-restart)
+      ("d" . agent-shell-manager-delete-killed)
+      ("m" . agent-shell-manager-set-mode)
+      ("M" . agent-shell-manager-set-model)
+      ("t" . agent-shell-manager-view-traffic)
+      ("l" . agent-shell-manager-toggle-logging)
+      ("gr" . agent-shell-manager-refresh)
+      ("q" . quit-window)
+      ("C-c C-c" . agent-shell-manager-interrupt)))
+    (agent-shell-attention-dashboard-mode-map
+     agent-shell-attention-dashboard-mode
+     (("RET" . agent-shell-attention-dashboard-visit)
+      ("o" . agent-shell-attention-dashboard-visit-other-window)
+      ("J" . agent-shell-attention-dashboard-open-ambient-directory)
+      ("D" . agent-shell-attention-dashboard-kill-session)
+      ("gr" . agent-shell-attention-dashboard-refresh)
+      ("q" . quit-window)))
+    (agent-review-mode-map
+     agent-review-mode
+     (("RET" . agent-review-jump-to-issue)
+      ("m" . agent-review-mark)
+      ("u" . agent-review-unmark)
+      ("M" . agent-review-mark-all)
+      ("U" . agent-review-unmark-all)
+      ("S" . agent-review-send-to-agent-shell)
+      ("W" . agent-review-copy-issues)
+      ("gr" . agent-review-refresh)
+      ("q" . quit-window))))
+  "Normal-state bindings per keymap, as (MAP-SYMBOL MODE ((KEY . COMMAND) ...)).")
+
+(defun a3madkour-agents-evil-bind (map-symbol)
+  "Apply the normal-state bindings listed for MAP-SYMBOL.
+See `a3madkour-agents-evil-bindings'."
+  (pcase-let ((`(,_ ,mode ,bindings) (assq map-symbol a3madkour-agents-evil-bindings)))
+    (when mode
+      (evil-set-initial-state mode 'normal))
+    (let ((map (symbol-value map-symbol)))
+      (pcase-dolist (`(,key . ,command) bindings)
+        (evil-define-key* 'normal map (kbd key) command)))))
+
 (provide 'a3madkour-agents)
 ;;; a3madkour-agents.el ends here

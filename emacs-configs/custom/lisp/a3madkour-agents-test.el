@@ -141,5 +141,86 @@
   (should (commandp 'a3madkour-agents-circus-toggle-cmd))
   (should (commandp 'a3madkour-agents-slack-connect-cmd)))
 
+;;;; Perspectives
+
+(defvar persp-mode)
+
+(defmacro a3madkour-agents-test--with-persps (current table &rest body)
+  "Run BODY with perspective.el stubbed: CURRENT name, TABLE alist name->buffers.
+Binds `switched' to the name passed to `persp-switch', if any."
+  (declare (indent 2))
+  `(let ((persp-mode t) (switched nil))
+     (cl-letf (((symbol-function 'persp-current-name) (lambda () ,current))
+               ((symbol-function 'persp-names) (lambda () (mapcar #'car ,table)))
+               ((symbol-function 'persp-get-buffers)
+                (lambda (&optional name _frame) (cdr (assoc (or name ,current) ,table))))
+               ((symbol-function 'persp-switch)
+                (lambda (name &rest _) (setq switched name))))
+       ,@body)))
+
+(ert-deftest a3madkour-agents-test/persp-switches-to-owner ()
+  (let ((buf (generate-new-buffer " a3ag")))
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" `(("main") ("work" ,buf))
+          (a3madkour-agents-switch-to-owner-persp buf)
+          (should (equal "work" switched)))
+      (kill-buffer buf))))
+
+(ert-deftest a3madkour-agents-test/persp-noop-when-in-current ()
+  (let ((buf (generate-new-buffer " a3ag")))
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" `(("main" ,buf) ("work" ,buf))
+          (a3madkour-agents-switch-to-owner-persp buf)
+          (should-not switched))
+      (kill-buffer buf))))
+
+(ert-deftest a3madkour-agents-test/persp-noop-when-unowned ()
+  (let ((buf (generate-new-buffer " a3ag")))
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" '(("main") ("work"))
+          (a3madkour-agents-switch-to-owner-persp buf)
+          (should-not switched))
+      (kill-buffer buf))))
+
+(ert-deftest a3madkour-agents-test/persp-noop-when-mode-off ()
+  (let ((buf (generate-new-buffer " a3ag")))
+    (unwind-protect
+        (a3madkour-agents-test--with-persps "main" `(("main") ("work" ,buf))
+          (let ((persp-mode nil))
+            (a3madkour-agents-switch-to-owner-persp buf))
+          (should-not switched))
+      (kill-buffer buf))))
+
+;;;; Evil remaps
+
+(require 'evil)
+
+(defvar a3madkour-agents-test--map (make-sparse-keymap))
+
+(ert-deftest a3madkour-agents-test/evil-bind-from-table ()
+  (let ((a3madkour-agents-evil-bindings
+         '((a3madkour-agents-test--map nil (("x" . kill-buffer) ("gr" . revert-buffer))))))
+    (a3madkour-agents-evil-bind 'a3madkour-agents-test--map)
+    (let ((aux (evil-get-auxiliary-keymap a3madkour-agents-test--map 'normal)))
+      (should (eq 'kill-buffer (lookup-key aux (kbd "x"))))
+      (should (eq 'revert-buffer (lookup-key aux (kbd "gr")))))))
+
+(ert-deftest a3madkour-agents-test/evil-table-pins-design ()
+  "Keys from spec §1.4 that collide with evil or evil-collection."
+  (cl-flet ((cmd (map key)
+              (alist-get key (nth 2 (assq map a3madkour-agents-evil-bindings))
+                         nil nil #'equal)))
+    (should (eq 'agent-shell-manager-kill (cmd 'agent-shell-manager-mode-map "x")))
+    (should (eq 'agent-shell-manager-goto (cmd 'agent-shell-manager-mode-map "RET")))
+    (should (eq 'agent-shell-manager-refresh (cmd 'agent-shell-manager-mode-map "gr")))
+    (should (eq 'agent-shell-attention-dashboard-open-ambient-directory
+                (cmd 'agent-shell-attention-dashboard-mode-map "J")))
+    (should (eq 'agent-review-send-to-agent-shell (cmd 'agent-review-mode-map "S")))
+    (should (eq 'agent-review-refresh (cmd 'agent-review-mode-map "gr")))
+    ;; every key must parse
+    (dolist (entry a3madkour-agents-evil-bindings)
+      (dolist (binding (nth 2 entry))
+        (should (kbd (car binding)))))))
+
 (provide 'a3madkour-agents-test)
 ;;; a3madkour-agents-test.el ends here
