@@ -286,7 +286,7 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
       (let ((buf (a3madkour-agents-meta-start 'use-current-dir "W")))
         (should (equal "/tmp/proj/sub/"
                        (with-current-buffer buf (funcall agent-shell-cwd-function))))
-        (should-not agent-shell-cwd-function))
+        (should-not (default-value 'agent-shell-cwd-function)))
       (let ((buf (a3madkour-agents-meta-start nil "V")))
         (should-not (local-variable-p 'agent-shell-cwd-function buf))))))
 
