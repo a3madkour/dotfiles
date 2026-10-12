@@ -4997,6 +4997,90 @@ The three advice functions patch OpenCode's non-standard ACP payloads and projec
 
   (a3madkour-agents-check-prereqs))
 #+end_src
+*** Session manager
+[[https://github.com/jethrokuan/agent-shell-manager][agent-shell-manager]] is the main session list: status, mode, model, pending permissions and path for every shell, in a bottom side window (=SPC a l=). The keys are remapped for evil normal state (=x= kills, =gr= refreshes; see =a3madkour-agents-evil-bindings=). Going to a row switches to the perspective that owns that shell first.
+#+begin_src emacs-lisp
+(use-package agent-shell-manager
+  :straight (agent-shell-manager :type git :host github :repo "jethrokuan/agent-shell-manager")
+  :after agent-shell
+  :commands agent-shell-manager-toggle
+  :custom
+  (agent-shell-manager-side 'bottom)
+  (agent-shell-manager-transient nil)
+  :config
+  (a3madkour-agents-evil-bind 'agent-shell-manager-mode-map)
+  (advice-add 'agent-shell-manager-goto :before #'a3madkour-agents--manager-goto-persp))
+#+end_src
+*** Attention
+[[https://github.com/ultronozm/agent-shell-attention.el][agent-shell-attention]] is the "who needs me" tracker. It puts an =AS:n= count in the mode-line and provides =SPC a j= / =SPC a J= to jump to the waiting or idle shell, plus a secondary dashboard (=SPC a L=). Its own notifier is off: it relies on D-Bus, which this Emacs build lacks, and macext already notifies. =:demand t= is needed because a global mode only does anything once it is loaded and enabled.
+#+begin_src emacs-lisp
+(use-package agent-shell-attention
+  :straight (agent-shell-attention :type git :host github :repo "ultronozm/agent-shell-attention.el")
+  :after agent-shell
+  :demand t
+  :custom
+  (agent-shell-attention-indicator-location 'global-mode-string)
+  (agent-shell-attention-notify-function nil)
+  :config
+  (agent-shell-attention-mode 1)
+  (add-hook 'agent-shell-attention-before-jump-hook
+            #'a3madkour-agents-switch-to-owner-persp)
+  (a3madkour-agents-evil-bind 'agent-shell-attention-dashboard-mode-map))
+#+end_src
+*** Sidebar
+[[https://github.com/cmacrae/agent-shell-sidebar][agent-shell-sidebar]] gives one shell per project in a locked right side window (=SPC a s=, focus with =SPC a f=). It is locked, so =other-window= and evil's window motions skip it, and =SPC a f= is the way in. It defaults to Claude Code; =SPC a n P= switches provider.
+#+begin_src emacs-lisp
+(use-package agent-shell-sidebar
+  :straight (agent-shell-sidebar :type git :host github :repo "cmacrae/agent-shell-sidebar")
+  :after agent-shell
+  :commands (agent-shell-sidebar-toggle agent-shell-sidebar-toggle-focus
+             agent-shell-sidebar-change-provider agent-shell-sidebar-reset)
+  :custom
+  (agent-shell-sidebar-position 'right)
+  (agent-shell-sidebar-width "35%")
+  (agent-shell-sidebar-locked t)
+  :config
+  (setq agent-shell-sidebar-default-config
+        (agent-shell-anthropic-make-claude-code-config)))
+#+end_src
+*** Bookmarks and org links
+[[https://github.com/dcluna/agent-shell-bookmark][agent-shell-bookmark]] makes shells bookmarkable (=SPC a b=); jumping to one resumes the session by ID. =agent-shell-ol= from the same repo adds =[[agent-shell:…]]= org links, so =org-store-link= in a shell gives a link that resumes it.
+#+begin_src emacs-lisp
+(use-package agent-shell-bookmark
+  :straight (agent-shell-bookmark :type git :host github :repo "dcluna/agent-shell-bookmark")
+  :after agent-shell
+  :demand t
+  :config
+  (with-eval-after-load 'org
+    (require 'agent-shell-ol)))
+#+end_src
+*** Review
+[[https://github.com/nineluj/agent-review][agent-review]] reviews the uncommitted diff with an agent of your choice and lists the issues; =m= marks and =S= sends to a shell. It runs its own ACP client, which skips agent-shell's authenticate step, so it may not work with Claude's =:login= auth. If it doesn't, review with OpenCode or Codex.
+#+begin_src emacs-lisp
+(use-package agent-review
+  :straight (agent-review :type git :host github :repo "nineluj/agent-review")
+  :commands agent-review
+  :config
+  (a3madkour-agents-evil-bind 'agent-review-mode-map))
+#+end_src
+*** macOS extensions
+[[https://github.com/cxa/agent-shell-macext][agent-shell-macext]] is the only notifier. It sends native notifications for finished turns and permission requests: banners through =terminal-notifier= if it is installed, otherwise =osascript= into Notification Center. It also makes pasting a Finder file insert it as =@file= context, and supports drag and drop. Under evil, =p= / =P= are not =yank=, so they are rebound here in agent buffers.
+#+begin_src emacs-lisp
+(use-package agent-shell-macext
+  :straight (agent-shell-macext :type git :host github :repo "cxa/agent-shell-macext")
+  :if (eq system-type 'darwin)
+  :after agent-shell
+  :demand t
+  :hook (agent-shell-mode . agent-shell-macext-setup)
+  :custom
+  (agent-shell-macext-notifications t)
+  (agent-shell-macext-file-copy-policy 'auto)
+  :config
+  (with-eval-after-load 'evil
+    (evil-define-key 'normal agent-shell-mode-map
+      (kbd "p") #'agent-shell-macext-yank
+      (kbd "P") #'agent-shell-macext-yank)))
+#+end_src
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
