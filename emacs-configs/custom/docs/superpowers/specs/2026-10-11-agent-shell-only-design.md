@@ -69,7 +69,7 @@ Rewrite `** Agent shell`:
   - It `display-warning`s, once per missing item: `claude-agent-acp`, `codex-acp`, `terminal-notifier`.
   - Phase 2 adds: `agent-circus`, `docker`|`podman`, and meta's `bin/` on PATH.
   - It never signals an error.
-- **gitignore:** add `emacs-configs/custom/.agent-shell/` (transcripts, worktrees, macext copies) to the dotfiles root `.gitignore`.
+- **gitignore:** add `emacs-configs/custom/.agent-shell/` (transcripts, worktrees, macext copies) to `emacs-configs/custom/.gitignore` (not the dotfiles root one).
 
 **External prerequisites (Phase 1)**
 - `npm i -g @zed-industries/claude-agent-acp`. Not installed today, so agent-shell Claude is currently broken.
@@ -143,8 +143,8 @@ Each one gets its own `*** <name>` org sub-heading under `** Agent shell`, insta
 
 Manager and attention list sessions from every perspective; that is intentional. Jumping should go to the session's own perspective rather than pulling its buffer into the current one:
 
-- `a3madkour-agents--switch-to-buffer-perspective (buffer)` finds the first perspective whose buffer list contains BUFFER (`persp-all-names` / `persp-get-by-name` / `persp-buffers`) and calls `persp-switch` to it. If no perspective other than the current one owns the buffer, it does nothing.
-- It is installed on `agent-shell-attention-before-jump-hook`, and as `:before` advice on `agent-shell-manager-goto` (the buffer comes from `tabulated-list-get-id`).
+- `a3madkour-agents-switch-to-owner-persp (buffer)` finds a perspective other than the current one whose buffer list contains BUFFER (`persp-names` / `persp-get-buffers`) and calls `persp-switch` to it. If the current perspective holds the buffer, or none owns it, it does nothing.
+- It is installed on `agent-shell-attention-before-jump-hook`, and as `:around` advice on `agent-shell-manager-goto`. The advice reads the row's buffer (`tabulated-list-get-id`) first, because `persp-switch` changes the current buffer; if another perspective owns it, it switches and `pop-to-buffer`s the shell, else it calls the original.
 
 ### 1.6 `SPC a` keymap
 
@@ -279,8 +279,8 @@ Each package is installed so that a missing prerequisite produces a warning from
 - **Wrapper:** `a3madkour-agents-meta-start (&optional arg buffer-name)` becomes `meta-agent-shell-start-function`. It:
   - accepts the two arguments meta passes, which stock `agent-shell` doesn't;
   - treats `arg = 'use-current-dir` as "start in `default-directory`";
-  - binds `agent-shell-session-strategy` to `'new`, so spawns never stop at the session prompt;
-  - starts through `agent-shell`, passing `'(4)` so a new shell is forced;
+  - calls `agent-shell--start` directly with `:session-strategy 'new` and `:new-session t`, so spawns never stop at the session prompt, and passes the explicit `meta-agent-shell--pending-decorator` as `:outgoing-request-decorator`;
+  - for `use-current-dir`, binds `agent-shell-cwd-function` for the call and also sets it buffer-locally in the new shell, because the ACP `session/new` request runs after the wrapper returns;
   - renames the resulting buffer to BUFFER-NAME when that is given;
   - returns the buffer.
 - **Project root:** `:around` advice on `meta-agent-shell--get-project-path` (which tries projectile, then `default-directory`) resolves with `project-current` / `project-root` first.
@@ -290,7 +290,7 @@ Each package is installed so that a missing prerequisite produces a warning from
 ### 2.3 agent-shell-to-go (Slack)
 
 - **Install:** `:straight (agent-shell-to-go :host github :repo "ElleNajt/agent-shell-to-go")`. `websocket` is already present.
-- **Credentials:** read with `auth-source` from macOS Keychain (`auth-source-macos-keychain-*`): bot token (xoxb), app token (xapp), channel ID and user ID. Nothing secret goes in the repo.
+- **Credentials:** read from the macOS Keychain with the `security` CLI (`security find-generic-password -s agent-shell-to-go -a ACCOUNT -w`), not `auth-source`: bot token (xoxb), app token (xapp), channel ID and user ID. Nothing secret goes in the repo.
   - `-authorized-users` is set to only the user's own Slack ID.
   - `-env-file "/dev/null"` (its loader calls `file-exists-p` unguarded, so nil would error).
 - **Never auto-connects.** `a3madkour-agents-slack-connect` loads the credentials, sets the variables and calls `agent-shell-to-go-setup`. Nothing in init calls setup, because Slack can drive Emacs remotely.
@@ -299,12 +299,13 @@ Each package is installed so that a missing prerequisite produces a warning from
 ### 2.4 agent-circus (Docker)
 
 - **Install outside Emacs:** `uv tool install agent-circus`, plus Docker Desktop or Podman (neither is installed today), then `agent-circus build`.
-- **Per-project toggle:** `a3madkour-agents-circus-mode` is a buffer-local variable that can also be set in `.dir-locals.el`. `a3madkour-agents-circus-toggle` (`SPC a C`) flips it for every buffer in the current project and reports the new state.
+- **Per-project toggle:** circus is on for a project when its root is in `a3madkour-agents-circus-projects`, or when the buffer-local `a3madkour-agents-circus-enabled` (settable in `.dir-locals.el`) is non-nil. `a3madkour-agents-circus-toggle` (`SPC a C`, bound directly) adds or removes the current root, reports the effective state (a dir-local can keep it on) and warns if `agent-circus` is not on `exec-path`.
+- **Per-shell snapshot:** the command prefix records the decision (`on`/`off`) buffer-locally in the shell the first time it runs, and `a3madkour-agents-circus-active-p` honours it. Agent-shell reads the prefix and path resolver on every call, so without this a mid-session toggle would break running shells; toggling now affects only shells started afterwards.
 - `agent-shell-command-prefix` is set to `a3madkour-agents-circus-command-prefix (buffer)`:
   - It returns nil when circus is off for that buffer's project. Stock behaviour, so devcontainer still works.
   - Otherwise it returns `("agent-circus" "exec" SERVICE "--")`.
-  - SERVICE comes from `(map-elt (agent-shell-get-config buffer) :identifier)`: `claude-code`→`"claude-code"`, `codex`→`"codex"`, `opencode`→`"opencode"`, `mistral-vibe`→`"mistral-vibe"` (agent-circus service names); anything else is `user-error`.
-- `agent-shell-path-resolver-function` is set to `a3madkour-agents-circus-resolve-path (path)`. When circus is on it maps between `/workspace/…` and `<project-root>/…` in both directions; otherwise it returns PATH unchanged.
+  - SERVICE comes from `(map-elt (agent-shell-get-config buffer) :identifier)`: `claude-code`→`"claude-code"`, `codex`→`"codex"`, `opencode`→`"opencode"`, `mistral-vibe`→`"mistral-vibe"` (agent-circus service names); a known identifier with no service is a `user-error`. When no identifier is known at all (agent-review builds its client outside `agent-shell--start`), the prefix is nil and the command runs on the host.
+- `agent-shell-path-resolver-function` is set to `a3madkour-agents-circus-resolve-path (path)`. When circus is on it maps between `/workspace/…` and `<project-root>/…` in both directions; otherwise it returns PATH unchanged. When circus is on, PATH is first expanded with `expand-file-name`; a path outside both the project root and `/workspace` (including one that `..` escapes) is refused with an error instead of reaching the host filesystem.
 
 ---
 
@@ -372,5 +373,5 @@ Each package is installed so that a missing prerequisite produces a warning from
 | `custom/config.org` | Delete `** Claude code`. Rewrite `** Agent shell`, adding the server, prerequisite check and Codex. Add one `***` per extension (Phase 1 and 2). Replace the `SPC a` group; delete the `SPC k` group. |
 | `custom/lisp/a3madkour-agents.el` | New. Advice functions, evil setup, perspective jump, not-configured wrappers, prerequisite check, meta wrapper, circus prefix, resolver and toggle, Slack connect. |
 | `custom/lisp/a3madkour-agents-test.el` | New. ERT tests per §4.1. |
-| `dotfiles/.gitignore` | Add `emacs-configs/custom/.agent-shell/`. |
+| `emacs-configs/custom/.gitignore` | Add `emacs-configs/custom/.agent-shell/`. |
 | `~/.zshrc`, `~/.claude/CLAUDE.md`, Keychain, `~/.claude-meta` | Phase 2 external setup. CLAUDE.md is confirmed with the user before it is edited. |

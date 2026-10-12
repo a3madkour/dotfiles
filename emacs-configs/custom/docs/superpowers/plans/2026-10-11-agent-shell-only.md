@@ -20,7 +20,7 @@
 - Use `when-let*` / `if-let*`, never `when-let` / `if-let`; the latter are obsolete in Emacs 31 and warn at load.
 - Module symbols use the prefix `a3madkour-agents-`, with `a3madkour-agents--` for internals.
 - **TEST command** (run from the config dir):
-  `emacs --batch -L lisp -L straight/build/evil -L straight/build/goto-chg -l lisp/a3madkour-agents-test.el -f ert-run-tests-batch-and-exit 2>&1 | tail -15`
+  `rm -f lisp/a3madkour-agents.elc && emacs --batch -L lisp -L straight/build/evil -L straight/build/goto-chg -l lisp/a3madkour-agents-test.el -f ert-run-tests-batch-and-exit 2>&1 | tail -15`
 - **BOOT command** (run from `~/emacs-configs/custom`):
   `emacs --batch --init-directory ~/emacs-configs/custom -l early-init.el -l init.el --eval '(message "BOOT-OK")' 2>&1 | grep -E 'BOOT-OK|Error|error' `
   - **Baseline** (2026-10-11, before any change): prints `Error (use-package): Cannot load godot-signals` and `BOOT-OK`. The godot line is pre-existing and expected.
@@ -31,7 +31,7 @@
 ## Review Focus
 
 1. **A missing ACP adapter.** Starting Claude with `claude-agent-acp` absent should give agent-shell's own "missing executable" error, and our startup warning should have named it exactly once, not once per shell. Pinned in Task 2.
-2. **Edge paths in circus mode.** A path equal to `/workspace`, the project root without its trailing slash, `/workspace/../etc/passwd`, and paths outside both. The first two map to their counterparts, the traversal errors, and anything else passes through. Pinned in Task 9.
+2. **Edge paths in circus mode.** A path equal to `/workspace`, the project root without its trailing slash, `/workspace/../etc/passwd`, and paths outside both. The first two map to their counterparts, the traversal errors, and anything else outside the project (`/etc/hosts`, `~/.ssh/id_rsa`) is refused with an error. Pinned in Task 9.
 3. **A meta spawn whose name is already taken.** For example, a second `Dispatcher`. It should get a unique name, not error and orphan the new shell. Pinned in Task 8.
 4. **Jumping when perspectives don't apply.** The target buffer is in no perspective, already in the current one, or persp-mode is off. Jumping should do nothing, with no error and no switch. Pinned in Task 3.
 5. **Slack connect with only some Keychain items present.** It must refuse to connect, name the missing items, and must not call `agent-shell-to-go-setup`. Pinned in Task 10.
