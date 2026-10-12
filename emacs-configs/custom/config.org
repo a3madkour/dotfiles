@@ -5129,6 +5129,16 @@ One-time setup:
 
 =env-file= is =/dev/null= rather than nil because =agent-shell-to-go--load-env= calls =file-exists-p= on it unguarded. =file-exists-p= on nil signals a =wrong-type-argument= error, while on =/dev/null= it reads an empty file.
 
+*** emacs-skills
+[[https://github.com/xenodium/emacs-skills][emacs-skills]] is a Claude Code plugin, not an Emacs package. Skills such as =/open=, =/select=, =/highlight=, =/dired= and =/describe= let the agent act on this Emacs through =emacsclient=, which needs the server above. Install it with
+=claude plugin marketplace add xenodium/emacs-skills && claude plugin install emacs-skills@xenodium-emacs-skills=.
+Its highlight mode exits on =q=, which evil normal state shadows, so =q= is rebound here.
+#+begin_src emacs-lisp
+(with-eval-after-load 'evil
+  (evil-define-minor-mode-key 'normal 'agent-skill-highlight-mode
+    (kbd "q") #'agent-skill-highlight-exit))
+#+end_src
+
 * Website publish
 Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
