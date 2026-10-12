@@ -322,11 +322,24 @@ meta-agent-shell only knows projectile."
   "The current agent-shell project root as a directory name."
   (file-name-as-directory (expand-file-name (agent-shell-cwd))))
 
+(defvar-local a3madkour-agents--circus-session nil
+  "Circus decision for this shell buffer: `on', `off', or nil if not yet made.
+Recorded when the shell's command prefix is first built, so toggling
+circus later cannot change how a running shell reads and writes paths.")
+
+(defun a3madkour-agents--circus-configured-p ()
+  "Non-nil if circus is enabled for the current buffer's project right now."
+  (or a3madkour-agents-circus-enabled
+      (and (member (a3madkour-agents--circus-root) a3madkour-agents-circus-projects) t)))
+
 (defun a3madkour-agents-circus-active-p (&optional buffer)
-  "Non-nil if agents for BUFFER (default current) run in agent-circus."
+  "Non-nil if agents for BUFFER (default current) run in agent-circus.
+A shell that already decided (see `a3madkour-agents--circus-session')
+keeps its decision."
   (with-current-buffer (or buffer (current-buffer))
-    (or a3madkour-agents-circus-enabled
-        (and (member (a3madkour-agents--circus-root) a3madkour-agents-circus-projects) t))))
+    (if a3madkour-agents--circus-session
+        (eq a3madkour-agents--circus-session 'on)
+      (a3madkour-agents--circus-configured-p))))
 
 (defvar a3madkour-agents--starting-config nil
   "Config of the agent-shell being started; see `a3madkour-agents--bind-starting-config'.")
@@ -339,22 +352,32 @@ so `agent-shell-get-config' is still nil at that point."
     (apply orig-fn args)))
 
 (defun a3madkour-agents-circus-command-prefix (buffer)
-  "`agent-shell-command-prefix' function: agent-circus exec for BUFFER, or nil."
-  (when (a3madkour-agents-circus-active-p buffer)
-    (let* ((id (map-elt (or (agent-shell-get-config buffer)
-                            a3madkour-agents--starting-config)
-                        :identifier))
-           (service (or (alist-get id a3madkour-agents-circus-services)
-                        (user-error "agent-circus has no service for agent `%s'" id))))
-      (list "agent-circus" "exec" service "--"))))
+  "`agent-shell-command-prefix' function: agent-circus exec for BUFFER, or nil.
+Runs on the host (nil) when circus is off, or when no agent identifier
+is known (agent-review builds clients outside `agent-shell--start').
+The decision is recorded in BUFFER on the first call."
+  (let* ((active (a3madkour-agents-circus-active-p buffer))
+         (id (and active
+                  (map-elt (or (agent-shell-get-config buffer)
+                               a3madkour-agents--starting-config)
+                           :identifier))))
+    (with-current-buffer buffer
+      (unless a3madkour-agents--circus-session
+        (setq-local a3madkour-agents--circus-session (if (and active id) 'on 'off))))
+    (when id
+      (let ((service (or (alist-get id a3madkour-agents-circus-services)
+                         (user-error "agent-circus has no service for agent `%s'" id))))
+        (list "agent-circus" "exec" service "--")))))
 
 (defun a3madkour-agents-circus-resolve-path (path)
   "`agent-shell-path-resolver-function': map PATH between host and container.
-Identity unless circus is active for the current buffer."
+Identity unless circus is active for the current buffer; then PATH must
+lie in the project or the container workspace, else it is an error."
   (if (not (a3madkour-agents-circus-active-p))
       path
     (let* ((root (a3madkour-agents--circus-root))
-           (workspace a3madkour-agents-circus-workspace))
+           (workspace a3madkour-agents-circus-workspace)
+           (path (expand-file-name path)))
       (cond
        ((equal path (directory-file-name root)) workspace)
        ((equal path (directory-file-name workspace)) root)
@@ -365,7 +388,7 @@ Identity unless circus is active for the current buffer."
           (if (string-prefix-p root local)
               local
             (error "Container path resolves outside the project: %s" path))))
-       (t path)))))
+       (t (error "agent-circus: path outside the project: %s" path))))))
 
 (defun a3madkour-agents-circus-toggle ()
   "Toggle agent-circus for the current project.

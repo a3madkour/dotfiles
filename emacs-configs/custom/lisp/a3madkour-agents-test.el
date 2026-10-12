@@ -385,7 +385,8 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
     (with-temp-buffer
       (should (equal "/p/" (a3madkour-agents-circus-resolve-path "/workspace")))
       (should (equal "/workspace/" (a3madkour-agents-circus-resolve-path "/p")))
-      (should (equal "/etc/hosts" (a3madkour-agents-circus-resolve-path "/etc/hosts")))
+      (should-error (a3madkour-agents-circus-resolve-path "/etc/hosts"))
+      (should-error (a3madkour-agents-circus-resolve-path "~/.ssh/id_rsa"))
       (should-error (a3madkour-agents-circus-resolve-path "/workspace/../etc/passwd")))))
 
 (ert-deftest a3madkour-agents-test/circus-prefix-uses-starting-config ()
@@ -395,6 +396,42 @@ Binds `start-args' (keyword plist received) and `start-cwd' (value of
         (cl-letf (((symbol-function 'agent-shell-get-config) (lambda (_) nil)))
           (should (equal '("agent-circus" "exec" "codex" "--")
                          (a3madkour-agents-circus-command-prefix (current-buffer)))))))))
+
+(ert-deftest a3madkour-agents-test/circus-prefix-no-identifier-runs-on-host ()
+  ;; agent-review calls the client maker from its own work buffer, outside
+  ;; agent-shell--start: no config is known, so run on the host.
+  (a3madkour-agents-test--with-circus "/p/" t
+    (with-temp-buffer
+      (let ((a3madkour-agents--starting-config nil))
+        (cl-letf (((symbol-function 'agent-shell-get-config) (lambda (_) nil)))
+          (should-not (a3madkour-agents-circus-command-prefix (current-buffer))))))))
+
+(ert-deftest a3madkour-agents-test/circus-toggle-after-start-keeps-running-shell ()
+  (a3madkour-agents-test--with-circus "/p/" t
+    (let ((running (generate-new-buffer " a3ag-run"))
+          (fresh (generate-new-buffer " a3ag-fresh")))
+      (unwind-protect
+          (cl-letf (((symbol-function 'agent-shell-get-config)
+                     (lambda (_) '((:identifier . codex)))))
+            (should (a3madkour-agents-circus-command-prefix running))
+            (setq a3madkour-agents-circus-projects nil)
+            (should (a3madkour-agents-circus-active-p running))
+            (should-not (a3madkour-agents-circus-active-p fresh))
+            (should-not (a3madkour-agents-circus-command-prefix fresh))
+            (setq a3madkour-agents-circus-projects (list "/p/"))
+            (should-not (a3madkour-agents-circus-active-p fresh)))
+        (kill-buffer running)
+        (kill-buffer fresh)))))
+
+(ert-deftest a3madkour-agents-test/circus-off-snapshot-survives-enabling ()
+  (a3madkour-agents-test--with-circus "/p/" nil
+    (let ((running (generate-new-buffer " a3ag-run")))
+      (unwind-protect
+          (progn
+            (should-not (a3madkour-agents-circus-command-prefix running))
+            (setq a3madkour-agents-circus-projects (list "/p/"))
+            (should-not (a3madkour-agents-circus-active-p running)))
+        (kill-buffer running)))))
 
 (ert-deftest a3madkour-agents-test/circus-bind-starting-config-advice ()
   (let (seen)
