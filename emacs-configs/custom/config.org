@@ -1389,6 +1389,24 @@ Flymake backend that lints math syntax in Org buffers via the
   (setq eldoc-echo-area-use-multiline-p nil)
   (setq eldoc-idle-delay 0.5))
 #+end_src
+** lsp-mode plist guard
+=lsp-protocol.el='s accessor macros read =lsp-use-plists= at /compile/ time.
+Byte- or native-code built where =LSP_USE_PLISTS= was unset (e.g. a straight
+rebuild inside a session that predates the =setenv= in early-init) reads the
+booster's plists as hash tables, and every server stalls at its initialize
+response with =wrong-type-argument hash-table-p=. Rebuilding the =.elc= alone
+is not enough: =.eln= names hash the source, not the environment, so the stale
+native code keeps loading. This checks a compiled accessor at load time and
+points at the fix.
+#+begin_src emacs-lisp
+(defun a3madkour/lsp-plists-consistent-p ()
+  "Non-nil when lsp-mode's compiled accessors match `lsp-use-plists'."
+  (defvar lsp-use-plists)
+  (let ((plist-build (eq t (ignore-errors
+                             (lsp:initialize-result-capabilities
+                              '(:capabilities t))))))
+    (eq plist-build (and lsp-use-plists t))))
+#+end_src
 ** Format all
 Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
 #+begin_src emacs-lisp
