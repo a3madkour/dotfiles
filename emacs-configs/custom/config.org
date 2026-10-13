@@ -905,8 +905,18 @@ Sourced from the [[https://github.com/minad/corfu][Corfu README]] minimal exampl
 (use-package corfu
   :custom
   (corfu-auto t)
+  (corfu-popupinfo-delay '(0.5 . 0.2))
   :init
-  (global-corfu-mode))
+  (global-corfu-mode)
+  (corfu-popupinfo-mode))
+#+end_src
+** Nerd-icons-corfu
+Kind icons in the Corfu popup, from the [[https://github.com/LuigiPiucco/nerd-icons-corfu][nerd-icons-corfu README]].
+#+begin_src emacs-lisp
+(use-package nerd-icons-corfu
+  :after corfu
+  :config
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 #+end_src
 ** Cape
 Adapted from the [[https://github.com/minad/cape][Cape README]] example, with the =cape-wrap-buster=/=cape-wrap-nonexclusive= advice from its Eglot section applied to =lsp-completion-at-point= instead.
