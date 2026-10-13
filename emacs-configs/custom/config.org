@@ -1354,10 +1354,16 @@ Flymake backend that lints math syntax in Org buffers via the
   (setq lsp-headerline-breadcrumb-enable nil
         lsp-lens-enable nil
         lsp-modeline-code-actions-enable nil
-        lsp-signature-auto-activate nil
         lsp-eldoc-render-all nil
         lsp-enable-symbol-highlighting nil
-        lsp-enable-on-type-formatting nil))
+        lsp-enable-on-type-formatting nil)
+  ;; One-line signatures while typing a call, like eglot's eldoc output.
+  (setq lsp-signature-auto-activate '(:on-trigger-char :on-server-request)
+        lsp-signature-render-documentation nil))
+
+(use-package consult-lsp
+  :after (consult lsp-mode)
+  :commands (consult-lsp-symbols consult-lsp-diagnostics))
 
 ;; emacs-lsp-booster wraps the server and pre-parses its JSON into elisp
 ;; bytecode. Advice from the booster README; a no-op until the binary is on
@@ -1438,6 +1444,20 @@ rebuild.  Emacs must be restarted afterwards to load the new code."
              (if lsp-use-plists "hash tables" "plists")
              lsp-use-plists)
      :error)))
+#+end_src
+** lsp code actions
+eglot shipped =eglot-code-action-extract= / =-inline=; lsp-mode only has the
+generic by-kind command, so these give the leader keys readable names.
+#+begin_src emacs-lisp
+(defun a3madkour/lsp-code-action-extract ()
+  "Run an extract refactoring code action at point."
+  (interactive)
+  (lsp-execute-code-action-by-kind "refactor.extract"))
+
+(defun a3madkour/lsp-code-action-inline ()
+  "Run an inline refactoring code action at point."
+  (interactive)
+  (lsp-execute-code-action-by-kind "refactor.inline"))
 #+end_src
 ** Format all
 Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
@@ -5612,8 +5632,12 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(format-all-buffer :which-key "format buffer")
  "cr" 'lsp-rename
  "ca" 'lsp-execute-code-action
+ "ce" '(a3madkour/lsp-code-action-extract :which-key "extract")
+ "ci" '(a3madkour/lsp-code-action-inline :which-key "inline")
  "co" 'lsp-organize-imports
  "cR" 'lsp-workspace-restart
+ "cs" '(consult-lsp-symbols :which-key "workspace symbols")
+ "cd" '(consult-lsp-diagnostics :which-key "workspace diagnostics")
  "cw" 'delete-trailing-whitespace
  "cm" 'consult-imenu
 
