@@ -136,3 +136,16 @@ Emacs (via `emacsclient -e`):
   `** Lexical binding` block). Those belong to the user and are left untouched; only
   the hunks from this change are staged when committing.
 - Switching back to eglot, or dropping `LSP_USE_PLISTS`.
+
+## Found during verification
+
+- **Big-repo watch prompt.** harper-ls roots org buffers at the enclosing git
+  repo; for `config.org` that is the whole dotfiles repo (4392 directories,
+  mostly `straight/` and doom's `.local/`). lsp-mode's blocking
+  `lsp--ask-about-watching-big-repo` prompt runs inside the message handler's
+  `lsp--cur-workspace` binding, so until it is answered every buffer reports
+  harper as its server (rust buffers lose completion). Fix: add `straight`,
+  `eln-cache`, `.local`, `.stack-work` to `lsp-file-watch-ignored-directories`
+  (4392 → 464, under the 1000 threshold).
+- **nerd-icons-corfu never loaded.** `use-package-always-defer` is on, so
+  `:after corfu` alone defers it forever; it needs `:demand t`.

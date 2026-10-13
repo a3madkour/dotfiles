@@ -914,6 +914,9 @@ Sourced from the [[https://github.com/minad/corfu][Corfu README]] minimal exampl
 Kind icons in the Corfu popup, from the [[https://github.com/LuigiPiucco/nerd-icons-corfu][nerd-icons-corfu README]].
 #+begin_src emacs-lisp
 (use-package nerd-icons-corfu
+  ;; Nothing autoloads this, so with `use-package-always-defer' it needs
+  ;; :demand to load at all; :after still holds it until corfu is in.
+  :demand t
   :after corfu
   :config
   (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
@@ -1350,6 +1353,13 @@ Flymake backend that lints math syntax in Org buffers via the
   (setq lsp-log-io nil
         lsp-idle-delay 0.5
         lsp-response-timeout 120)
+  ;; harper roots org notes at the enclosing repo. In the dotfiles repo that
+  ;; is ~4400 directories, nearly all package build output, so lsp-mode stops
+  ;; at a blocking "watch this big repo?" prompt -- and until it is answered,
+  ;; harper stays bound as the current workspace for every buffer.
+  (dolist (dir '("[/\\\\]straight\\'" "[/\\\\]eln-cache\\'"
+                 "[/\\\\]\\.local\\'" "[/\\\\]\\.stack-work\\'"))
+    (add-to-list 'lsp-file-watch-ignored-directories dir))
   ;; Trim the UI down to roughly what eglot showed.
   (setq lsp-headerline-breadcrumb-enable nil
         lsp-lens-enable nil
