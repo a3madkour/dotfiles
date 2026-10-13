@@ -1406,6 +1406,28 @@ points at the fix.
                              (lsp:initialize-result-capabilities
                               '(:capabilities t))))))
     (eq plist-build (and lsp-use-plists t))))
+
+(defun a3madkour/lsp-rebuild-for-plists ()
+  "Rebuild lsp-mode and its dependents for the current `lsp-use-plists'.
+Also deletes their native-compiled files, which would otherwise survive the
+rebuild.  Emacs must be restarted afterwards to load the new code."
+  (interactive)
+  (dolist (pkg (cons "lsp-mode" (straight-dependents "lsp-mode")))
+    (straight-rebuild-package pkg)
+    (dolist (el (directory-files (straight--build-dir pkg) t "\\.el\\'"))
+      (let ((eln (comp-el-to-eln-filename el)))
+        (when (file-exists-p eln)
+          (delete-file eln)))))
+  (message "Rebuilt lsp-mode and its dependents; restart Emacs to load them."))
+
+(with-eval-after-load 'lsp-protocol
+  (unless (a3madkour/lsp-plists-consistent-p)
+    (display-warning
+     'lsp-mode
+     (format "lsp-mode was compiled for %s but lsp-use-plists is %S; servers will not initialize.  Run M-x a3madkour/lsp-rebuild-for-plists and restart."
+             (if lsp-use-plists "hash tables" "plists")
+             lsp-use-plists)
+     :error)))
 #+end_src
 ** Format all
 Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
