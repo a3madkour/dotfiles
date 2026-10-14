@@ -1367,6 +1367,9 @@ Flymake backend that lints math syntax in Org buffers via the
         lsp-eldoc-render-all nil
         lsp-enable-symbol-highlighting nil
         lsp-enable-on-type-formatting nil)
+  ;; Inlay hints (inline types, parameter names) everywhere the server offers
+  ;; them, as eglot-inlay-hints-mode did by default.
+  (setq lsp-inlay-hint-enable t)
   ;; One-line signatures while typing a call, like eglot's eldoc output.
   (setq lsp-signature-auto-activate '(:on-trigger-char :on-server-request)
         lsp-signature-render-documentation nil))
@@ -1506,7 +1509,11 @@ Standard activation from the [[https://github.com/lassik/emacs-format-all-the-co
   :dash "Rust")
 (use-package rustic
   :config
-  (setq rustic-lsp-client 'lsp-mode))
+  (setq rustic-lsp-client 'lsp-mode)
+  ;; lsp-mode turns these off; rust-analyzer's own defaults (what eglot
+  ;; showed) have them on.
+  (setq lsp-rust-analyzer-display-chaining-hints t
+        lsp-rust-analyzer-display-parameter-hints t))
 #+end_src
 *** GDScript
 #+begin_src emacs-lisp
@@ -1779,10 +1786,6 @@ The =auctex= configuration block is adapted from [[https://github.com/doomemacs/
   :straight (lean4-mode :type git :host github
                         :repo "leanprover-community/lean4-mode"
                         :files ("*.el" "data"))
-  ;; Inlay hints (e.g. types of auto-bound implicits) for Lean only; buffer-local
-  ;; like lean4-mode's own `lsp-semantic-tokens-enable', and set before
-  ;; `lsp-deferred' connects.
-  :hook (lean4-mode . (lambda () (setq-local lsp-inlay-hint-enable t)))
   :config
   ;; The Lean server streams inlay hints for the elaborated prefix of a file and
   ;; sends `workspace/inlayHint/refresh' to ask for the rest. lsp-mode has no
