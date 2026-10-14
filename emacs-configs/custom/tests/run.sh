@@ -18,7 +18,8 @@ for f in tests/test-helpers.el \
          tests/test-inbox.el \
          tests/test-agenda-seasons.el \
          tests/test-helpers-extracted.el \
-         tests/boox-tests.el; do
+         tests/boox-tests.el \
+         tests/test-lsp-plists.el; do
   LOAD_ARGS+=(-l "$f")
 done
 

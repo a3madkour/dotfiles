@@ -905,8 +905,21 @@ Sourced from the [[https://github.com/minad/corfu][Corfu README]] minimal exampl
 (use-package corfu
   :custom
   (corfu-auto t)
+  (corfu-popupinfo-delay '(0.5 . 0.2))
   :init
-  (global-corfu-mode))
+  (global-corfu-mode)
+  (corfu-popupinfo-mode))
+#+end_src
+** Nerd-icons-corfu
+Kind icons in the Corfu popup, from the [[https://github.com/LuigiPiucco/nerd-icons-corfu][nerd-icons-corfu README]].
+#+begin_src emacs-lisp
+(use-package nerd-icons-corfu
+  ;; Nothing autoloads this, so with `use-package-always-defer' it needs
+  ;; :demand to load at all; :after still holds it until corfu is in.
+  :demand t
+  :after corfu
+  :config
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 #+end_src
 ** Cape
 Adapted from the [[https://github.com/minad/cape][Cape README]] example, with the =cape-wrap-buster=/=cape-wrap-nonexclusive= advice from its Eglot section applied to =lsp-completion-at-point= instead.
@@ -1346,14 +1359,30 @@ Flymake backend that lints math syntax in Org buffers via the
   (setq lsp-log-io nil
         lsp-idle-delay 0.5
         lsp-response-timeout 120)
+  ;; harper roots org notes at the enclosing repo. In the dotfiles repo that
+  ;; is ~4400 directories, nearly all package build output, so lsp-mode stops
+  ;; at a blocking "watch this big repo?" prompt -- and until it is answered,
+  ;; harper stays bound as the current workspace for every buffer.
+  (dolist (dir '("[/\\\\]straight\\'" "[/\\\\]eln-cache\\'"
+                 "[/\\\\]\\.local\\'" "[/\\\\]\\.stack-work\\'"))
+    (add-to-list 'lsp-file-watch-ignored-directories dir))
   ;; Trim the UI down to roughly what eglot showed.
   (setq lsp-headerline-breadcrumb-enable nil
         lsp-lens-enable nil
         lsp-modeline-code-actions-enable nil
-        lsp-signature-auto-activate nil
         lsp-eldoc-render-all nil
         lsp-enable-symbol-highlighting nil
-        lsp-enable-on-type-formatting nil))
+        lsp-enable-on-type-formatting nil)
+  ;; Inlay hints (inline types, parameter names) everywhere the server offers
+  ;; them, as eglot-inlay-hints-mode did by default.
+  (setq lsp-inlay-hint-enable t)
+  ;; One-line signatures while typing a call, like eglot's eldoc output.
+  (setq lsp-signature-auto-activate '(:on-trigger-char :on-server-request)
+        lsp-signature-render-documentation nil))
+
+(use-package consult-lsp
+  :after (consult lsp-mode)
+  :commands (consult-lsp-symbols consult-lsp-diagnostics))
 
 ;; emacs-lsp-booster wraps the server and pre-parses its JSON into elisp
 ;; bytecode. Advice from the booster README; a no-op until the binary is on
@@ -1395,6 +1424,60 @@ Flymake backend that lints math syntax in Org buffers via the
   (setq eldoc-echo-area-use-multiline-p nil)
   (setq eldoc-idle-delay 0.5))
 #+end_src
+** lsp-mode plist guard
+=lsp-protocol.el='s accessor macros read =lsp-use-plists= at /compile/ time.
+Byte- or native-code built where =LSP_USE_PLISTS= was unset (e.g. a straight
+rebuild inside a session that predates the =setenv= in early-init) reads the
+booster's plists as hash tables, and every server stalls at its initialize
+response with =wrong-type-argument hash-table-p=. Rebuilding the =.elc= alone
+is not enough: =.eln= names hash the source, not the environment, so the stale
+native code keeps loading. This checks a compiled accessor at load time and
+points at the fix.
+#+begin_src emacs-lisp
+(defun a3madkour/lsp-plists-consistent-p ()
+  "Non-nil when lsp-mode's compiled accessors match `lsp-use-plists'."
+  (defvar lsp-use-plists)
+  (let ((plist-build (eq t (ignore-errors
+                             (lsp:initialize-result-capabilities
+                              '(:capabilities t))))))
+    (eq plist-build (and lsp-use-plists t))))
+
+(defun a3madkour/lsp-rebuild-for-plists ()
+  "Rebuild lsp-mode and its dependents for the current `lsp-use-plists'.
+Also deletes their native-compiled files, which would otherwise survive the
+rebuild.  Emacs must be restarted afterwards to load the new code."
+  (interactive)
+  (dolist (pkg (cons "lsp-mode" (straight-dependents "lsp-mode")))
+    (straight-rebuild-package pkg)
+    (dolist (el (directory-files (straight--build-dir pkg) t "\\.el\\'"))
+      (let ((eln (comp-el-to-eln-filename el)))
+        (when (file-exists-p eln)
+          (delete-file eln)))))
+  (message "Rebuilt lsp-mode and its dependents; restart Emacs to load them."))
+
+(with-eval-after-load 'lsp-protocol
+  (unless (a3madkour/lsp-plists-consistent-p)
+    (display-warning
+     'lsp-mode
+     (format "lsp-mode was compiled for %s but lsp-use-plists is %S; servers will not initialize.  Run M-x a3madkour/lsp-rebuild-for-plists and restart."
+             (if lsp-use-plists "hash tables" "plists")
+             lsp-use-plists)
+     :error)))
+#+end_src
+** lsp code actions
+eglot shipped =eglot-code-action-extract= / =-inline=; lsp-mode only has the
+generic by-kind command, so these give the leader keys readable names.
+#+begin_src emacs-lisp
+(defun a3madkour/lsp-code-action-extract ()
+  "Run an extract refactoring code action at point."
+  (interactive)
+  (lsp-execute-code-action-by-kind "refactor.extract"))
+
+(defun a3madkour/lsp-code-action-inline ()
+  "Run an inline refactoring code action at point."
+  (interactive)
+  (lsp-execute-code-action-by-kind "refactor.inline"))
+#+end_src
 ** Format all
 Standard activation from the [[https://github.com/lassik/emacs-format-all-the-code][format-all README]] by Lassi Kortela.
 #+begin_src emacs-lisp
@@ -1432,7 +1515,11 @@ Standard activation from the [[https://github.com/lassik/emacs-format-all-the-co
   :dash "Rust")
 (use-package rustic
   :config
-  (setq rustic-lsp-client 'lsp-mode))
+  (setq rustic-lsp-client 'lsp-mode)
+  ;; lsp-mode turns these off; rust-analyzer's own defaults (what eglot
+  ;; showed) have them on.
+  (setq lsp-rust-analyzer-display-chaining-hints t
+        lsp-rust-analyzer-display-parameter-hints t))
 #+end_src
 *** GDScript
 #+begin_src emacs-lisp
@@ -1708,10 +1795,6 @@ The =auctex= configuration block is adapted from [[https://github.com/doomemacs/
   :straight (lean4-mode :type git :host github
                         :repo "leanprover-community/lean4-mode"
                         :files ("*.el" "data"))
-  ;; Inlay hints (e.g. types of auto-bound implicits) for Lean only; buffer-local
-  ;; like lean4-mode's own `lsp-semantic-tokens-enable', and set before
-  ;; `lsp-deferred' connects.
-  :hook (lean4-mode . (lambda () (setq-local lsp-inlay-hint-enable t)))
   :config
   ;; The Lean server streams inlay hints for the elaborated prefix of a file and
   ;; sends `workspace/inlayHint/refresh' to ask for the rest. lsp-mode has no
@@ -5691,8 +5774,12 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(format-all-buffer :which-key "format buffer")
  "cr" 'lsp-rename
  "ca" 'lsp-execute-code-action
+ "ce" '(a3madkour/lsp-code-action-extract :which-key "extract")
+ "ci" '(a3madkour/lsp-code-action-inline :which-key "inline")
  "co" 'lsp-organize-imports
  "cR" 'lsp-workspace-restart
+ "cs" '(consult-lsp-symbols :which-key "workspace symbols")
+ "cd" '(consult-lsp-diagnostics :which-key "workspace diagnostics")
  "cw" 'delete-trailing-whitespace
  "cm" 'consult-imenu
 
