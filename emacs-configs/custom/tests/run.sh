@@ -11,6 +11,16 @@ cd "$(dirname "$0")/.."
 rm -f boox-core.elc
 
 LOAD_ARGS=(-L tests -L .)
+
+# --batch skips early-init.el, which is where the macOS native-comp target
+# lives (see "Native-compilation macOS target" in config.org). Without it,
+# tests that stub a primitive with cl-letf need a native trampoline, and
+# libgccjit's guessed -mmacosx-version-min=18.0 makes clang refuse to build it.
+if [[ "$(uname)" == Darwin ]]; then
+  LOAD_ARGS=(--eval '(setq native-comp-driver-options (quote ("-Wl,-w" "-mmacosx-version-min=26.0")))'
+             "${LOAD_ARGS[@]}")
+fi
+
 for f in tests/test-helpers.el \
          tests/test-pure.el \
          tests/test-project-lifecycle.el \
