@@ -5233,12 +5233,26 @@ Its highlight mode exits on =q=, which evil normal state shadows, so =q= is rebo
 #+end_src
 
 * Website publish
-Pulls in the deliberate-publish pipeline plus D.2 multi-target export.
+Pulls in the deliberate- and living-publish pipelines, the author commands,
+and D.2 multi-target export.
 Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
 load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 `yaml' is needed by `a3madkour-publish-export' / `-history' on the same chain.
 #+begin_src emacs-lisp
 (require 'a3madkour-publish-deliberate)
+;; The living path and its per-section handlers, in `a3-pub.sh --publish-living'
+;; order.  A living run only republishes sections whose handler is loaded, so a
+;; missing handler here makes that section's pages look removed (S1 row 9).
+(require 'a3madkour-publish-living)
+(require 'a3madkour-publish-garden)
+(require 'a3madkour-publish-library)
+(require 'a3madkour-publish-research)
+(require 'a3madkour-recipe-lint)
+(require 'a3madkour-publish-recipes)
+(require 'a3madkour-works-lint)
+(require 'a3madkour-publish-works)
+;; Author commands: a3-publish-mark / -unmark / -status, a3-library-insert-item.
+(require 'a3madkour-publish-author)
 (require 'a3madkour-publish-multi-filter)
 (require 'a3madkour-publish-multi-pdf)
 (require 'a3madkour-publish-multi-word)
