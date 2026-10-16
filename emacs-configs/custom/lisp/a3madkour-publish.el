@@ -155,6 +155,15 @@ publish run (called from `a3madkour-pub/begin-publish').")
   "Clear the per-publish metadata cache.  Idempotent."
   (setq a3madkour-pub--metadata-cache (make-hash-table :test 'equal)))
 
+(defconst a3madkour-pub-deliberate-sections '("essays" "works/poetry")
+  "URL sections published only by `a3-publish-deliberate', never by a living run.
+
+A living run's new-set cannot contain these, so the living orphan sweep must
+not treat their manifest entries as removed.  Must name exactly the keys of
+`a3madkour-pub-deliberate--handlers' (pinned by a test); kept here rather than
+derived from that alist so the sweep does not depend on the deliberate module
+being loaded.")
+
 (defvar a3madkour-pub--publish-run-accumulator
   (make-hash-table :test 'equal)
   "Per-publish-run accumulator of id → (current-url . state) for notes that

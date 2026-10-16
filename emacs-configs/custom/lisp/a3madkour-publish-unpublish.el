@@ -249,6 +249,11 @@ yield (\"research/questions\" . \"q\")."
         (cons (mapconcat #'identity (butlast parts) "/")
               (car (last parts)))))))
 
+(defun a3madkour-pub--unpublish-deliberate-url-p (url)
+  "Non-nil when URL lives in one of `a3madkour-pub-deliberate-sections'."
+  (member (car (a3madkour-pub--unpublish-url-to-section-slug url))
+          a3madkour-pub-deliberate-sections))
+
 (cl-defun a3madkour-pub/finish-publish (&key dry-run (scope 'living) (reap t))
   "Orchestrate the unpublish flow.  Returns a plist.
 
@@ -310,10 +315,18 @@ Returns:
                        a3madkour-pub--publish-run-accumulator)
                       filtered)))
          (diff (a3madkour-pub/diff-published-set new-set))
-         (removed (plist-get diff :removed))
          (shifts (plist-get diff :slug-shifted))
          (manifest (a3madkour-pub-history/read-manifest-snapshot-or-disk))
          (notes (alist-get 'notes manifest))
+         ;; S1 dogfood row 2: a living run never publishes a deliberate
+         ;; section, so those ids are always missing from its new-set.
+         ;; Missing is not removed — they are only unpublished deliberately.
+         (removed (cl-remove-if
+                   (lambda (id)
+                     (let ((idx (a3madkour-pub-history--find-note-by-id notes id)))
+                       (and idx (a3madkour-pub--unpublish-deliberate-url-p
+                                 (alist-get 'current_url (aref notes idx))))))
+                   (plist-get diff :removed)))
          (removed-set (make-hash-table :test 'equal))
          ;; P1.1c mass-removal circuit-breaker.  Refuse a real (non-dry-run,
          ;; reaping) sweep that would delete more than the configured fraction
@@ -321,7 +334,10 @@ Returns:
          ;; `org-notes-dir' or an empty/partial source walk about to wipe the
          ;; site.  Below the floor count, small legitimate removals proceed.
          (old-live-count (cl-count-if
-                          (lambda (n) (member (alist-get 'state n) '("live" "draft")))
+                          (lambda (n)
+                            (and (member (alist-get 'state n) '("live" "draft"))
+                                 (not (a3madkour-pub--unpublish-deliberate-url-p
+                                       (alist-get 'current_url n)))))
                           notes))
          (sweep-refused
           (and (not (eq scope 'deliberate))

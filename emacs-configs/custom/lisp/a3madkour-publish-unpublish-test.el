@@ -1229,6 +1229,101 @@ against a misconfigured `org-notes-dir' / empty walk wiping the whole site."
       (when (file-exists-p manifest-path) (delete-file manifest-path))
       (delete-directory content-root t))))
 
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-living-spares-deliberate-sections ()
+  "S1 dogfood row 2: a living run never publishes essays or poetry, so their
+manifest entries are always absent from the living new-set.  Step A must not
+read that absence as removal — before the fix an unchanged living publish
+deleted every deliberate bundle (9 of 19 live, just under the breaker)."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (essay (expand-file-name "essays/e1" content-root))
+         (poem (expand-file-name "works/poetry/p1" content-root))
+         (gone (expand-file-name "garden/gone" content-root)))
+    (unwind-protect
+        (progn
+          (dolist (dir (list essay poem gone))
+            (make-directory dir t)
+            (with-temp-file (expand-file-name "index.md" dir) (insert "x")))
+          (let ((a3madkour-pub-site-content-dir content-root))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'a3madkour-pub--unpublish-recheck-live-note-links)
+                       (lambda (&rest _) nil)))
+              (a3madkour-pub-history/write-manifest
+               '((notes . [((id . "id-kept") (current_url . "/garden/kept/")
+                            (history . []) (state . "live"))
+                           ((id . "id-gone") (current_url . "/garden/gone/")
+                            (history . []) (state . "live"))
+                           ((id . "id-essay") (current_url . "/essays/e1/")
+                            (history . []) (state . "live"))
+                           ((id . "id-poem") (current_url . "/works/poetry/p1/")
+                            (history . []) (state . "live"))])))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (puthash "id-kept" (cons "/garden/kept/" 'live)
+                       a3madkour-pub--publish-run-accumulator)
+              (let ((result (a3madkour-pub/finish-publish)))
+                ;; The living orphan is still swept ...
+                (should (equal (plist-get result :removed) '("id-gone")))
+                (should-not (file-directory-p gone))
+                ;; ... but deliberate bundles and their manifest state survive.
+                (should (file-directory-p essay))
+                (should (file-directory-p poem))
+                (let ((notes (alist-get 'notes (a3madkour-pub-history/read-manifest))))
+                  (should (equal (alist-get 'state (aref notes 2)) "live"))
+                  (should (equal (alist-get 'state (aref notes 3)) "live")))))))
+      (clrhash a3madkour-pub--publish-run-accumulator)
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-breaker-ratio-ignores-deliberate ()
+  "The breaker ratio is measured against the living set only.  4 of 6 garden
+notes vanishing must trip it even when 10 essays pad the manifest — counting
+the essays would dilute the ratio to 4/16 and let the wipe through."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (garden (cl-loop for i from 0 below 6
+                          collect `((id . ,(format "g-%d" i))
+                                    (current_url . ,(format "/garden/g%d/" i))
+                                    (history . []) (state . "live"))))
+         (essays (cl-loop for i from 0 below 10
+                          collect `((id . ,(format "e-%d" i))
+                                    (current_url . ,(format "/essays/e%d/" i))
+                                    (history . []) (state . "live"))))
+         (bundle (expand-file-name "garden/g0" content-root)))
+    (unwind-protect
+        (progn
+          (make-directory bundle t)
+          (with-temp-file (expand-file-name "index.md" bundle) (insert "x"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-unpublish-removal-floor-count 5)
+                (a3madkour-pub-unpublish-max-removal-ratio 0.5))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path)))
+              (a3madkour-pub-history/write-manifest
+               `((notes . ,(vconcat garden essays))))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (dolist (i '(4 5))
+                (puthash (format "g-%d" i) (cons (format "/garden/g%d/" i) 'live)
+                         a3madkour-pub--publish-run-accumulator))
+              (let ((result (a3madkour-pub/finish-publish)))
+                (should (file-directory-p bundle))
+                (should-not (plist-get result :removed))
+                (should (cl-some (lambda (w) (string-match-p "refus" w))
+                                 (plist-get result :orphan-warnings)))))))
+      (clrhash a3madkour-pub--publish-run-accumulator)
+      (when (file-exists-p manifest-path) (delete-file manifest-path))
+      (delete-directory content-root t))))
+
+(ert-deftest a3madkour-pub-unpublish-test/deliberate-sections-match-handler-registry ()
+  "The sweep's deliberate-section list must name exactly the sections that
+`a3madkour-pub-deliberate--handlers' publishes — a new deliberate section
+added only to the registry would otherwise be swept by every living run."
+  (require 'a3madkour-publish-deliberate)
+  (should (equal (sort (copy-sequence a3madkour-pub-deliberate-sections) #'string<)
+                 (sort (mapcar (lambda (e) (symbol-name (car e)))
+                               a3madkour-pub-deliberate--handlers)
+                       #'string<))))
+
 (ert-deftest a3madkour-pub-unpublish-test/finish-publish-small-removal-not-refused ()
   "P1.1c: below the floor count, legitimate small removals (e.g. unpublishing
 the only note) proceed — the breaker must not block them.  This is the
