@@ -19,6 +19,10 @@ LISP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUSTOM_DIR="$(dirname "$LISP_DIR")"
 STRAIGHT_BOOTSTRAP="$CUSTOM_DIR/straight/repos/straight.el/bootstrap.el"
 
+# Every `emacs --batch' below sets `load-prefer-newer': the publish modules sit
+# beside untracked .elc files, and `require' otherwise loads a stale .elc over
+# an edited .el — a fix that is silently not what publishes (S1 row 4).
+
 # Resolve the Hugo site `data/' directory used for url-history.yaml.
 # Cascade:
 #   1. Explicit override via $A3_PUB_SITE_DATA_DIR
@@ -63,26 +67,34 @@ export A3_PUB_SKIP_RECIPE_CHECK
 : "${A3_PUB_SKIP_WORKS_CHECK:=}"
 export A3_PUB_SKIP_WORKS_CHECK
 
-# C: invoke `org-math-lint check --root <dir>' against the org source
-# directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.  Exits
-# non-zero on validator failure or missing install (distinct exit codes
-# so callers can tell them apart):
+# C: invoke `org-math-lint check [--config <toml>] <dir>' against the org
+# source directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.
+# The executable is $A3_PUB_MATH_LINT, else `org-math-lint' on PATH (a
+# `uv tool install' of the org-math-lint repo).  The config is
+# $ORG_MATH_LINT_CONFIG; without one the CLI looks for ./config.toml and
+# falls back to defaults that report every unknown command as an error.
+# Exits non-zero on validator failure or missing install (distinct exit
+# codes so callers can tell them apart):
 #   0  validation passed (or skipped via flag/env)
 #   1  validator reported issues (stderr already detailed)
-#   2  org-math-lint not installed at expected venv path
+#   2  org-math-lint not found
 a3_pub_check_math() {
   local source_dir="$1"
   if [ "$A3_PUB_SKIP_MATH_CHECK" = "1" ]; then
     return 0
   fi
-  local ml_venv="$HOME/org/notes/tools/org-math-lint/.venv/bin/python"
-  if [ ! -x "$ml_venv" ]; then
-    echo "a3-pub.sh: org-math-lint not installed at $ml_venv" >&2
-    echo "  Install: cd ~/org/notes/tools/org-math-lint && python3 -m venv .venv && .venv/bin/pip install -e ." >&2
+  local ml_bin="${A3_PUB_MATH_LINT:-$(command -v org-math-lint || true)}"
+  if [ -z "$ml_bin" ] || [ ! -x "$ml_bin" ]; then
+    echo "a3-pub.sh: org-math-lint not found (tried ${A3_PUB_MATH_LINT:-PATH})." >&2
+    echo "  Install: uv tool install --editable <org-math-lint clone>" >&2
     echo "  Or rerun with --skip-math-check (sets A3_PUB_SKIP_MATH_CHECK=1)." >&2
     return 2
   fi
-  if ! "$ml_venv" -m org_math_lint.cli check --root "$source_dir"; then
+  local ml_args=(check)
+  if [ -n "${ORG_MATH_LINT_CONFIG:-}" ]; then
+    ml_args+=(--config "$ORG_MATH_LINT_CONFIG")
+  fi
+  if ! "$ml_bin" "${ml_args[@]}" "$source_dir"; then
     echo "a3-pub.sh: math validation failed; publish aborted." >&2
     echo "  Fix the issues above, or rerun with --skip-math-check." >&2
     return 1
@@ -124,6 +136,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     exit 2
   fi
   exec emacs --batch \
+    --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
@@ -180,6 +193,7 @@ if [ "${1:-}" = "--publish-living" ]; then
   # C: source-side math validation before invoking emacs.
   a3_pub_check_math "$HOME/org/notes" || exit $?
   exec emacs --batch \
+    --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
@@ -253,6 +267,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
   emacs_pid=
   trap 'if [ -n "$emacs_pid" ]; then kill -TERM "$emacs_pid" 2>/dev/null; fi' TERM INT
   emacs --batch \
+    --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
@@ -317,6 +332,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
   # C: source-side math validation across all org dirs (sync walks the whole corpus).
   a3_pub_check_math "$HOME/org" || exit $?
   exec emacs --batch \
+    --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
     -l "$STRAIGHT_BOOTSTRAP" \
@@ -347,6 +363,7 @@ if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
 fi
 
 exec emacs --batch \
+  --eval "(setq load-prefer-newer t)" \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \

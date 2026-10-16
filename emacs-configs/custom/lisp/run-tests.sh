@@ -31,6 +31,8 @@ exec emacs --batch \
   `# That was 54 of 55 failures before this line. Trampolines are pointless`\
   `# in a batch test run regardless.`\
   --eval "(setq native-comp-enable-subr-trampolines nil)" \
+  `# A stale .elc beside an edited .el would otherwise be what the tests load.`\
+  --eval "(setq load-prefer-newer t)" \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
   -l "$STRAIGHT_BOOTSTRAP" \
