@@ -67,8 +67,30 @@ export A3_PUB_SKIP_RECIPE_CHECK
 : "${A3_PUB_SKIP_WORKS_CHECK:=}"
 export A3_PUB_SKIP_WORKS_CHECK
 
-# C: invoke `org-math-lint check [--config <toml>] <dir>' against the org
-# source directory.  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.
+# S1 rows 6-7: classify the .org files under each PATH (file or directory;
+# `tools/' segments skipped, as the CLI does).  Prints one `LINT<TAB>file' or
+# `WARN<TAB>file' line per published file (`#+HUGO_PUBLISH: t'):
+#   LINT  declares `#+HUGO_HAS_MATH: t' — the only files the math check reads
+#   WARN  no such declaration, but its text outside src/example blocks holds
+#         a math marker — a matched \(...\) / \[...\] pair, \begin{, $$ or an
+#         org-style $x$ — so the flag was probably forgotten
+# Unpublished files and math look-alikes (a synced-poetry `\[mm:ss]' timecode
+# has no closing `\]') print nothing.  Both keywords accept only `t' (any
+# case), mirroring `a3madkour-pub-keywords/boolean-p'.
+a3_pub_math_classify() {
+  find "$@" -name '*.org' -not -path '*/tools/*' -print0 \
+    | xargs -0 perl -0777 -ne '
+        next unless /^[ \t]*#\+hugo_publish:[ \t]*t[ \t]*$/mi;
+        if (/^[ \t]*#\+hugo_has_math:[ \t]*t[ \t]*$/mi) { print "LINT\t$ARGV\n"; next }
+        (my $b = $_) =~ s/^[ \t]*#\+begin_(src|example)\b.*?^[ \t]*#\+end_\1\b//gmsi;
+        print "WARN\t$ARGV\n"
+          if $b =~ /\\\(.+?\\\)|\\\[.+?\\\]|\\begin\{|\$\$|(?<![\\\$\w])\$[^\s\$](?:[^\$\n]*[^\s\$])?\$(?![\w\$])/s;
+      '
+}
+
+# C: invoke `org-math-lint check [--config <toml>] <file>...' against the
+# published, math-declaring files under each PATH (see
+# `a3_pub_math_classify').  Default-on; honored unless A3_PUB_SKIP_MATH_CHECK=1.
 # The executable is $A3_PUB_MATH_LINT, else `org-math-lint' on PATH (a
 # `uv tool install' of the org-math-lint repo).  The config is
 # $ORG_MATH_LINT_CONFIG; without one the CLI looks for ./config.toml and
@@ -79,8 +101,19 @@ export A3_PUB_SKIP_WORKS_CHECK
 #   1  validator reported issues (stderr already detailed)
 #   2  org-math-lint not found
 a3_pub_check_math() {
-  local source_dir="$1"
   if [ "$A3_PUB_SKIP_MATH_CHECK" = "1" ]; then
+    return 0
+  fi
+  local kind file lint_files=()
+  while IFS="$(printf '\t')" read -r kind file; do
+    if [ "$kind" = "LINT" ]; then
+      lint_files+=("$file")
+    else
+      echo "a3-pub.sh: WARN $file looks like it has math but lacks #+HUGO_HAS_MATH: t — not math-checked." >&2
+    fi
+  done < <(a3_pub_math_classify "$@")
+  if [ "${#lint_files[@]}" -eq 0 ]; then
+    echo "a3-pub.sh: math check: no published file declares #+HUGO_HAS_MATH: t; nothing to lint." >&2
     return 0
   fi
   local ml_bin="${A3_PUB_MATH_LINT:-$(command -v org-math-lint || true)}"
@@ -94,7 +127,7 @@ a3_pub_check_math() {
   if [ -n "${ORG_MATH_LINT_CONFIG:-}" ]; then
     ml_args+=(--config "$ORG_MATH_LINT_CONFIG")
   fi
-  if ! "$ml_bin" "${ml_args[@]}" "$source_dir"; then
+  if ! "$ml_bin" "${ml_args[@]}" "${lint_files[@]}"; then
     echo "a3-pub.sh: math validation failed; publish aborted." >&2
     echo "  Fix the issues above, or rerun with --skip-math-check." >&2
     return 1
@@ -260,8 +293,14 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
   # command-substitution exit status behind the export builtin's own success.
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
   export SITE_DATA_DIR
-  # C: source-side math validation on the file's parent dir.
-  a3_pub_check_math "$(dirname "$A3_PUB_TARGET_PATH")" || exit $?
+  # C: source-side math validation on the target file alone (S1 row 6: its
+  # parent dir dragged sibling drafts in).  An org-roam id instead of a path
+  # falls back to every published, math-declaring file under ~/org.
+  if [ -f "$A3_PUB_TARGET_PATH" ]; then
+    a3_pub_check_math "$A3_PUB_TARGET_PATH" || exit $?
+  else
+    a3_pub_check_math "$HOME/org" || exit $?
+  fi
   # Task 26: propagate SIGTERM/SIGINT to the emacs child so its
   # `kill-emacs-hook' runs (a3-pub-async--on-kill cleans tmp-dirs).
   emacs_pid=
