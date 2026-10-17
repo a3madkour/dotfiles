@@ -55,6 +55,28 @@ Returns the message string (also `message'd)."
 
 ;; -- internal: keyword upsert (used by mark / unmark) --
 
+(defun a3madkour-pub-author--hoist-file-property-drawer ()
+  "Move a file-level `:PROPERTIES:' drawer back to the top of the buffer.
+
+Repairs notes an earlier `a3-publish-mark' left with `#+' keyword lines
+above the drawer (S1 row 10): org then reads it as a plain drawer, ox-hugo
+prints it into the page, and org-roam loses the note's `:ID:'.  Acts only
+when the drawer is preceded by nothing but `#+' keyword and blank lines, so
+a heading's own drawer is never touched.  Regex-only, no `org-element'."
+  (save-excursion
+    (goto-char (point-min))
+    (when (and (not (looking-at "[ \t]*:PROPERTIES:"))
+               (looking-at "\\(?:[ \t]*\\(?:#\\+.*\\)?\n\\)+")
+               (progn (goto-char (match-end 0))
+                      (looking-at (concat "[ \t]*:PROPERTIES:[ \t]*\n"
+                                          "\\(?:.*\n\\)*?"
+                                          "[ \t]*:END:[ \t]*\\(?:\n\\|\\'\\)"))))
+      (let ((drawer (match-string 0)))
+        (delete-region (match-beginning 0) (match-end 0))
+        (goto-char (point-min))
+        (insert drawer)
+        (unless (string-suffix-p "\n" drawer) (insert "\n"))))))
+
 (defun a3madkour-pub-author--upsert-keyword (key val)
   "Set `#+KEY: VAL' in the current buffer's preamble, idempotently.
 
@@ -66,6 +88,7 @@ buffer opens with a file-level `:PROPERTIES:' drawer, just after its
 
 KEY matching is case-insensitive on the keyword name.  VAL is inserted
 verbatim — caller is responsible for any escaping."
+  (a3madkour-pub-author--hoist-file-property-drawer)
   (save-excursion
     (goto-char (point-min))
     (let ((case-fold-search t)

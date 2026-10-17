@@ -80,6 +80,31 @@ ID.  The keywords must land after :END:."
                 'property-drawer))
     (should (equal (org-entry-get (point-min) "ID") "abc-123"))))
 
+(ert-deftest a3madkour-pub-author-test/mark-repairs-drawer-displaced-by-old-mark ()
+  "S1 row 10: a note an earlier `a3-publish-mark' left with its keywords above
+the property drawer is repaired by marking it again — the drawer moves back
+to the top, keywords and body are kept, nothing is duplicated."
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"
+            ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: Test\n\n* Heading\nBody.\n")
+    (a3-publish-mark "garden")
+    (should (equal (buffer-string)
+                   (concat ":PROPERTIES:\n:ID:       abc-123\n:END:\n"
+                           "#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"
+                           "#+title: Test\n\n* Heading\nBody.\n")))
+    (should (equal (org-entry-get (point-min) "ID") "abc-123"))))
+
+(ert-deftest a3madkour-pub-author-test/mark-leaves-heading-drawer-alone ()
+  "A drawer that belongs to a heading is not a file drawer: no keyword-only
+run precedes it, so the repair must not hoist it."
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: Test\n\n* Heading\n:PROPERTIES:\n:ID:       h-1\n:END:\n")
+    (a3-publish-mark "garden")
+    (should (string-match-p "^\\* Heading\n:PROPERTIES:\n:ID:       h-1\n:END:"
+                            (buffer-string)))))
+
 (ert-deftest a3madkour-pub-author-test/mark-updates-section-in-place-when-present ()
   "mark: existing HUGO_SECTION → updated in place (cross-section guard skipped
 when caller passes the same answer to y-or-n-p)."
