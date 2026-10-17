@@ -6242,4 +6242,11 @@ _SPC_ cancel    _o_nly this      _d_elete
  "TAB"
  '(outshine-cycle :which-key "outshine-cycle"))
 
+;; evil-collection makes g a prefix (gj/gk) in magit blob buffers, shadowing gg
+(general-def
+  :states '(normal visual)
+  :keymaps 'magit-blob-mode-map
+  :package 'magit
+  "gg" '(evil-goto-first-line :which-key "first line"))
+
 #+end_src
