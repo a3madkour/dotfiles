@@ -59,7 +59,10 @@ Returns the message string (also `message'd)."
   "Set `#+KEY: VAL' in the current buffer's preamble, idempotently.
 
 If a `#+KEY:' line exists anywhere in the buffer, replace its value
-in place.  Otherwise insert `#+KEY: VAL' at point-min.
+in place.  Otherwise insert `#+KEY: VAL' at point-min — or, when the
+buffer opens with a file-level `:PROPERTIES:' drawer, just after its
+`:END:'.  Org reads that drawer as the file's properties (org-roam's
+`:ID:' among them) only while it is the first element.
 
 KEY matching is case-insensitive on the keyword name.  VAL is inserted
 verbatim — caller is responsible for any escaping."
@@ -70,6 +73,9 @@ verbatim — caller is responsible for any escaping."
       (if (re-search-forward re nil t)
           (replace-match (format "#+%s: %s" key val) t t)
         (goto-char (point-min))
+        (when (and (looking-at "^[ \t]*:PROPERTIES:[ \t]*$")
+                   (re-search-forward "^[ \t]*:END:[ \t]*$" nil t))
+          (forward-line 1))
         (insert (format "#+%s: %s\n" key val))))))
 
 ;; -- a3-publish-mark --

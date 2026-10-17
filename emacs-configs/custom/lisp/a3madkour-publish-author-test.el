@@ -61,6 +61,25 @@
     (should (string-match-p "^#\\+HUGO_SECTION:[[:space:]]+essays$"
                             (buffer-string)))))
 
+(ert-deftest a3madkour-pub-author-test/mark-keeps-file-property-drawer-first ()
+  "S1 row 10: an org-roam note opens with its file-level :PROPERTIES: drawer.
+Org only reads that drawer as the file's properties when it is the first
+element, so inserting the keywords above it demoted it to a plain drawer —
+ox-hugo then printed :ID: into the page body and org-roam lost the note's
+ID.  The keywords must land after :END:."
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: Test\n\n* Heading\n")
+    (a3-publish-mark "garden")
+    (should (string-prefix-p ":PROPERTIES:\n:ID:       abc-123\n:END:\n"
+                             (buffer-string)))
+    (should (string-match-p "^#\\+HUGO_PUBLISH:[[:space:]]+t$" (buffer-string)))
+    (should (string-match-p "^#\\+HUGO_SECTION:[[:space:]]+garden$" (buffer-string)))
+    (should (eq (org-element-type
+                 (org-element-at-point (point-min)))
+                'property-drawer))
+    (should (equal (org-entry-get (point-min) "ID") "abc-123"))))
+
 (ert-deftest a3madkour-pub-author-test/mark-updates-section-in-place-when-present ()
   "mark: existing HUGO_SECTION → updated in place (cross-section guard skipped
 when caller passes the same answer to y-or-n-p)."
