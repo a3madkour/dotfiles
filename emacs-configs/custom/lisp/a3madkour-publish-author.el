@@ -175,17 +175,16 @@ an empty value counts as absent), else the custom front matter keys."
 
 (defun a3madkour-pub-author--cfm-value (type value)
   "Render VALUE of field TYPE for a `:key VALUE' custom front matter segment.
-Text is always double-quoted (the caller has rejected embedded quotes), so
-spaces, ` :' and digit-only strings survive ox-hugo's parser verbatim."
+Text, ref, refs and enum values are double-quoted (the caller has rejected
+embedded quotes and backslashes), so spaces, ` :' and digit-only strings
+such as a slug `1984' survive ox-hugo's parser as strings.  A refs list is
+one quoted, space-separated string, which the section normalizers split."
   (pcase type
-    ("text" (format "\"%s\"" value))
+    ((or "text" "ref" "enum") (format "\"%s\"" value))
+    ("refs" (format "\"%s\"" (mapconcat #'identity value " ")))
     ("int" (number-to-string value))
     ("bool" (if value "true" "false"))
     ("list" (mapconcat #'identity value " "))
-    ;; Branch A (Task 1: the space list reaches the page as a YAML list).
-    ;; Branch B replaces this line with:
-    ;;   ("refs" (format "'(%s)" (mapconcat #'identity value " ")))
-    ("refs" (mapconcat #'identity value " "))
     (_ value)))
 
 (defun a3madkour-pub-author--cfm-insert-point ()
@@ -627,13 +626,17 @@ resolve to a file."
 
 (defun a3madkour-pub-author--published-targets (to)
   "Published pages of section TO as ((SLUG . TITLE) ...), sorted by slug.
-TITLE is the bundle frontmatter's title, falling back to SLUG."
+Bundles whose frontmatter says `draft: true' are not published, so are
+omitted.  TITLE is the bundle frontmatter's title, falling back to SLUG."
   (sort (mapcar (lambda (md)
                   (let ((slug (file-name-nondirectory
                                (directory-file-name (file-name-directory md)))))
                     (cons slug (or (a3madkour-pub-author--fm-scalar md "title")
                                    slug))))
-                (a3madkour-pub-author--bundles to))
+                (cl-remove-if
+                 (lambda (md)
+                   (equal (a3madkour-pub-author--fm-scalar md "draft") "true"))
+                 (a3madkour-pub-author--bundles to)))
         (lambda (a b) (string< (car a) (car b)))))
 
 (defun a3madkour-pub-author--next-weight (section)
@@ -679,7 +682,8 @@ section (library) yields nil: `a3-library-insert-item' writes its items."
 (defun a3madkour-pub-author--ask-string (name type required keyword-p prompt)
   "Read field NAME of string-entered TYPE; re-prompt until acceptable.
 An empty answer returns `skip' unless REQUIRED.  A double quote is
-refused unless KEYWORD-P (custom front matter cannot carry one)."
+refused unless KEYWORD-P (custom front matter cannot carry one); so is a
+backslash, which org's header-argument reader would consume."
   (let ((shape (cdr (assoc type a3madkour-pub-author--string-shapes)))
         v done)
     (while (not done)
@@ -689,6 +693,9 @@ refused unless KEYWORD-P (custom front matter cannot carry one)."
         (if required (message "%s is required" name) (setq done t)))
        ((and (not keyword-p) (string-match-p "\"" v))
         (message "%s: a double quote cannot be written to \
+#+HUGO_CUSTOM_FRONT_MATTER" name))
+       ((and (not keyword-p) (string-match-p "\\\\" v))
+        (message "%s: a backslash cannot be written to \
 #+HUGO_CUSTOM_FRONT_MATTER" name))
        ((and shape (not (string-match-p (car shape) v)))
         (message "%s must be %s" name (cadr shape)))

@@ -58,7 +58,7 @@
   "mark: empty preamble → inserts #+HUGO_PUBLISH: t + #+HUGO_SECTION: <pick>."
   (with-temp-buffer
     (org-mode)
-    (insert "#+title: Test\n\n* Heading\n")
+    (insert "#+title: Test\n#+HUGO_SUMMARY: S\n\n* Heading\n")
     (a3-publish-mark "essays")
     (should (string-match-p "^#\\+HUGO_PUBLISH:[[:space:]]+t$"
                             (buffer-string)))
@@ -114,7 +114,7 @@ run precedes it, so the repair must not hoist it."
 when caller passes the same answer to y-or-n-p)."
   (with-temp-buffer
     (org-mode)
-    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: Test\n")
+    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: Test\n#+HUGO_SUMMARY: S\n")
     (cl-letf (((symbol-function 'y-or-n-p) (lambda (_p) t)))
       (a3-publish-mark "essays"))
     (should (string-match-p "^#\\+HUGO_SECTION:[[:space:]]+essays$"
@@ -126,7 +126,7 @@ when caller passes the same answer to y-or-n-p)."
   "mark: cross-section y-or-n-p → t edits proceed, returns picked section."
   (with-temp-buffer
     (org-mode)
-    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n")
+    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+HUGO_SUMMARY: S\n")
     (cl-letf (((symbol-function 'y-or-n-p) (lambda (_p) t)))
       (should (equal (a3-publish-mark "essays") "essays")))))
 
@@ -478,12 +478,11 @@ when caller passes the same answer to y-or-n-p)."
   (should (equal (a3madkour-pub-author--cfm-value "int" 40) "40"))
   (should (equal (a3madkour-pub-author--cfm-value "bool" t) "true"))
   (should (equal (a3madkour-pub-author--cfm-value "bool" nil) "false"))
-  (should (equal (a3madkour-pub-author--cfm-value "enum" "active") "active"))
+  (should (equal (a3madkour-pub-author--cfm-value "enum" "active") "\"active\""))
   (should (equal (a3madkour-pub-author--cfm-value "date" "2026-10-20") "2026-10-20"))
   (should (equal (a3madkour-pub-author--cfm-value "list" '("a" "b")) "a b"))
-  ;; Branch A (Task 1).  Under Branch B this line is instead:
-  ;;   (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "'(a b)"))
-  (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "a b")))
+  ;; A refs list is ONE quoted string; the section normalizers split it.
+  (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "\"a b\"")))
 
 (ert-deftest a3madkour-pub-author-test/write-field-routes-keyword-vs-cfm ()
   (with-temp-buffer
@@ -492,7 +491,7 @@ when caller passes the same answer to y-or-n-p)."
     (a3madkour-pub-author--write-field "description" "text" "A \"quoted\" line.")
     (a3madkour-pub-author--write-field "status" "enum" "active")
     (should (string-match-p "^#\\+HUGO_DESCRIPTION: A \"quoted\" line\\.$" (buffer-string)))
-    (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" (buffer-string)))))
+    (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status \"active\"$" (buffer-string)))))
 
 ;; -- Section registry Tasks 8-9: prompt stubs over a temp site --
 
@@ -574,10 +573,11 @@ returns a one-element list."
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/questions"))
                    '("description" "status" "theme" "supporting_notes" "started")))
     (should-not (a3madkour-pub-author--fields-to-fill "garden"))
-    (should-not (a3madkour-pub-author--fields-to-fill "essays"))
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "essays"))
+                   '("summary")))
     (should-not (a3madkour-pub-author--fields-to-fill "library/reading"))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "recipes"))
-                   '("sources" "ingredients" "steps")))
+                   '("summary")))
     (insert "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant :media_type book\n")
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
                    '("description" "weight")))
@@ -650,7 +650,7 @@ returns a one-element list."
       (should (string-match-p "^#\\+HUGO_PUBLISH: t$" s))
       (should (string-match-p "^#\\+HUGO_SECTION: research/themes$" s))
       (should (string-match-p "^#\\+HUGO_DESCRIPTION: What the theme asks\\.$" s))
-      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status \"active\"$" s))
       (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :weight 40$" s)))))
 
 (defun a3madkour-pub-author-test--question-site ()
@@ -673,13 +673,12 @@ returns a one-element list."
     (a3madkour-pub-author-test--answering a3madkour-pub-author-test--question-answers
       (a3-publish-mark "research/questions"))
     (let ((s (buffer-string)))
-      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :theme procedural-narrative$" s))
-      ;; Branch A form (Task 1); under Branch B: ":supporting_notes '(note-a note-b)".
-      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :supporting_notes note-a note-b$" s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :theme \"procedural-narrative\"$" s))
+            (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :supporting_notes \"note-a note-b\"$" s))
       (should (string-match-p (format "^#\\+HUGO_CUSTOM_FRONT_MATTER: :started %s$"
                                       (format-time-string "%Y-%m-%d"))
                               s))
-      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" s)))))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status \"active\"$" s)))))
 
 (ert-deftest a3madkour-pub-author-test/mark-second-run-asks-nothing ()
   (a3madkour-pub-author-test--with-site
@@ -757,7 +756,7 @@ not even #+HUGO_PUBLISH."
                 (cons " status: " :default))
         (a3-publish-mark "research/themes"))
       (let ((s (buffer-string)))
-        (should (string-match-p ":status active" s))
+        (should (string-match-p ":status \"active\"" s))
         (if accept
             (progn (should-not (string-match-p "topic_map" s))
                    (should-not (string-match-p ":year" s)))
@@ -769,7 +768,7 @@ not even #+HUGO_PUBLISH."
     (a3madkour-pub-author-test--answering
         '((" status: " . "finished") (" creator: " . "Example Author"))
       (a3-publish-mark "garden"))
-    (should (string-match-p ":status finished" (buffer-string)))
+    (should (string-match-p ":status \"finished\"" (buffer-string)))
     (should (string-match-p ":creator \"Example Author\"" (buffer-string)))))
 
 (ert-deftest a3madkour-pub-author-test/mark-library-and-structured ()
@@ -778,15 +777,22 @@ not even #+HUGO_PUBLISH."
     (a3madkour-pub-author-test--answering nil
       (a3-publish-mark "library/reading"))
     (should (string-match-p "^#\\+HUGO_SECTION: library/reading$" (buffer-string))))
-  (a3madkour-pub-author-test--with-site
-    (insert "#+title: Soup\n")
-    (let (said)
-      (cl-letf (((symbol-function 'message)
-                 (lambda (fmt &rest args) (push (apply #'format fmt args) said))))
-        (a3madkour-pub-author-test--answering nil
-          (a3-publish-mark "recipes")))
-      (should (cl-some (lambda (m) (string-match-p "sources, ingredients, steps" m))
-                       said)))))
+  ;; The real contract derives every recipe structure; the by-hand message
+  ;; path is exercised by making `sources' a hand-filled structured field.
+  (a3madkour-sections-test--with-root
+      (a3madkour-sections-test/mutate
+       "\"sources\": {\"type\": \"structured\", \"required\": true, \"from\": \"pipeline\"}"
+       "\"sources\": {\"type\": \"structured\", \"required\": true}")
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+title: Soup\n")
+      (let (said)
+        (cl-letf (((symbol-function 'message)
+                   (lambda (fmt &rest args) (push (apply #'format fmt args) said))))
+          (a3madkour-pub-author-test--answering '((" summary: " . "A soup."))
+            (a3-publish-mark "recipes")))
+        (should (cl-some (lambda (m) (string-match-p "needs sources " m))
+                         said))))))
 
 (ert-deftest a3madkour-pub-author-test/mark-errors-on-missing-contract ()
   (a3madkour-sections-test--with-root nil
@@ -833,6 +839,79 @@ not even #+HUGO_PUBLISH."
               (should (string-match-p "^description: \"Does it hold\\?\"$" md))
               (should (string-match-p "^status: \"active\"$" md))))
         (delete-directory notes-dir t)))))
+
+(ert-deftest a3madkour-pub-author-test/fields-to-fill-real-contract ()
+  "Pin what mark asks for against the REAL data/sections.json, per section."
+  (a3madkour-sections-test--with-real-site
+    (let ((expect '(("research/themes" "description" "status" "weight")
+                    ("research/questions" "description" "status" "theme"
+                     "supporting_notes" "started")
+                    ("works/games" "status" "game_kind" "tagline" "year")
+                    ("works/music" "format" "year")
+                    ("works/poetry") ("garden") ("about")
+                    ("streams" "platforms" "category" "archive_status")
+                    ("library/reading") ("library/listening")
+                    ("library/playing") ("library/watching")
+                    ("essays" "summary") ("recipes" "summary"))))
+      (dolist (e expect)
+        (with-temp-buffer
+          (org-mode)
+          (should (equal (list (car e)
+                               (mapcar #'car (a3madkour-pub-author--fields-to-fill (car e))))
+                         (list (car e) (cdr e))))))
+      (with-temp-buffer
+        (org-mode)
+        (insert "#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
+        (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
+                       '("status" "creator")))))))
+
+(ert-deftest a3madkour-pub-author-test/published-targets-skip-drafts ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "live" "title" "Live" "draft" "false")
+    (a3madkour-pub-author-test--page "research/themes" "wip" "title" "Wip" "draft" "true")
+    (should (equal (a3madkour-pub-author--published-targets "research/themes")
+                   '(("live" . "Live"))))))
+
+(ert-deftest a3madkour-pub-author-test/required-ref-with-only-draft-target-errors ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "wip" "title" "Wip" "draft" "true")
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) (ert-fail "a draft was offered as a target"))))
+      (let ((err (should-error (a3madkour-pub-author--ask
+                                "research/questions" "theme"
+                                (a3madkour-sections/field "research/questions" "theme"))
+                               :type 'user-error)))
+        (should (string-match-p "publish a research/themes page first"
+                                (error-message-string err)))))))
+
+(ert-deftest a3madkour-pub-author-test/cfm-value-quotes-ref-and-enum ()
+  (should (equal (a3madkour-pub-author--cfm-value "ref" "1984") "\"1984\""))
+  (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "\"a b\""))
+  (should (equal (a3madkour-pub-author--cfm-value "enum" "active") "\"active\"")))
+
+(ert-deftest a3madkour-pub-author-test/numeric-slug-ref-round-trips-as-string ()
+  (with-temp-buffer
+    (org-mode)
+    (a3madkour-pub-author--write-field "theme" "ref" "1984")
+    (should (stringp (cdr (assq :theme (org-babel-parse-header-arguments
+                                        ":theme \"1984\"" t)))))
+    (should (equal (a3madkour-pub-author--cfm-get "theme") "1984"))
+    (should (equal (cdr (assq :theme (org-babel-parse-header-arguments
+                                      (nth 2 (car (a3madkour-pub-author--cfm-lines))) t)))
+                   "1984"))))
+
+(ert-deftest a3madkour-pub-author-test/ask-refuses-backslash ()
+  (a3madkour-pub-author-test--with-site
+    (let ((texts '("a\\b" "ok")) said)
+      (cl-letf (((symbol-function 'message)
+                 (lambda (fmt &rest args) (push (apply #'format fmt args) said))))
+        (a3madkour-pub-author-test--answering
+            (list (cons " tagline: " (lambda () (pop texts))))
+          (should (equal (a3madkour-pub-author--ask
+                          "works/games" "tagline" '((type . "text") (required . t)))
+                         "ok"))))
+      (should (cl-some (lambda (m) (string-match-p "backslash cannot be written" m))
+                       said)))))
 
 (provide 'a3madkour-publish-author-test)
 ;;; a3madkour-publish-author-test.el ends here

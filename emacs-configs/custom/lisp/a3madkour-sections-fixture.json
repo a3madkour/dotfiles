@@ -8,7 +8,7 @@
         "date": {"type": "date", "required": true, "from": "pipeline"},
         "lastmod": {"type": "date", "required": true, "from": "pipeline"},
         "draft": {"type": "bool", "required": true, "from": "pipeline"},
-        "summary": {"type": "text", "required": true, "from": "pipeline"},
+        "summary": {"type": "text", "required": true},
         "tags": {"type": "list", "required": true, "from": "pipeline"},
         "series": {"type": "text", "required": true, "from": "pipeline"},
         "series_order": {"type": "int", "required": true, "from": "pipeline"},
@@ -255,12 +255,12 @@
         "date": {"type": "date", "required": true, "from": "pipeline"},
         "lastmod": {"type": "date", "required": true, "from": "pipeline"},
         "draft": {"type": "bool", "required": true, "from": "pipeline"},
-        "summary": {"type": "text", "required": true, "from": "pipeline"},
+        "summary": {"type": "text", "required": true},
         "tags": {"type": "list", "from": "pipeline"},
-        "servings": {"type": "int", "required": true, "from": "pipeline"},
-        "sources": {"type": "structured", "required": true},
-        "ingredients": {"type": "structured", "required": true},
-        "steps": {"type": "structured", "required": true}
+        "servings": {"type": "structured", "required": true, "from": "pipeline"},
+        "sources": {"type": "structured", "required": true, "from": "pipeline"},
+        "ingredients": {"type": "structured", "required": true, "from": "pipeline"},
+        "steps": {"type": "structured", "required": true, "from": "pipeline"}
       }
     },
     "about": {
