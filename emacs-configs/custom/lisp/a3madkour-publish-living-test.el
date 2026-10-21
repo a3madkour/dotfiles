@@ -125,6 +125,7 @@ Post Task 14: the garden handler natively accepts the
         (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
          ((symbol-function 'a3madkour-pub/finish-publish)
           (lambda (&rest _) (cl-incf finish-count)))
+         ((symbol-function 'a3madkour-pub-citations/emit-yaml) (lambda (&rest _) nil))
          ((symbol-function 'a3madkour-pub-living--collect-triples) (lambda () nil)))
       (let ((a3-pub-async--in-flight-run nil))
         (with-a3-pub-async-sync

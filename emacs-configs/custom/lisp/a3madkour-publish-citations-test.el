@@ -332,6 +332,24 @@ derivation, honoring `#+HUGO_SLUG:'), NOT `file-name-base'."
           (should (string-match-p "  a:" yaml-text))
           (should (string-match-p "title: \"T-A\"" yaml-text)))))))
 
+(ert-deftest a3madkour-pub-citations-test/emit-errors-when-site-data-dir-unset ()
+  "emit-yaml with a nil site-data-dir errors and writes nothing.
+`expand-file-name' with a nil DIR falls back to `default-directory', so an
+unguarded emit wrote citations.yaml into whatever directory the caller ran from."
+  (let* ((tmp (make-temp-file "a3-pub-citations-cwd-" t))
+         (default-directory (file-name-as-directory tmp))
+         (a3madkour-pub/site-data-dir nil))
+    (unwind-protect
+        (a3madkour-pub-bib-test--with-bib
+            "@misc{a, author={A,A}, title={A}, date={2020}, publisher={P}}"
+          (cl-letf (((symbol-function 'a3madkour-pub-bib--citar-loaded-p) (lambda () nil)))
+            (a3madkour-pub-citations--accumulator-init)
+            (puthash "a" '(("/fake/x.org" . 1)) a3madkour-pub-citations--accumulator)
+            (should-error (a3madkour-pub-citations/emit-yaml :mode 'replace)
+                          :type 'user-error)
+            (should-not (file-exists-p (expand-file-name "citations.yaml" tmp)))))
+      (delete-directory tmp t))))
+
 (ert-deftest a3madkour-pub-citations-test/emit-merges-with-existing ()
   "F Task 11: pre-existing keys NOT in accumulator survive untouched."
   (a3madkour-pub-citations-test--with-yaml-dir

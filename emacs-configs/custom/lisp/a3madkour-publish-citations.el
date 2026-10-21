@@ -350,6 +350,10 @@ MODE: `'merge' (default) keeps existing keys not in the accumulator.
       `'replace' drops keys not in the accumulator (sync command path).
 
 Skips file write entirely if the accumulator is empty and MODE is merge."
+  ;; A nil DIR makes `expand-file-name' resolve against `default-directory',
+  ;; which silently wrote citations.yaml into the caller's cwd.
+  (unless a3madkour-pub/site-data-dir
+    (user-error "a3madkour-pub/site-data-dir is not set; refusing to write citations.yaml"))
   (unless a3madkour-pub-citations--accumulator
     (a3madkour-pub-citations--accumulator-init))
   (let ((acc-keys (sort (let (keys)
