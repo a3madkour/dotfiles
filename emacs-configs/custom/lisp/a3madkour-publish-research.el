@@ -12,9 +12,9 @@
 ;; else — ox-hugo export, link-rewrite, asset-copy, write-if-different,
 ;; record-publish — is shared with garden.
 ;;
-;; Registered into `a3madkour-pub-living--handlers' as two entries
+;; Registered in `a3madkour-pub-registry' as two entries
 ;; (one per cascade type, both pointing at the same `publish-research-file'
-;; entry point) by `a3madkour-publish-living'.
+;; entry point).
 
 ;;; Code:
 
@@ -211,12 +211,6 @@ The section string already encodes the nested path so this is identity,
 but we centralize the mapping here for clarity and future-proofing."
   section-str)
 
-(defun a3madkour-pub-research--section-to-normalize-sym (section-str)
-  "Convert SECTION-STR (e.g. \"research/themes\") to the normalize-dispatch symbol.
-\"research/themes\" → 'research-themes
-\"research/questions\" → 'research-questions"
-  (intern (replace-regexp-in-string "/" "-" section-str)))
-
 ;;; Task 9 — outputs injection into normalized alist
 
 (defun a3madkour-pub-research--inject-outputs (alist outputs)
@@ -271,7 +265,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                             (format "content/%s/%s/" content-subdir slug)
                             site-root))
                (out-path   (expand-file-name "index.md" bundle-dir))
-               (norm-sym   (a3madkour-pub-research--section-to-normalize-sym section))
+               (norm-sym   (a3madkour-pub-section/symbol section))
                (question-p (string= section "research/questions"))
                ;; Step 1: For questions, parse outputs BEFORE the body is stripped.
                (outputs    (when question-p

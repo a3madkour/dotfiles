@@ -4,6 +4,7 @@
 (require 'cl-lib)
 (require 'a3madkour-publish-library)
 (require 'a3madkour-publish-async)
+(require 'a3madkour-sections-fixture)
 
 (defun a3madkour-pub-library-test--parse-headline (org-text)
   "Helper: parse ORG-TEXT and return the first top-level headline element."
@@ -699,6 +700,17 @@ sequences that PyYAML rejects."
 (ert-deftest a3madkour-pub-library/extras-for-unknown-medium-nil ()
   "Tier 5.2: `/extras-for' returns nil for an unknown medium (not an error)."
   (should (null (a3madkour-pub-library/extras-for "bogus"))))
+
+(ert-deftest a3madkour-pub-library--config-reads-registry-and-contract ()
+  "yaml file + default medium come from the registry, the allowed lists
+from the site's section contract."
+  (should (equal (a3madkour-pub-library--config-for "library/reading")
+                 '("reading.yaml" "book" ("book")
+                   ("finished" "reading" "queued" "abandoned"))))
+  (a3madkour-sections-test--with-root
+      (a3madkour-sections-test/mutate "\"abandoned\"" "\"dnf\"")
+    (should (member "dnf" (nth 3 (a3madkour-pub-library--config-for
+                                  "library/reading"))))))
 
 (provide 'a3madkour-publish-library-test)
 

@@ -5,6 +5,7 @@
 
 (require 'ert)
 (require 'a3madkour-publish-deliberate)
+(require 'a3madkour-sections-fixture)
 
 (ert-deftest a3madkour-pub-delib-test/command-defined-and-interactive ()
   "B.0 — `a3-publish-deliberate' is defined and interactive."
@@ -36,8 +37,7 @@ control reaches the dispatch."
 
 (ert-deftest a3madkour-pub-deliberate-test/essays-handler-registered ()
   "B.4 Task 9: 'essays is registered in the deliberate handler alist."
-  (require 'a3madkour-publish-deliberate)
-  (should (eq (cdr (assq 'essays a3madkour-pub-deliberate--handlers))
+  (should (eq (a3madkour-pub-registry/handler "essays" 'deliberate)
               'a3madkour-pub-essays/publish-essay-file)))
 
 ;; -- F Task 13: deliberate triggers cite emit-yaml --
@@ -50,12 +50,12 @@ Under the async lifecycle, the handler's :on-done callback flows into
 Stub begin-publish, finish-publish, resolve-file-or-id, note-section,
 and emit-yaml; bind handlers to an essays entry that fires :on-done with
 'ok.  Assert call order: finish first, then emit."
-  (let ((calls nil)
-        (a3madkour-pub-deliberate--handlers
-         (list (cons 'essays
-                     (lambda (_file _run &rest rest)
-                       (funcall (plist-get rest :on-done) 'ok))))))
-    (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
+  (let ((calls nil))
+    (cl-letf (((symbol-function 'a3madkour-pub-deliberate--handler-for)
+               (lambda (&rest _)
+                 (lambda (_file _run &rest rest)
+                   (funcall (plist-get rest :on-done) 'ok))))
+              ((symbol-function 'a3madkour-pub/begin-publish) (lambda () nil))
               ((symbol-function 'a3madkour-pub/finish-publish)
                (lambda (&rest _) (push 'finish calls)))
               ((symbol-function 'a3madkour-pub--resolve-file-or-id)
@@ -305,6 +305,20 @@ as an opaque id (manifest contract doesn't require UUID format)."
   (should (null (a3madkour-pub-deliberate--resolve-to-id nil)))
   (should (null (a3madkour-pub-deliberate--resolve-to-id "")))
   (should (null (a3madkour-pub-deliberate--resolve-to-id 42))))
+
+(ert-deftest a3madkour-pub-deliberate-test/unloaded-handler-errors-before-begin ()
+  "A registered deliberate handler that is not loaded signals naming the
+function, before `begin-publish' takes the run lock."
+  (cl-letf (((symbol-function 'a3madkour-pub--resolve-file-or-id) (lambda (_) "/fake/e.org"))
+            ((symbol-function 'a3madkour-pub/note-section) (lambda (_) "essays"))
+            ((symbol-function 'a3madkour-pub-registry/handler)
+             (lambda (&rest _) 'a3madkour-pub-deliberate-test--no-such-handler))
+            ((symbol-function 'a3-pub-async/begin-publish)
+             (lambda (&rest _) (error "begin-publish must not run"))))
+    (let ((err (should-error (a3-publish-deliberate "/fake/e.org"))))
+      (should (string-match-p
+               "a3madkour-pub-deliberate-test--no-such-handler.*is not loaded"
+               (error-message-string err))))))
 
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here

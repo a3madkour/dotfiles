@@ -7,7 +7,7 @@
 ;; asset-copy → write-if-different → record-publish), with a novel
 ;; post-export markdown body scan for the 6 `has_*' frontmatter flags.
 ;;
-;; Registered into `a3madkour-pub-deliberate--handlers' (see Task 9) as
+;; Registered in `a3madkour-pub-registry' as
 ;;   (essays . a3madkour-pub-essays/publish-essay-file)
 
 ;;; Code:

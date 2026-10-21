@@ -13,7 +13,7 @@
 
 (ert-deftest a3madkour-pub-poetry-test/dispatch-registered ()
   "The deliberate dispatch alist contains a works/poetry entry."
-  (should (eq (cdr (assq 'works/poetry a3madkour-pub-deliberate--handlers))
+  (should (eq (a3madkour-pub-registry/handler "works/poetry" 'deliberate)
               'a3madkour-pub-poetry/publish-poetry-file)))
 
 (ert-deftest a3madkour-pub-poetry-test/section-dir-default ()

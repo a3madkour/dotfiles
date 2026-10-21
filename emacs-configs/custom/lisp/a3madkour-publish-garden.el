@@ -6,7 +6,7 @@
 ;; frontmatter normalization, A.1's link rewriter + asset copier, and
 ;; A.1's record-publish into one entry point: `publish-garden-file'.
 ;;
-;; Registered into `a3madkour-pub-living--handlers' (see Task 11) as
+;; Registered in `a3madkour-pub-registry' as
 ;;   (garden . a3madkour-pub-garden/publish-garden-file)
 ;; per spec §10.
 

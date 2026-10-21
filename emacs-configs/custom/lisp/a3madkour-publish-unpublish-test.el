@@ -1315,14 +1315,14 @@ the essays would dilute the ratio to 4/16 and let the wipe through."
       (delete-directory content-root t))))
 
 (ert-deftest a3madkour-pub-unpublish-test/deliberate-sections-match-handler-registry ()
-  "The sweep's deliberate-section list must name exactly the sections that
-`a3madkour-pub-deliberate--handlers' publishes — a new deliberate section
-added only to the registry would otherwise be swept by every living run."
+  "The sweep's deliberate-section list is exactly the sections
+`a3-publish-deliberate' dispatches, and none of them is living — a living
+run must never sweep a deliberate section's pages."
   (require 'a3madkour-publish-deliberate)
-  (should (equal (sort (copy-sequence a3madkour-pub-deliberate-sections) #'string<)
-                 (sort (mapcar (lambda (e) (symbol-name (car e)))
-                               a3madkour-pub-deliberate--handlers)
-                       #'string<))))
+  (should a3madkour-pub-deliberate-sections)
+  (dolist (s a3madkour-pub-deliberate-sections)
+    (should (fboundp (a3madkour-pub-deliberate--handler-for s "test")))
+    (should-not (a3madkour-pub-registry/handler s 'living))))
 
 (ert-deftest a3madkour-pub-unpublish-test/finish-publish-small-removal-not-refused ()
   "P1.1c: below the floor count, legitimate small removals (e.g. unpublishing

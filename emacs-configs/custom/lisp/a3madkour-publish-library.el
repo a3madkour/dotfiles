@@ -7,9 +7,9 @@
 ;; watching}.org), normalizes each heading to a YAML row plist, renders
 ;; the corresponding data/<medium>.yaml deterministically.
 ;;
-;; Registered into `a3madkour-pub-living--handlers' as four entries
+;; Registered in `a3madkour-pub-registry' as four entries
 ;; (one per library-<medium> section symbol, all pointing at the same
-;; `publish-library-file' entry point) by `a3madkour-publish-living'.
+;; `publish-library-file' entry point).
 
 ;;; Code:
 
@@ -20,43 +20,26 @@
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-registry)
+(require 'a3madkour-sections)
 
-(defconst a3madkour-pub-library--config
-  '(("library/reading"
-     "reading.yaml"  "book"  ("book")
-     ("finished" "reading" "queued" "abandoned"))
-    ("library/listening"
-     "listening.yaml" "album" ("album" "track")
-     ("finished" "listening" "queued" "dropped"))
-    ("library/playing"
-     "playing.yaml"   "game"  ("game")
-     ("finished" "100pct" "playing" "queued" "dropped"))
-    ("library/watching"
-     "watching.yaml"  "film"  ("film" "series")
-     ("finished" "watching" "queued" "dropped")))
-  "Per-section config: (SECTION-STRING YAML-FILE DEFAULT-MT (ALLOWED-MT...) (ALLOWED-STATUS...)).
-SECTION-STRING is the canonical `#+HUGO_SECTION:' slash-form value (e.g.
-`\"library/reading\"') so it compares directly against `note-section''s
-string return — no symbol/string bridge needed.
-
-Status enums copied verbatim from check_library_fixtures.py — the linter is
-authoritative for B-emitted YAML.")
+(defun a3madkour-pub-library/sections ()
+  "The library section strings (e.g. \"library/reading\"), from the registry."
+  (a3madkour-pub-registry/sections-for-handler
+   'a3madkour-pub-library/publish-library-file))
 
 (defun a3madkour-pub-library--config-for (section)
   "Return (yaml-file default-mt allowed-mt allowed-status) for SECTION.
-SECTION is a string (the canonical `#+HUGO_SECTION:' slash-form).
-Errors when SECTION is not a known library section."
-  (let ((entry (assoc section a3madkour-pub-library--config)))
-    (unless entry
-      (error "a3madkour-pub-library: unknown library section %S" section))
-    (cdr entry)))
-
-(defun a3madkour-pub-library/sections ()
-  "Return the list of library section strings (e.g. \"library/reading\").
-
-Public wrapper over `a3madkour-pub-library--config' for consumption from
-sibling modules (Tier 5.2 author.el)."
-  (mapcar #'car a3madkour-pub-library--config))
+SECTION is the slash-form `#+HUGO_SECTION:' string.  The yaml file and
+default medium come from `a3madkour-pub-registry'; the allowed media
+types and statuses from the site's section contract (`a3madkour-sections',
+which fails closed).  Errors when SECTION is not a library section."
+  (unless (member section (a3madkour-pub-library/sections))
+    (error "a3madkour-pub-library: unknown library section %S" section))
+  (list (a3madkour-pub-registry/get section :data-file)
+        (a3madkour-pub-registry/get section :default-medium)
+        (a3madkour-sections/enum section "media_type")
+        (a3madkour-sections/enum section "status")))
 
 (defun a3madkour-pub-library/extras-for (medium)
   "Return the per-medium extras spec for MEDIUM, or nil if unknown.

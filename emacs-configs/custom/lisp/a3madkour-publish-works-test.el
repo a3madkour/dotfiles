@@ -114,10 +114,10 @@
              out))))
 
 (ert-deftest a3madkour-pub-works--registers-both-sections ()
-  (should (equal (cdr (assoc "works/games" a3madkour-pub-living--handlers))
-                 'a3madkour-pub-works/publish-works-file))
-  (should (equal (cdr (assoc "works/music" a3madkour-pub-living--handlers))
-                 'a3madkour-pub-works/publish-works-file)))
+  (should (eq (a3madkour-pub-registry/handler "works/games" 'living)
+              'a3madkour-pub-works/publish-works-file))
+  (should (eq (a3madkour-pub-registry/handler "works/music" 'living)
+              'a3madkour-pub-works/publish-works-file)))
 
 (ert-deftest a3madkour-pub-works--bundle-dir-for-section ()
   (should (equal (a3madkour-pub-works--bundle-subdir "works/games") "works/games"))

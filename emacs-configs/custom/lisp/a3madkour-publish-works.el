@@ -3,7 +3,7 @@
 ;;; Commentary:
 
 ;; Slice A1: one handler for two living sections.  Registered twice into
-;; `a3madkour-pub-living--handlers' (works/games, works/music) against a
+;; `a3madkour-pub-registry' (works/games, works/music) against a
 ;; single entry point that branches on section.
 ;;
 ;; Authoring uses `#+HUGO_CUSTOM_FRONT_MATTER:' (the research idiom), NOT a
@@ -16,6 +16,7 @@
 (require 'org-element)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-export)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-rewrite)
@@ -134,21 +135,21 @@ not render an empty track list."
    :key-hook #'a3madkour-pub-works--key-hook
    :value-fn #'a3madkour-pub-yaml/render-value))
 
-(defconst a3madkour-pub-works--sections
-  '(("works/games" . works-games)
-    ("works/music" . works-music))
-  "Sections this handler serves, mapping the slash form to the hyphen form.")
+(defun a3madkour-pub-works--sections ()
+  "Slash-form sections this handler serves, from `a3madkour-pub-registry'."
+  (a3madkour-pub-registry/sections-for-handler
+   'a3madkour-pub-works/publish-works-file))
 
 (defun a3madkour-pub-works--bundle-subdir (section)
   "Content subdirectory for SECTION.  Signals for an unserved section."
-  (unless (assoc section a3madkour-pub-works--sections)
+  (unless (member section (a3madkour-pub-works--sections))
     (error "a3madkour-pub-works: unserved section %S" section))
   section)
 
 (defun a3madkour-pub-works--normalize-symbol (section)
   "Hyphen-form normalize symbol for slash-form SECTION."
-  (or (cdr (assoc section a3madkour-pub-works--sections))
-      (error "a3madkour-pub-works: unserved section %S" section)))
+  (a3madkour-pub-works--bundle-subdir section)
+  (a3madkour-pub-section/symbol section))
 
 (defun a3madkour-pub-works--claim-slug (table slug file)
   "Claim SLUG in TABLE for FILE.  Signals when SLUG is already taken.

@@ -5,9 +5,8 @@
 
 (require 'ert)
 (require 'a3madkour-publish-living)
-;; Loading garden triggers living.el's `with-eval-after-load' handler
-;; registration, so the P4.1 end-to-end idempotency test drives a real
-;; living-section handler through the orchestrator.
+(require 'a3madkour-sections-fixture)
+;; Loaded so the P4.1 end-to-end idempotency test drives a real living-section handler (the registry names it; this makes it fboundp).
 (require 'a3madkour-publish-garden)
 
 (ert-deftest a3madkour-pub-living-test/command-defined-and-interactive ()
@@ -34,23 +33,15 @@ No commits to the manifest; snapshot is cleared at end."
       (delete-directory tmp-data t))))
 
 (ert-deftest a3madkour-pub-living-test/garden-handler-registered ()
-  "B.1 — loading a3madkour-publish-garden registers the garden handler in
-`a3madkour-pub-living--handlers' via the after-load form at the bottom of
-this file's parent module.  Handler-alist keys are STRINGS (the canonical
-`#+HUGO_SECTION:' value), so we look up via `assoc' not `assq'."
-  (require 'a3madkour-publish-garden)
-  (should (eq (cdr (assoc "garden" a3madkour-pub-living--handlers))
+  "The registry names garden's living handler (slash-form string key)."
+  (should (eq (a3madkour-pub-registry/handler "garden" 'living)
               'a3madkour-pub-garden/publish-garden-file)))
 
 (ert-deftest a3madkour-pub-living-test/library-handlers-registered ()
-  "B.2 — loading a3madkour-publish-library registers all 4 library
-sections (`library/reading', `library/listening', `library/playing',
-`library/watching') in `a3madkour-pub-living--handlers', each pointing
-at `a3madkour-pub-library/publish-library-file'."
-  (require 'a3madkour-publish-library)
+  "All four library sections are living, on `publish-library-file'."
   (dolist (section '("library/reading" "library/listening"
                      "library/playing" "library/watching"))
-    (should (eq (cdr (assoc section a3madkour-pub-living--handlers))
+    (should (eq (a3madkour-pub-registry/handler section 'living)
                 'a3madkour-pub-library/publish-library-file))))
 
 (ert-deftest a3madkour-pub-living-test/walk-section-dispatches-on-string-key ()
@@ -96,13 +87,9 @@ Post Task 14: the garden handler natively accepts the
       (delete-directory site-dir t))))
 
 (ert-deftest a3madkour-pub-living-test/research-handlers-registered ()
-  "B.3 — loading a3madkour-publish-research registers both research
-sections (`research/themes', `research/questions') in
-`a3madkour-pub-living--handlers', each pointing at
-`a3madkour-pub-research/publish-research-file'."
-  (require 'a3madkour-publish-research)
+  "Both research sections are living, on `publish-research-file'."
   (dolist (section '("research/themes" "research/questions"))
-    (should (eq (cdr (assoc section a3madkour-pub-living--handlers))
+    (should (eq (a3madkour-pub-registry/handler section 'living)
                 'a3madkour-pub-research/publish-research-file))))
 
 (require 'a3madkour-publish-async)
@@ -275,9 +262,7 @@ even when the filesystem mtime advances between runs (never-committed note)."
         (progn
           (with-temp-file (expand-file-name "a.org" dir)
             (insert "#+TITLE: A\n#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"))
-          (let ((a3madkour-pub/org-notes-dir dir)
-                (a3madkour-pub-living--handlers
-                 '(("garden" . ignore) ("recipes" . ignore) ("works/games" . ignore))))
+          (let ((a3madkour-pub/org-notes-dir dir))
             (cl-letf* ((orig (symbol-function 'directory-files-recursively))
                        ((symbol-function 'directory-files-recursively)
                         (lambda (&rest args)
@@ -293,13 +278,60 @@ even when the filesystem mtime advances between runs (never-committed note)."
         (progn
           (with-temp-file (expand-file-name "a.org" dir)
             (insert "#+TITLE: A\n#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"))
-          (let ((a3madkour-pub/org-notes-dir dir)
-                (a3madkour-pub-living--handlers
-                 '(("garden" . ignore) ("recipes" . ignore))))
+          (let ((a3madkour-pub/org-notes-dir dir))
             (let ((triples (a3madkour-pub-living--collect-triples)))
               (should (equal (length triples) 1))
               (should (equal (car (car triples)) "garden")))))
       (delete-directory dir t))))
+
+;; -- Section registry: dispatch follows the registry, loudly --
+
+(ert-deftest a3madkour-pub-living--collect-follows-registry-modes ()
+  "Only `:mode living' sections yield triples; deliberate (essays) and
+handler-less (streams) sections are skipped."
+  (let ((dir (make-temp-file "a3-living-modes" t)))
+    (unwind-protect
+        (progn
+          (dolist (spec '(("g.org" . "garden") ("e.org" . "essays")
+                          ("s.org" . "streams")))
+            (with-temp-file (expand-file-name (car spec) dir)
+              (insert (format "#+TITLE: %s\n#+HUGO_SECTION: %s\n#+HUGO_PUBLISH: t\n"
+                              (car spec) (cdr spec)))))
+          (let ((a3madkour-pub/org-notes-dir dir))
+            (a3madkour-pub--reset-metadata-cache)
+            (let ((triples (a3madkour-pub-living--collect-triples)))
+              (should (equal (mapcar #'car triples) '("garden")))
+              (should (eq (nth 2 (car triples))
+                          'a3madkour-pub-garden/publish-garden-file)))))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-living-test/unloaded-handler-is-a-loud-per-file-error ()
+  "A registered handler that is not `fboundp' reports `err' for its file
+and logs a `handler-missing' step naming the function; the other files
+still run.  Intended behaviour change: before the registry the section
+was silently skipped, so its pages looked removed (S1 row 9)."
+  (let ((captured 'unset) (logged nil) (other-ran nil))
+    (a3-pub-living-test--capture-finish-status captured
+      (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                 (lambda ()
+                   (list (list "garden" "/a.org" 'a3madkour-pub-living-test--no-such-handler)
+                         (list "garden" "/b.org" 'ok-h))))
+                ((symbol-function 'ok-h)
+                 (lambda (_f _r &rest rest)
+                   (setq other-ran t)
+                   (funcall (plist-get rest :on-done) 'ok)))
+                ((symbol-function 'a3-pub-async/log-step)
+                 (lambda (_run label status &rest kw)
+                   (push (list label status (plist-get kw :err-snippet)) logged))))
+        (a3-publish-living)))
+    (should (eq captured 'err))
+    (should other-ran)
+    (should (cl-some (lambda (l)
+                       (and (equal (nth 0 l) "handler-missing")
+                            (eq (nth 1 l) :err)
+                            (string-match-p "a3madkour-pub-living-test--no-such-handler"
+                                            (nth 2 l))))
+                     logged))))
 
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

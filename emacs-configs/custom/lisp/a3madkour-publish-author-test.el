@@ -5,6 +5,7 @@
 
 (require 'ert)
 (require 'a3madkour-publish-author)
+(require 'a3madkour-sections-fixture)
 
 (ert-deftest a3madkour-pub-author-test/skeleton-loaded ()
   "The author module loads and its provide marker is registered."

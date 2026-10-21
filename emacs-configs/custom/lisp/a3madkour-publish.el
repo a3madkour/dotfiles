@@ -30,21 +30,14 @@
 (require 'a3madkour-publish-slug)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-id)
+(require 'a3madkour-publish-registry)
 
 (defconst a3madkour-pub/version "0.1.0-bootstrap"
   "Current version of the publish library.")
 
-(defconst a3madkour-pub/sections
-  '("essays"
-    "garden"
-    "research/themes" "research/questions"
-    "works/games" "works/music" "works/poetry"
-    "library/reading" "library/listening" "library/playing" "library/watching"
-    "streams"
-    "recipes"
-    "about")
+(defconst a3madkour-pub/sections (a3madkour-pub-registry/names)
   "Permitted values for the org-side `#+HUGO_SECTION:' keyword.
-See docs/superpowers/specs/2026-05-20-phase-3-access-control-link-semantics-design.md §4.")
+Derived from `a3madkour-pub-registry'; see the phase-3 design spec §4.")
 
 (defun a3madkour-pub/valid-section-p (s)
   "Return non-nil iff S is a string matching one of `a3madkour-pub/sections'."
@@ -155,14 +148,13 @@ publish run (called from `a3madkour-pub/begin-publish').")
   "Clear the per-publish metadata cache.  Idempotent."
   (setq a3madkour-pub--metadata-cache (make-hash-table :test 'equal)))
 
-(defconst a3madkour-pub-deliberate-sections '("essays" "works/poetry")
+(defconst a3madkour-pub-deliberate-sections
+  (a3madkour-pub-registry/sections-with-mode 'deliberate)
   "URL sections published only by `a3-publish-deliberate', never by a living run.
 
 A living run's new-set cannot contain these, so the living orphan sweep must
-not treat their manifest entries as removed.  Must name exactly the keys of
-`a3madkour-pub-deliberate--handlers' (pinned by a test); kept here rather than
-derived from that alist so the sweep does not depend on the deliberate module
-being loaded.")
+not treat their manifest entries as removed.  Derived from the registry's
+`:mode deliberate' entries, so it cannot disagree with the dispatch.")
 
 (defvar a3madkour-pub--publish-run-accumulator
   (make-hash-table :test 'equal)

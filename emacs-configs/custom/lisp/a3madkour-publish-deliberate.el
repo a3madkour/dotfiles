@@ -11,17 +11,25 @@
 ;;; Code:
 
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
 (require 'a3madkour-publish-unpublish)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-essays)
 (require 'a3madkour-publish-poetry)
 
-(defvar a3madkour-pub-deliberate--handlers
-  '((essays       . a3madkour-pub-essays/publish-essay-file)
-    (works/poetry . a3madkour-pub-poetry/publish-poetry-file))
-  "Alist of (SECTION-SYMBOL . HANDLER-FUNCTION).
-Handler signature: (file run &key on-done).")
+(defun a3madkour-pub-deliberate--handler-for (section file)
+  "The deliberate handler for SECTION (FILE is for the message).
+Signal when SECTION is not deliberate in `a3madkour-pub-registry', or
+when its handler is not loaded; both before any run lock is taken."
+  (let ((handler (a3madkour-pub-registry/handler (or section "") 'deliberate)))
+    (unless handler
+      (error "a3madkour-pub-deliberate: no handler registered for section %S \
+\(file: %s)" section file))
+    (unless (fboundp handler)
+      (error "a3madkour-pub-deliberate: handler `%s' for section %s is not \
+loaded (file: %s)" handler section file))
+    handler))
 
 ;;;###autoload
 (defun a3-publish-deliberate (file-or-id)
@@ -33,10 +41,7 @@ sentinel chain completes; finish-publish then fires."
   (interactive "fOrg file or ID: ")
   (let* ((file (a3madkour-pub--resolve-file-or-id file-or-id))
          (section (a3madkour-pub/note-section file))
-         (handler (cdr (assq (intern (or section "")) a3madkour-pub-deliberate--handlers))))
-    (unless handler
-      (error "a3madkour-pub-deliberate: no handler registered for section %S (file: %s)"
-             section file))
+         (handler (a3madkour-pub-deliberate--handler-for section file)))
     (let* ((planned-steps-fn (intern (format "%s/planned-steps" handler)))
            (planned (if (fboundp planned-steps-fn)
                         (funcall planned-steps-fn file)
@@ -105,7 +110,7 @@ manifest is still advanced to `removed' so the state converges."
     (unless parts
       (user-error "a3-unpublish-deliberate: manifest URL %S is malformed" url))
     (let ((section (car parts)))
-      (unless (assq (intern section) a3madkour-pub-deliberate--handlers)
+      (unless (member section a3madkour-pub-deliberate-sections)
         (user-error "a3-unpublish-deliberate: section %s is not deliberate \
 (use publish-living + unmark `#+HUGO_PUBLISH:' instead)" section)))
     (let ((delete-result

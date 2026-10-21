@@ -207,13 +207,6 @@ Body before.
     (should (string-match-p "outputs:" rendered))
     (should (string-match-p "  - { kind: paper" rendered))))
 
-(ert-deftest a3madkour-pub-research--section-to-normalize-sym ()
-  "Section string to normalize symbol conversion."
-  (should (eq 'research-themes
-              (a3madkour-pub-research--section-to-normalize-sym "research/themes")))
-  (should (eq 'research-questions
-              (a3madkour-pub-research--section-to-normalize-sym "research/questions"))))
-
 (ert-deftest a3madkour-pub-research--inject-outputs-non-nil ()
   "inject-outputs sets outputs key when outputs is non-nil."
   (let* ((alist '((title . "T") (status . "active")))
@@ -420,7 +413,7 @@ field — reaches the page as a YAML list."
           (with-temp-file tmp-src (insert "#+title: T\n"))
           (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
                      (lambda (_f)
-                       (list :id "research-id-55" :slug "test-theme" :section "research"
+                       (list :id "research-id-55" :slug "test-theme" :section "research/themes"
                              :state 'live :title "T")))
                     ((symbol-function 'a3madkour-pub/note-url)
                      (lambda (_f) "/research/test-theme/"))

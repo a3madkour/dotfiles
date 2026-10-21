@@ -34,6 +34,7 @@
 ;; died on `cl-defun'.  Requiring it here removes the load-order dependency.
 (require 'cl-lib)
 (require 'a3madkour-publish-keywords)
+(require 'a3madkour-publish-registry)
 ;; The works emitted-field contract is read from the site repo's shared
 ;; vocabulary, not transcribed here.  This module is deliberately a leaf that
 ;; `emacs -Q --batch' can load, so `a3madkour-works-vocab' carries no
@@ -58,14 +59,9 @@ Preserves order of remaining tags."
     (seq-filter (lambda (tag) (not (member tag excl))) tags)))
 
 (defconst a3madkour-pub-frontmatter--known-sections
-  '(garden essays
-    research-themes research-questions
-    works-games works-music works-poetry
-    streams about
-    library-reading library-listening library-playing library-watching
-    recipes)
-  "Closed set of section symbols `normalize' accepts.  Updated as new
-sections are added (none planned beyond this set).")
+  (mapcar #'a3madkour-pub-section/symbol (a3madkour-pub-registry/names))
+  "Closed set of section symbols `normalize' accepts.
+Derived from `a3madkour-pub-registry' (hyphen form of every section).")
 
 (defun a3madkour-pub-frontmatter/normalize (section raw-alist source-file)
   "Normalize RAW-ALIST for SECTION's frontmatter contract.

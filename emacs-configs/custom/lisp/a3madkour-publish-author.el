@@ -19,6 +19,7 @@
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-publish-library)
+(require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-id)
 
@@ -180,7 +181,7 @@ Signal `user-error' if missing or not in `(a3madkour-pub-library/sections)'."
 
 (defun a3madkour-pub-author--default-medium-for (section)
   "Return the default medium string for SECTION (a library section)."
-  (nth 1 (a3madkour-pub-library--config-for section)))
+  (a3madkour-pub-registry/get section :default-medium))
 
 ;; -- a3-library-insert-extras --
 
