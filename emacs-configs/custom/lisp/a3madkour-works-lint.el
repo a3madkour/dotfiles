@@ -5,21 +5,18 @@
 ;; Pre-publish lint for works/games and works/music org sources.  Reports
 ;; org `FILE:LINE: message' strings, mirroring a3madkour-recipe-lint.el.
 ;;
-;; The four enum vocabularies are NOT defined here.  They live in the site
-;; repo at data/works-vocab.json, are read by `a3madkour-works-vocab' and are
-;; shared with tools/check_works_fixtures.py, so the two languages cannot
-;; drift.  A missing or malformed vocabulary is an error, never a skipped
-;; check.
+;; Required keys and enum values are NOT defined here.  They are read from
+;; the site repo's data/sections.json (via `a3madkour-sections'), which
+;; tools/check_works_fixtures.py also checks against, so the two languages
+;; cannot drift.  A missing or malformed contract is an error, never a
+;; skipped check.
 
 ;;; Code:
 
 (require 'cl-lib)
 (require 'org-element)
-;; `a3madkour-works-vocab/list' — the vocabulary reader, which is a separate
-;; module because the frontmatter normalizer needs the same file and sits
-;; upstream of this one (via `a3madkour-publish-poetry'), so it cannot
-;; `require' this module back.
-(require 'a3madkour-works-vocab)
+(require 'a3madkour-sections)
+(require 'a3madkour-publish-registry)
 ;; `a3madkour-pub--extract-id' lives here.  The note ID must be read from the
 ;; file-level `:PROPERTIES: :ID: ... :END:' drawer, which is the documented
 ;; authoring convention (design spec §3.1) and what the handler itself uses
@@ -34,26 +31,6 @@
 
 (defvar a3madkour-works-lint-enabled t
   "When non-nil, the works handler runs this linter before publishing.")
-
-(defvaralias 'a3madkour-works-lint--vocab-cache 'a3madkour-works-vocab--cache
-  "Compatibility alias for the reader's cache, which now lives in
-`a3madkour-works-vocab'.  Kept so callers and tests that rebind the cache by
-its historical name still reach the one real cache.")
-
-(defun a3madkour-works-lint/vocab (key)
-  "Return the list of allowed values for KEY (a string).
-
-A thin accessor over `a3madkour-works-vocab/list'.  The reader moved into its
-own module because the frontmatter normalizer needs the same file for the
-emitted-field sets and cannot `require' this one (it sits upstream of it via
-`a3madkour-publish-poetry')."
-  (a3madkour-works-vocab/list key))
-
-(defconst a3madkour-works-lint--required
-  '((works-games . (status game_kind tagline year))
-    (works-music . (format year)))
-  "Required `#+HUGO_CUSTOM_FRONT_MATTER' keys per section.
-title/date/lastmod/draft come from ox-hugo and are not authored here.")
 
 (defun a3madkour-works-lint--kw (ast name)
   "Value of keyword NAME (upcased) in AST, or nil."
@@ -138,9 +115,9 @@ post-push CI failure into a file:line error."
            (base    (file-name-nondirectory file))
            (section (a3madkour-works-lint--kw ast "HUGO_SECTION"))
            (errs    '()))
-      (when (member section '("works/games" "works/music"))
+      (when (member section (a3madkour-pub-registry/sections-for-handler
+                             'a3madkour-pub-works/publish-works-file))
         (let* ((games-p (string-equal section "works/games"))
-               (sym     (if games-p 'works-games 'works-music))
                (cells   (a3madkour-works-lint--cfm-cells ast))
                ;; Position-robust file-level `:ID:' drawer read, via the SAME
                ;; helper `a3madkour-pub/note-metadata' uses.  Sharing the
@@ -158,19 +135,21 @@ post-push CI failure into a file:line error."
                           (push (format "%s:%d: %s" base (ln k)
                                         (apply #'format fmt args))
                                 errs)))
-            ;; 1 — required keys
-            (dolist (k (cdr (assq sym a3madkour-works-lint--required)))
+            ;; 1 — required keys: the contract's required fields that the
+            ;; author writes (title/date/lastmod/draft are `from: pipeline').
+            (dolist (k (mapcar #'intern
+                               (a3madkour-sections/required-authored section)))
               (unless (alist-get k cells)
                 (push (format "%s:1: missing required key :%s" base k) errs)))
-            ;; 2 — enum membership, against the shared vocabulary
-            (dolist (spec (if games-p
-                              '((status . "game_statuses") (game_kind . "game_kinds"))
-                            '((format . "music_formats"))))
-              (let ((v (val (car spec))))
-                (when v
-                  (let ((allowed (a3madkour-works-lint/vocab (cdr spec))))
-                    (unless (member v allowed)
-                      (add (car spec) ":%s=%S not in %S" (car spec) v allowed))))))
+            ;; 2 — enum membership: every enum field the contract declares.
+            (dolist (cell (a3madkour-sections/fields section))
+              (when (equal (alist-get 'type (cdr cell)) "enum")
+                (let* ((k (intern (car cell)))
+                       (v (val k)))
+                  (when v
+                    (let ((allowed (alist-get 'values (cdr cell))))
+                      (unless (member v allowed)
+                        (add k ":%s=%S not in %S" k v allowed)))))))
             ;; 2b — `year' must be four digits.
             ;;
             ;; Uniquely among the authored fields, `year' had its presence
@@ -257,7 +236,7 @@ carries flat scalars only, and a map-valued key is then silently dropped); %s"
                  ((and url (not kind))
                   (add 'platform_url ":platform_url %S needs a matching :platform_kind" url)))
                 (when kind
-                  (let ((allowed (a3madkour-works-lint/vocab "platform_kinds")))
+                  (let ((allowed (a3madkour-sections/enum section "platform_embed.kind")))
                     (unless (member kind allowed)
                       (add 'platform_kind ":platform_kind=%S not in %S" kind allowed))))))
             ;; 7 — lyrics_poem must have its reciprocal set_to_music

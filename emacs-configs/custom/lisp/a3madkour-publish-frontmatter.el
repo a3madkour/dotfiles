@@ -36,11 +36,6 @@
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-sections)
-;; The works emitted-field contract is read from the site repo's shared
-;; vocabulary, not transcribed here.  This module is deliberately a leaf that
-;; `emacs -Q --batch' can load, so `a3madkour-works-vocab' carries no
-;; load-time dependency of its own (it requires the site-root helper lazily).
-(require 'a3madkour-works-vocab)
 
 (defcustom a3madkour-pub-editorial-tags
   '("TODO" "DONE" "WAIT" "CANCELED" "HOLD" "NOEXPORT" "ATTACH")
@@ -570,29 +565,23 @@ in the per-section normalizer or the handler entry point."
     out))
 
 (defun a3madkour-pub-frontmatter--works-allowed-keys (section)
-  "Every key legal in emitted frontmatter for works SECTION.
+  "Every key legal in emitted frontmatter for works SECTION, as symbols.
 
-Read from the shared vocabulary (`data/works-vocab.json' in the site repo),
-which is the ONE home of this contract — `tools/check_works_fixtures.py'
-builds its `GAME_FIELDS' / `MUSIC_FIELDS' from the same file.
+SECTION is the hyphen-form symbol (`works-games' / `works-music').  Read
+from the site's section contract (data/sections.json), which is the one
+home of this contract: `tools/check_works_fixtures.py' checks pages
+against the same file.  Fails closed: a missing or malformed contract
+signals, so a works publish aborts rather than emitting unfiltered
+frontmatter (ox-hugo's own `author'/`slug' would reach the page).
 
-This used to be two elisp defconsts transcribing the Python sets, plus a
-third transcription in the tests, and the tests compared copy 1 against
-copy 3 (both elisp), so a key added on the Python side left every elisp copy
-stale and green.  The filter below then dropped the new field out of every
-published page with no error at any layer, which is strictly worse than the
-unknown-field CI failure the filter exists to prevent.  Reading the contract
-is what makes that impossible rather than merely unlikely.
-
-Fails closed: a missing or malformed vocabulary signals, so a works publish
-aborts rather than emitting unfiltered frontmatter.
-
-The two flat authoring keys `platform_kind' / `platform_url' are deliberately
-NOT in the contract: they are inputs the music normalizer folds into
-`platform_embed', and filtering them out is what keeps them off the page.
-`tracks' IS in it although the handler injects it after `normalize' — the set
-is the contract, not a record of who writes each key."
-  (a3madkour-works-vocab/emitted-keys section))
+`platform_kind' / `platform_url' are deliberately NOT in the contract:
+they are inputs the music normalizer folds into `platform_embed', and
+filtering them out is what keeps them off the page.  `tracks' IS in it
+although the handler injects it after `normalize' — the set is the
+contract, not a record of who writes each key."
+  (mapcar #'intern
+          (a3madkour-sections/emitted-keys
+           (a3madkour-pub-section/from-symbol section))))
 
 (defconst a3madkour-pub-frontmatter--works-comma-keys
   '(collaborators tech_stack made_with)

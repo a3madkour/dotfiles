@@ -1,47 +1,15 @@
 ;;; a3madkour-works-lint-test.el --- tests for works pre-publish lint  -*- lexical-binding: t; -*-
 (require 'ert)
 (require 'a3madkour-works-lint)
-;; `a3madkour-works-vocab-test--json' — the one vocabulary fixture, shared so
+;; `a3madkour-sections-test--json' — the one vocabulary fixture, shared so
 ;; the works test files do not each carry their own literal copy.
-(require 'a3madkour-works-vocab-fixture)
+(require 'a3madkour-sections-fixture)
 
 (defmacro a3madkour-works-lint-test--with-vocab (json &rest body)
-  "Run BODY with a temp site root whose data/works-vocab.json holds JSON.
-When JSON is nil, no vocabulary file is written."
+  "Run BODY over a temp site root whose data/sections.json holds JSON.
+When JSON is nil, no contract file is written."
   (declare (indent 1))
-  `(let* ((a3madkour-works-lint--vocab-cache nil)
-          (root (make-temp-file "a3-works-vocab" t)))
-     (unwind-protect
-         (progn
-           (when ,json
-             (make-directory (expand-file-name "data" root) t)
-             (with-temp-file (expand-file-name "data/works-vocab.json" root)
-               (insert ,json)))
-           (cl-letf (((symbol-function 'a3madkour-pub-yaml/site-root)
-                      (lambda () root)))
-             ,@body))
-       (delete-directory root t))))
-
-(ert-deftest a3madkour-works-lint--vocab-reads-file ()
-  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
-    (should (member "playable" (a3madkour-works-lint/vocab "game_statuses")))
-    (should (member "jam" (a3madkour-works-lint/vocab "game_kinds")))))
-
-(ert-deftest a3madkour-works-lint--vocab-fails-closed-when-missing ()
-  (a3madkour-works-lint-test--with-vocab nil
-    (should-error (a3madkour-works-lint/vocab "game_statuses"))))
-
-(ert-deftest a3madkour-works-lint--vocab-fails-closed-when-malformed ()
-  (a3madkour-works-lint-test--with-vocab "{ not json"
-    (should-error (a3madkour-works-lint/vocab "game_statuses"))))
-
-(ert-deftest a3madkour-works-lint--vocab-fails-closed-on-missing-key ()
-  (a3madkour-works-lint-test--with-vocab "{\"game_statuses\":[\"playable\"]}"
-    (should-error (a3madkour-works-lint/vocab "game_kinds"))))
-
-(ert-deftest a3madkour-works-lint--vocab-fails-closed-on-unknown-key ()
-  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
-    (should-error (a3madkour-works-lint/vocab "not_a_real_key"))))
+  `(a3madkour-sections-test--with-root ,json ,@body))
 
 ;;; lint-file rule tests
 
@@ -51,7 +19,7 @@ When JSON is nil, no vocabulary file is written."
     (with-temp-file f (insert text)) f))
 
 (defvaralias 'a3madkour-works-lint-test--vocab
-  'a3madkour-works-vocab-test--json
+  'a3madkour-sections-test--json
   "The shared vocabulary fixture, which now also carries the emitted-field
 sets the frontmatter normalizer reads.  Aliased rather than re-written here:
 a second literal would be a second thing to keep in step.")
@@ -326,7 +294,7 @@ declared asset genuinely exists, so a correct reader finds it."
 ;;
 ;; The brief's Step 1 test bodies do not wrap these in
 ;; `a3madkour-works-lint-test--with-vocab', relying on the real
-;; `a3madkour-pub-yaml/site-root' to resolve `data/works-vocab.json' (rule 2,
+;; `a3madkour-pub-yaml/site-root' to resolve `data/sections.json' (rule 2,
 ;; the `format' enum check, runs before the new symmetry rule and needs the
 ;; vocab file regardless of what the symmetry rule tests).  That works when
 ;; poking the function from a live Emacs pointed at the real site checkout,
@@ -487,3 +455,65 @@ declared asset genuinely exists, so a correct reader finds it."
 
 (provide 'a3madkour-works-lint-test)
 ;;; a3madkour-works-lint-test.el ends here
+
+;;; Section registry Task 6: rules read data/sections.json
+
+(ert-deftest a3madkour-works-lint--enum-rule-follows-the-contract ()
+  (a3madkour-works-lint-test--with-vocab
+      (a3madkour-sections-test/mutate "\"playable\"" "\"shippable\"")
+    (dolist (case '(("playable" . t) ("shippable" . nil)))
+      (let ((f (a3madkour-works-lint-test--file
+                (format "#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status %s :game_kind jam :year 2026 :tagline T
+" (car case)))))
+        (unwind-protect
+            (let ((flagged (cl-some (lambda (e) (string-match-p ":status=" e))
+                                    (a3madkour-works-lint/lint-file f))))
+              (should (eq (and flagged t) (cdr case))))
+          (delete-file f))))))
+
+(ert-deftest a3madkour-works-lint--checks-every-contract-enum ()
+  "Intended behaviour change: `tile_size' is an enum in the contract, so
+the lint now checks it (only the site linter did before)."
+  (a3madkour-works-lint-test--with-vocab a3madkour-works-lint-test--vocab
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026 :tagline T
+#+HUGO_CUSTOM_FRONT_MATTER: :tile_size huge
+")))
+      (unwind-protect
+          (should (cl-some (lambda (e) (string-match-p ":tile_size=\"huge\" not in" e))
+                           (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))
+
+(ert-deftest a3madkour-works-lint--required-rule-follows-the-contract ()
+  (dolist (case (list (cons a3madkour-works-lint-test--vocab t)
+                      (cons (a3madkour-sections-test/mutate
+                             "\"tagline\": {\"type\": \"text\", \"required\": true}"
+                             "\"tagline\": {\"type\": \"text\"}")
+                            nil)))
+    (a3madkour-works-lint-test--with-vocab (car case)
+      (let ((f (a3madkour-works-lint-test--file "#+TITLE: G
+#+HUGO_SECTION: works/games
+#+HUGO_CUSTOM_FRONT_MATTER: :status playable :game_kind jam :year 2026
+")))
+        (unwind-protect
+            (should (eq (and (cl-some (lambda (e) (string-match-p "missing required key :tagline" e))
+                                      (a3madkour-works-lint/lint-file f))
+                             t)
+                        (cdr case)))
+          (delete-file f))))))
+
+(ert-deftest a3madkour-works-lint--platform-kind-follows-the-contract ()
+  (a3madkour-works-lint-test--with-vocab
+      (a3madkour-sections-test/mutate "\"soundcloud\"" "\"mixcloud\"")
+    (let ((f (a3madkour-works-lint-test--file "#+TITLE: M
+#+HUGO_SECTION: works/music
+#+HUGO_CUSTOM_FRONT_MATTER: :format album :year 2026
+#+HUGO_CUSTOM_FRONT_MATTER: :platform_kind mixcloud :platform_url https://example.com/x
+")))
+      (unwind-protect
+          (should-not (cl-some (lambda (e) (string-match-p "platform_kind=" e))
+                               (a3madkour-works-lint/lint-file f)))
+        (delete-file f)))))

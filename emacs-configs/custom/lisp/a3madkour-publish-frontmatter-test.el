@@ -5,11 +5,11 @@
 
 (require 'ert)
 (require 'a3madkour-publish-frontmatter)
-;; `a3madkour-works-vocab-test--with-root' / `--json': the one vocabulary
+;; `a3madkour-sections-test--with-root' / `--json': the one vocabulary
 ;; fixture, shared with the works lint + handler test files.  The works
 ;; normalizer reads its allowed-key contract from that file, so every
 ;; works normalize call below needs a site root that carries one.
-(require 'a3madkour-works-vocab-fixture)
+(require 'a3madkour-sections-fixture)
 (require 'a3madkour-sections-fixture)
 
 (ert-deftest a3madkour-pub-fm-test/normalize-returns-alist-with-section ()
@@ -25,9 +25,9 @@ Per-section transforms land in B.1+; B.0 ships pass-through behavior."
   "B.0 — `normalize' dispatches without error for every section enum value.
 
 Wrapped in the vocabulary fixture because works-games / works-music read
-their allowed-key contract from `data/works-vocab.json' and fail closed
+their allowed-key contract from `data/sections.json' and fail closed
 without it."
-  (a3madkour-works-vocab-test--with-root a3madkour-works-vocab-test--json
+  (a3madkour-sections-test--with-root a3madkour-sections-test--json
     (dolist (section '(garden essays research-themes research-questions
                        works-games works-music works-poetry
                        streams about
@@ -850,7 +850,7 @@ must read it from the source file and coerce to int."
 ;;; --- works/games + works/music -------------------------------------------
 ;;
 ;; Every normalize call below goes through the shared vocabulary, because the
-;; emitted-field contract lives there (`data/works-vocab.json' in the site
+;; emitted-field contract lives there (`data/sections.json' in the site
 ;; repo) and no longer in an elisp defconst.  The macro supplies a site root
 ;; carrying the fixture, the way production supplies one.
 ;;
@@ -865,7 +865,7 @@ must read it from the source file and coerce to int."
 (defmacro a3madkour-pub-frontmatter-test--with-works-vocab (&rest body)
   "Run BODY with a temp site root carrying the shared vocabulary fixture."
   (declare (indent 0))
-  `(a3madkour-works-vocab-test--with-root a3madkour-works-vocab-test--json
+  `(a3madkour-sections-test--with-root a3madkour-sections-test--json
      ,@body))
 
 (ert-deftest a3madkour-pub-frontmatter--works-games-comma-vs-whitespace ()
@@ -1063,8 +1063,7 @@ never-committed works note does not churn its date to today."
            (out (a3madkour-pub-frontmatter/normalize
                  'works-games input "/tmp/a3-works-no-such-file.org")))
       (should (equal (a3madkour-pub-frontmatter-test--emitted-key-names out)
-                     (sort (mapcar #'symbol-name
-                                   (a3madkour-works-vocab/emitted-keys 'works-games))
+                     (sort (a3madkour-sections/emitted-keys "works/games")
                            #'string<))))))
 
 (ert-deftest a3madkour-pub-frontmatter--works-music-keeps-exactly-the-vocabulary-keys ()
@@ -1084,19 +1083,17 @@ never-committed works note does not churn its date to today."
            (out (a3madkour-pub-frontmatter/normalize
                  'works-music input "/tmp/a3-works-no-such-file.org")))
       (should (equal (a3madkour-pub-frontmatter-test--emitted-key-names out)
-                     (sort (mapcar #'symbol-name
-                                   (remq 'platform_embed
-                                         (a3madkour-works-vocab/emitted-keys
-                                          'works-music)))
+                     (sort (remove "platform_embed"
+                                   (a3madkour-sections/emitted-keys "works/music"))
                            #'string<))))))
 
 ;; A key the vocabulary does not declare is filtered out, and a key it DOES
 ;; declare survives — asserted against a vocabulary the test mutates, so the
 ;; filter provably consults the file rather than a compiled-in list.
 (ert-deftest a3madkour-pub-frontmatter--works-filter-follows-the-vocabulary ()
-  (a3madkour-works-vocab-test--with-root
+  (a3madkour-sections-test--with-root
       (replace-regexp-in-string
-       "\"length\"" "\"playtime\"" a3madkour-works-vocab-test--json)
+       "\"length\"" "\"playtime\"" a3madkour-sections-test--json)
     (let ((out (a3madkour-pub-frontmatter/normalize
                 'works-games
                 '((title . "G") (year . "2026")
@@ -1108,7 +1105,7 @@ never-committed works note does not churn its date to today."
 (ert-deftest a3madkour-pub-frontmatter--works-fails-closed-without-a-vocabulary ()
   "No vocabulary means no publish: emitting unfiltered frontmatter would put
 ox-hugo's `author'/`slug' on the page and fail the site linter."
-  (a3madkour-works-vocab-test--with-root nil
+  (a3madkour-sections-test--with-root nil
     (should-error (a3madkour-pub-frontmatter/normalize
                    'works-games '((title . "G")) "/tmp/g.org"))
     (should-error (a3madkour-pub-frontmatter/normalize
