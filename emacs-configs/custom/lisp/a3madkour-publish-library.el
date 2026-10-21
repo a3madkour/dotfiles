@@ -262,8 +262,36 @@ Matches the shape of existing fixtures under data/*.yaml.")
 Single-quoted YAML: the only escape is `'' → `'''."
   (concat "'" (replace-regexp-in-string "'" "''" val) "'"))
 
-(defun a3madkour-pub-library--render-scalar (val)
+(defconst a3madkour-pub-library--non-string-scalar-re
+  (concat "\\`\\(?:\\'"
+          "\\|[+-]?\\(?:[0-9][0-9_]*\\(?:\\.[0-9_]*\\)?\\|\\.[0-9]+\\)"
+          "\\(?:[eE][+-]?[0-9]+\\)?"
+          "\\|0[xXoO][0-9a-fA-F_]+"
+          "\\|[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}"
+          "\\|~\\|[.][iI][nN][fF]\\|[.][nN][aA][nN]"
+          "\\|\\(?:true\\|false\\|null\\|yes\\|no\\|on\\|off\\)"
+          "\\)\\'")
+  "Plain strings that YAML or `parse_scalar' read as a non-string.
+Empty, numbers, dates, booleans and null spellings.  Matched
+case-insensitively by `--reads-as-non-string-p'.")
+
+(defun a3madkour-pub-library--reads-as-non-string-p (val)
+  "Non-nil when plain VAL would be read back as a non-string."
+  (let ((case-fold-search t))
+    (string-match-p a3madkour-pub-library--non-string-scalar-re val)))
+
+(defun a3madkour-pub-library--field-type (section path)
+  "Contract type string of field PATH in library SECTION.
+Signals when PATH is not in the contract (the emitter writes only
+contract keys, so that is a bug)."
+  (alist-get 'type (a3madkour-sections/field section path)))
+
+(defun a3madkour-pub-library--render-scalar (val &optional type)
   "Render a scalar VAL for inclusion in YAML.
+
+TYPE is the contract type of the field.  A string of type text, ref
+or enum that YAML would read as a non-string (number, date, boolean,
+null, empty) is single-quoted.  With no TYPE the output is unchanged.
 
 Strings that contain YAML-sensitive characters (`:' `#'), look like URLs,
 or begin with any YAML indicator character (`[' `]' `{' `}' `>' `|' `*'
@@ -277,6 +305,9 @@ natural types."
    ((numberp val) (number-to-string val))
    ((stringp val)
     (cond
+     ((and (member type '("text" "ref" "enum"))
+           (a3madkour-pub-library--reads-as-non-string-p val))
+      (a3madkour-pub-library--yaml-single-quote val))
      ;; YYYY-MM-DD: emit unquoted so PyYAML loads as datetime.date.
      ((string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$" val) val)
      ;; URLs: single-quote (escape embedded `'').
@@ -298,20 +329,25 @@ natural types."
   "Render a list of tag strings as a YAML flow-sequence."
   (concat "[" (mapconcat #'identity tags ", ") "]"))
 
-(defun a3madkour-pub-library--render-extras (extras indent)
-  "Render an EXTRAS plist as a nested YAML block at INDENT (a string)."
+(defun a3madkour-pub-library--render-extras (extras indent &optional section)
+  "Render an EXTRAS plist as a nested YAML block at INDENT (a string).
+SECTION, when given, supplies each value's contract type."
   (let ((lines '()))
     ;; Render in plist-iteration order (matches insertion order from
     ;; the per-medium extras table — already deterministic).
     (cl-loop for (k v) on extras by #'cddr
              for name = (substring (symbol-name k) 1)
              do (push (format "%s%s: %s" indent name
-                              (a3madkour-pub-library--render-scalar v))
+                              (a3madkour-pub-library--render-scalar
+                              v (and section
+                                     (a3madkour-pub-library--field-type
+                                      section (concat "extras." name)))))
                       lines))
     (mapconcat #'identity (nreverse lines) "\n")))
 
-(defun a3madkour-pub-library--render-row (row)
-  "Render one ROW plist as a YAML list item (`  - key: value' style)."
+(defun a3madkour-pub-library--render-row (row &optional section)
+  "Render one ROW plist as a YAML list item (`  - key: value' style).
+SECTION, when given, supplies each value's contract type."
   (let ((lines '())
         (first t))
     (dolist (key a3madkour-pub-library--yaml-key-order)
@@ -326,22 +362,28 @@ natural types."
                           (a3madkour-pub-library--render-tags val)))
                  ((eq key :extras)
                   (format "%s%s:\n%s" prefix name
-                          (a3madkour-pub-library--render-extras val "      ")))
+                          (a3madkour-pub-library--render-extras val "      " section)))
                  (t
                   (format "%s%s: %s" prefix name
-                          (a3madkour-pub-library--render-scalar val))))))
+                          (a3madkour-pub-library--render-scalar
+                           val (and section
+                                    (a3madkour-pub-library--field-type
+                                     section name))))))))
           (push line lines)
           (setq first nil))))
     (mapconcat #'identity (nreverse lines) "\n")))
 
-(defun a3madkour-pub-library--render-library-yaml (rows source-file)
+(defun a3madkour-pub-library--render-library-yaml (rows source-file
+                                                    &optional section)
   "Render ROWS (a list of plists) into a complete YAML document.
-SOURCE-FILE is recorded in the comment header for provenance."
+SOURCE-FILE is recorded in the comment header for provenance.  SECTION
+\(e.g. \"library/reading\") types the values from the site contract."
   (concat
    (format
     "# Generated by a3madkour-publish-library from %s.\n# Manual edits will be overwritten on next publish-living run.\nitems:\n"
     (file-name-nondirectory source-file))
-   (mapconcat #'a3madkour-pub-library--render-row rows "\n")
+   (mapconcat (lambda (row) (a3madkour-pub-library--render-row row section))
+              rows "\n")
    "\n"))
 
 (defun a3madkour-pub-library--write-if-different (path content)
@@ -396,7 +438,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                         (puthash slug t seen-slugs)
                         (push row rows)))))))))
           (let ((yaml (a3madkour-pub-library--render-library-yaml
-                       (nreverse rows) file)))
+                       (nreverse rows) file section)))
             (a3madkour-pub-library--write-if-different out-path yaml)))
         (when on-done (funcall on-done 'ok)))
     (error

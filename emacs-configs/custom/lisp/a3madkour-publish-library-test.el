@@ -712,6 +712,113 @@ from the site's section contract."
     (should (member "dnf" (nth 3 (a3madkour-pub-library--config-for
                                   "library/reading"))))))
 
+(defun a3madkour-pub-library-test--yaml (section row)
+  "Render ROW (plist) as a SECTION yaml document."
+  (a3madkour-pub-library--render-library-yaml (list row) "x.org" section))
+
+(defun a3madkour-pub-library-test--row (&rest props)
+  "A minimal valid row plist with PROPS overriding the defaults."
+  (let ((row (list :slug "x" :title "Dune" :creator "Y" :year 1949
+                   :last_modified "2026-05-01" :tags '("a"))))
+    (while props
+      (setq row (plist-put row (pop props) (pop props))))
+    row))
+
+(ert-deftest a3madkour-pub-library--render-quotes-number-looking-text ()
+  "Text-typed strings that YAML reads as non-strings are single-quoted."
+  (a3madkour-sections-test--with-real-site
+    (should (string-match-p
+             "title: '1984'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :title "1984"))))
+    (should (string-match-p
+             "creator: '21'"
+             (a3madkour-pub-library-test--yaml
+              "library/listening"
+              (a3madkour-pub-library-test--row :creator "21"))))
+    (should (string-match-p
+             "title: '1917'"
+             (a3madkour-pub-library-test--yaml
+              "library/watching"
+              (a3madkour-pub-library-test--row :title "1917"))))
+    (should (string-match-p
+             "title: 'true'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :title "true"))))
+    (should (string-match-p
+             "title: '-3.5'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :title "-3.5"))))
+    (should (string-match-p
+             "title: 'null'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :title "null"))))
+    (should (string-match-p
+             "title: '2026-05-01'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :title "2026-05-01"))))))
+
+(ert-deftest a3madkour-pub-library--render-leaves-ordinary-text-unquoted ()
+  (a3madkour-sections-test--with-real-site
+    (should (string-match-p
+             "title: Dune$"
+             (a3madkour-pub-library-test--yaml
+              "library/reading" (a3madkour-pub-library-test--row))))))
+
+(ert-deftest a3madkour-pub-library--render-int-and-date-fields-stay-bare ()
+  "int/date fields are never quoted, number or digit string alike."
+  (a3madkour-sections-test--with-real-site
+    (should (string-match-p
+             "year: 1949"
+             (a3madkour-pub-library-test--yaml
+              "library/reading" (a3madkour-pub-library-test--row))))
+    (should (string-match-p
+             "year: 1949$"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row :year "1949"))))
+    (should (string-match-p
+             "last_modified: 2026-05-01$"
+             (a3madkour-pub-library-test--yaml
+              "library/reading" (a3madkour-pub-library-test--row))))))
+
+(ert-deftest a3madkour-pub-library--render-extras-typed-by-contract ()
+  "extras.isbn (text) quotes digit strings; int extras stay bare."
+  (a3madkour-sections-test--with-real-site
+    (should (string-match-p
+             "isbn: '9780451524935'"
+             (a3madkour-pub-library-test--yaml
+              "library/reading"
+              (a3madkour-pub-library-test--row
+               :extras (list :isbn "9780451524935")))))
+    (should (string-match-p
+             "runtime_min: 120$"
+             (a3madkour-pub-library-test--yaml
+              "library/watching"
+              (a3madkour-pub-library-test--row
+               :extras (list :runtime_min 120)))))
+    (should (string-match-p
+             "runtime_min: 120$"
+             (a3madkour-pub-library-test--yaml
+              "library/watching"
+              (a3madkour-pub-library-test--row
+               :extras (list :runtime_min "120")))))))
+
+(ert-deftest a3madkour-pub-library--render-unknown-key-signals ()
+  "A key outside the contract is a bug, not something to swallow."
+  (a3madkour-sections-test--with-real-site
+    (let ((err (should-error
+                (a3madkour-pub-library-test--yaml
+                 "library/reading"
+                 (a3madkour-pub-library-test--row
+                  :extras (list :bogus_key "1"))))))
+      (should (string-match-p "extras.bogus_key" (error-message-string err))))))
+
 (provide 'a3madkour-publish-library-test)
 
 ;;; a3madkour-publish-library-test.el ends here
