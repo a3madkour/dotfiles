@@ -10,6 +10,7 @@
 ;; normalizer reads its allowed-key contract from that file, so every
 ;; works normalize call below needs a site root that carries one.
 (require 'a3madkour-works-vocab-fixture)
+(require 'a3madkour-sections-fixture)
 
 (ert-deftest a3madkour-pub-fm-test/normalize-returns-alist-with-section ()
   "B.0 — `normalize' returns the input alist annotated with section symbol.
@@ -1211,6 +1212,64 @@ demands a dict."
                   (platform_embed . "{ kind: bandcamp, url: \"https://x\" }"))
                 "/tmp/a3-works-no-such-file.org")))
       (should-not (assq 'platform_embed out)))))
+
+;;; Section registry Task 5: the filters read data/sections.json
+
+(ert-deftest a3madkour-pub-frontmatter--essays-filter-follows-the-contract ()
+  "Rename `hero' in the contract: the old name is dropped, the new kept."
+  (a3madkour-sections-test--with-root
+      (a3madkour-sections-test/mutate "\"hero\"" "\"hero_image\"")
+    (let* ((tmp (make-temp-file "essays-norm-" nil ".org"))
+           (out (unwind-protect
+                    (progn
+                      (with-temp-file tmp
+                        (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+                      (a3madkour-pub-frontmatter/normalize
+                       'essays '((title . "x") (date . "2026-04-12")
+                                 (hero . "h.png") (hero_image . "i.png"))
+                       tmp))
+                  (delete-file tmp))))
+      (should-not (assq 'hero out))
+      (should (equal (alist-get 'hero_image out) "i.png")))))
+
+(ert-deftest a3madkour-pub-frontmatter--theme-keeps-only-its-contract-fields ()
+  "Themes drop every key outside the contract; `theme' only because the
+contract lacks it: rename `garden_topic_ref' to `theme' and it survives."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (let ((raw '((title . "T") (description . "x") (status . "active")
+                 (slug . "t") (theme . "other") (garden_topic_ref . "g"))))
+      (let ((out (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org")))
+        (should-not (assq 'slug out))
+        (should-not (assq 'theme out))
+        (should (equal (alist-get 'garden_topic_ref out) "g")))
+      (a3madkour-sections-test--with-root
+          (a3madkour-sections-test/mutate "\"garden_topic_ref\"" "\"theme\"")
+        (let ((out (a3madkour-pub-frontmatter/normalize 'research-themes raw "/tmp/x.org")))
+          (should (equal (alist-get 'theme out) "other"))
+          (should-not (assq 'garden_topic_ref out)))))))
+
+(ert-deftest a3madkour-pub-frontmatter--research-status-enum-follows-the-contract ()
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2026-05-30"))
+            ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+             (lambda (_) "2026-05-30")))
+    (a3madkour-sections-test--with-root
+        (a3madkour-sections-test/mutate "\"dormant\"" "\"paused\"")
+      (dolist (section '(research-themes research-questions))
+        (let ((warnings '()))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args) (push (apply #'format fmt args) warnings))))
+            (a3madkour-pub-frontmatter/normalize
+             section '((title . "T") (description . "x") (status . "paused")) "/tmp/x.org")
+            (should-not (cl-some (lambda (w) (string-match-p "status=" w)) warnings))
+            (a3madkour-pub-frontmatter/normalize
+             section '((title . "T") (description . "x") (status . "dormant")) "/tmp/x.org")
+            (should (cl-some (lambda (w) (string-match-p "status=\"dormant\"" w))
+                             warnings))))))))
+
 
 (provide 'a3madkour-publish-frontmatter-test)
 ;;; a3madkour-publish-frontmatter-test.el ends here

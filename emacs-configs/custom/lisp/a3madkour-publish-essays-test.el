@@ -5,6 +5,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-essays)
+(require 'a3madkour-sections-fixture)
 (require 'a3madkour-publish-async)
 
 ;; -- B.4 Task 4: has_* body scanner --

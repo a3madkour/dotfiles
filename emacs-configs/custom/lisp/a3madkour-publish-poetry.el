@@ -23,6 +23,7 @@
 (require 'a3madkour-publish-assets)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-keywords)
+(require 'a3madkour-sections)
 
 (defcustom a3madkour-pub-poetry/section-dir-name "works/poetry"
   "Relative content directory under `content/' for poetry bundles.
@@ -162,19 +163,10 @@ Returns a plist:
              :warnings warnings
              :error (error-message-string err))))))
 
-(defconst a3madkour-pub-poetry--required-keys
-  '(title date lastmod draft lines)
-  "5 required frontmatter keys per check_works_fixtures.py poetry contract.")
-
-(defconst a3madkour-pub-poetry--optional-keys
-  '(tags collection set_to_music summary audio_url source_stream
-         tile_size featured hero)
-  "9 optional frontmatter keys per spec §Authoring + check_works_fixtures.py.")
-
 (defun a3madkour-pub-poetry--allowed-keys ()
-  "All keys allowed in the emitted poetry frontmatter."
-  (append a3madkour-pub-poetry--required-keys
-          a3madkour-pub-poetry--optional-keys))
+  "All keys allowed in emitted poetry frontmatter, as symbols.
+Read from the site's section contract (data/sections.json, works/poetry)."
+  (mapcar #'intern (a3madkour-sections/emitted-keys "works/poetry")))
 
 (defun a3madkour-pub-frontmatter--normalize-works-poetry (raw-alist source-file)
   "Tier 8.2: works-poetry frontmatter normalizer.

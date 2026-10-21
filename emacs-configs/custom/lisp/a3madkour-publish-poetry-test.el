@@ -5,6 +5,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'a3madkour-publish-poetry)
+(require 'a3madkour-sections-fixture)
 (require 'a3madkour-publish-deliberate)
 
 (ert-deftest a3madkour-pub-poetry-test/module-provides ()
@@ -307,6 +308,18 @@ or hugo — pure in-process emacs."
                  "\"The \\\"x\\\" y\""))
   (should (equal (a3madkour-pub-poetry--render-yaml-value '("a\"b"))
                  "[\"a\\\"b\"]")))
+
+(ert-deftest a3madkour-pub-poetry-test/allowed-keys-follow-the-contract ()
+  (a3madkour-sections-test--with-root
+      (a3madkour-sections-test/mutate "\"collection\"" "\"cycle\"")
+    (let ((out (a3madkour-pub-frontmatter/normalize
+                'works-poetry
+                '((title . "P") (date . "2026-06-12") (lastmod . "2026-06-12")
+                  (collection . "old") (cycle . "new"))
+                nil)))
+      (should-not (assq 'collection out))
+      (should (equal (alist-get 'cycle out) "new")))))
+
 
 (provide 'a3madkour-publish-poetry-test)
 

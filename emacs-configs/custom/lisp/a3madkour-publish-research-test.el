@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'a3madkour-publish-research)
+(require 'a3madkour-sections-fixture)
 (require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-research--module-loads ()

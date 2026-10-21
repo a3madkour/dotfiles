@@ -35,6 +35,7 @@
 (require 'cl-lib)
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-publish-registry)
+(require 'a3madkour-sections)
 ;; The works emitted-field contract is read from the site repo's shared
 ;; vocabulary, not transcribed here.  This module is deliberately a leaf that
 ;; `emacs -Q --batch' can load, so `a3madkour-works-vocab' carries no
@@ -228,16 +229,6 @@ returning an empty string that the downstream linter rejects."
         (nonempty (a3madkour-pub-history/filesystem-mtime-of-file file))
         (format-time-string "%Y-%m-%d"))))
 
-(defconst a3madkour-pub-frontmatter--essay-required-keys
-  '(title date lastmod draft summary tags series series_order toc
-          has_sidenotes has_citations has_footnotes has_math
-          has_widgets has_video_sync)
-  "14 required frontmatter keys per check_fixtures.py essay contract.")
-
-(defconst a3madkour-pub-frontmatter--essay-optional-keys
-  '(tile_size featured hero source_stream)
-  "4 optional frontmatter keys per CLAUDE.md essay contract.")
-
 (defun a3madkour-pub-frontmatter--coerce-bool (v)
   "Coerce V (a parsed frontmatter value) to a boolean t/nil (P2.9).
 nil, `:nil', and the string forms false/nil/no/off/0/\"\" (any case, trimmed)
@@ -262,8 +253,7 @@ Pipeline:
   4. Resolve lastmod via last-modified-cascade (drawer → keyword → git → fs → today).
   5. Default all 6 has_* flags to nil; Tasks 4-5 add real scan + override merge.
 Returns the normalized alist."
-  (let* ((allowed (append a3madkour-pub-frontmatter--essay-required-keys
-                          a3madkour-pub-frontmatter--essay-optional-keys))
+  (let* ((allowed (mapcar #'intern (a3madkour-sections/emitted-keys "essays")))
          (out (cl-remove-if-not (lambda (cell) (memq (car cell) allowed))
                                 (copy-alist raw-alist))))
     ;; draft default false
@@ -453,17 +443,6 @@ Hygiene rules (check_garden_fixtures.py compliance):
             (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
     out))
 
-(defconst a3madkour-pub-frontmatter--research-statuses
-  '("active" "dormant" "answered")
-  "Allowed status values for research themes + questions
-(per check_research_fixtures.py STATUSES).")
-
-(defconst a3madkour-pub-frontmatter--theme-forbidden
-  '(parent_question theme)
-  "Frontmatter keys forbidden on themes (per check_research_fixtures.py
-THEME_FORBIDDEN).  Dropped silently in the normalizer; site linter
-is the hard gate.")
-
 (defun a3madkour-pub-frontmatter--coerce-weight (raw file)
   "Coerce RAW weight value to int.  String '08' must not octal-trap
 (per [[hugo-int-octal-gotcha]]).  Non-numeric raw → WARN + nil."
@@ -502,10 +481,11 @@ Contract:
   "Normalize a research-question RAW alist.  Returns the cleaned alist."
   (let ((out (a3madkour-pub-frontmatter/research-normalize-common raw file)))
     ;; Status enum check.
-    (let ((status (alist-get 'status out)))
-      (unless (member status a3madkour-pub-frontmatter--research-statuses)
-        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S" status
-                 a3madkour-pub-frontmatter--research-statuses)))
+    (let ((status (alist-get 'status out))
+          (statuses (a3madkour-sections/enum "research/questions" "status")))
+      (unless (member status statuses)
+        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S"
+                            status statuses)))
     ;; Weight coercion — drop key if coerce returns nil (matches theme post-T5 fix).
     (when-let ((raw-w (alist-get 'weight out)))
       (let ((coerced (a3madkour-pub-frontmatter--coerce-weight raw-w file)))
@@ -527,13 +507,19 @@ Contract:
     out))
 
 (defun a3madkour-pub-frontmatter--normalize-research-theme (raw file)
-  "Normalize a research-theme RAW alist.  Returns the cleaned alist."
-  (let ((out (a3madkour-pub-frontmatter/research-normalize-common raw file)))
+  "Normalize a research-theme RAW alist.  Returns the cleaned alist.
+Keys outside the themes contract (data/sections.json) are dropped
+silently -- `theme' and `parent_question' among them -- and the site
+linter stays the hard gate."
+  (let ((out (a3madkour-pub-frontmatter/research-normalize-common raw file))
+        (statuses (a3madkour-sections/enum "research/themes" "status"))
+        (legal (mapcar #'intern
+                       (a3madkour-sections/emitted-keys "research/themes"))))
     ;; Status enum check (WARN-don't-fail).
     (let ((status (alist-get 'status out)))
-      (unless (member status a3madkour-pub-frontmatter--research-statuses)
-        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S" status
-                 a3madkour-pub-frontmatter--research-statuses)))
+      (unless (member status statuses)
+        (a3madkour-pub/warn "frontmatter" file "status=%S not in %S"
+                            status statuses)))
     ;; Weight coercion to int (octal-safe).  Drop the key when coercion
     ;; returns nil (non-numeric raw) rather than leaving (weight . nil)
     ;; in the alist, which would serialize as weight: null and fail the
@@ -543,10 +529,7 @@ Contract:
         (if coerced
             (setf (alist-get 'weight out) coerced)
           (setq out (assq-delete-all 'weight out)))))
-    ;; Drop forbidden keys silently.
-    (dolist (key a3madkour-pub-frontmatter--theme-forbidden)
-      (setq out (assq-delete-all key out)))
-    out))
+    (cl-remove-if-not (lambda (cell) (memq (car cell) legal)) out)))
 
 (defun a3madkour-pub-frontmatter/research-normalize-common (raw source-file)
   "Apply common-across-both-research-types normalization to RAW alist.
