@@ -35,6 +35,7 @@ export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/gem/ruby/3.3.0/bin/"
 export PATH="$PATH:$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
 export EDITOR="emacsclient"
+export ORG_MATH_LINT_CONFIG="$HOME/Sync/Workspace/org-math-lint/config.toml"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
