@@ -494,3 +494,144 @@ when caller passes the same answer to y-or-n-p)."
 
 (provide 'a3madkour-publish-author-test)
 ;;; a3madkour-publish-author-test.el ends here
+
+;; -- Section registry Tasks 8-9: prompt stubs over a temp site --
+
+(defmacro a3madkour-pub-author-test--with-site (&rest body)
+  "Run BODY in an org temp buffer over a temp site root carrying the
+sections fixture (resolved through `a3madkour-pub/site-data-dir')."
+  (declare (indent 0))
+  `(a3madkour-sections-test--with-root a3madkour-sections-test--json
+     (with-temp-buffer (org-mode) ,@body)))
+
+(defun a3madkour-pub-author-test--page (section slug &rest kv)
+  "Publish a stub content/SECTION/SLUG/index.md with frontmatter KV.
+KV alternates key and already-rendered YAML value strings."
+  (let ((dir (expand-file-name (format "content/%s/%s" section slug)
+                               (a3madkour-pub-yaml/site-root))))
+    (make-directory dir t)
+    (with-temp-file (expand-file-name "index.md" dir)
+      (insert "---\n")
+      (while kv (insert (format "%s: %s\n" (pop kv) (pop kv))))
+      (insert "---\nBody\n"))))
+
+(defmacro a3madkour-pub-author-test--answering (answers &rest body)
+  "Run BODY with every prompt answered from ANSWERS, or the test fails.
+ANSWERS is an alist (REGEXP . ANSWER) matched against the prompt text.
+ANSWER is returned as-is, except: a function is called; for
+`completing-read' the keyword `:default' returns the DEF argument and
+`:first' the first candidate; for `completing-read-multiple' `:first'
+returns a one-element list."
+  (declare (indent 1))
+  `(let ((answers ,answers))
+     (cl-flet ((answer (prompt)
+                 (let ((hit (cl-find-if (lambda (a) (string-match-p (car a) prompt))
+                                        answers)))
+                   (unless hit (ert-fail (list "unexpected prompt" prompt)))
+                   (let ((v (cdr hit)))
+                     (if (functionp v) (funcall v) v)))))
+       (cl-letf (((symbol-function 'completing-read)
+                  (lambda (prompt coll &optional _p _r _i _h def &rest _)
+                    (let ((v (answer prompt)))
+                      (cond ((eq v :default) def)
+                            ((eq v :first) (car coll))
+                            (t v)))))
+                 ((symbol-function 'completing-read-multiple)
+                  (lambda (prompt coll &rest _)
+                    (let ((v (answer prompt)))
+                      (if (eq v :first) (list (car coll)) v))))
+                 ((symbol-function 'read-string)
+                  (lambda (prompt &rest _) (answer prompt)))
+                 ((symbol-function 'y-or-n-p)
+                  (lambda (prompt) (answer prompt))))
+         ,@body))))
+
+(ert-deftest a3madkour-pub-author-test/published-targets-read-bundle-titles ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "beta" "title" "\"Beta \\\"B\\\"\"")
+    (a3madkour-pub-author-test--page "research/themes" "alpha" "title" "Alpha")
+    (a3madkour-pub-author-test--page "research/themes" "untitled")
+    (with-temp-file (expand-file-name "content/research/themes/_index.md"
+                                      (a3madkour-pub-yaml/site-root))
+      (insert "---\ntitle: Section\n---\n"))
+    (should (equal (a3madkour-pub-author--published-targets "research/themes")
+                   '(("alpha" . "Alpha") ("beta" . "Beta \"B\"")
+                     ("untitled" . "untitled"))))
+    (should-not (a3madkour-pub-author--published-targets "streams"))))
+
+(ert-deftest a3madkour-pub-author-test/next-weight-is-max-plus-ten ()
+  (a3madkour-pub-author-test--with-site
+    (should (= (a3madkour-pub-author--next-weight "research/themes") 10))
+    (a3madkour-pub-author-test--page "research/themes" "a" "weight" "10")
+    (a3madkour-pub-author-test--page "research/themes" "b" "weight" "30")
+    (a3madkour-pub-author-test--page "research/themes" "c" "weight" "\"x\"")
+    (should (= (a3madkour-pub-author--next-weight "research/themes") 40))))
+
+(ert-deftest a3madkour-pub-author-test/fields-to-fill-per-section ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: T\n")
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
+                   '("description" "status" "weight")))
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/questions"))
+                   '("description" "status" "theme" "supporting_notes" "started")))
+    (should-not (a3madkour-pub-author--fields-to-fill "garden"))
+    (should-not (a3madkour-pub-author--fields-to-fill "essays"))
+    (should-not (a3madkour-pub-author--fields-to-fill "library/reading"))
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "recipes"))
+                   '("sources" "ingredients" "steps")))
+    (insert "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant :media_type book\n")
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
+                   '("description" "weight")))
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
+                   '("creator")))))
+
+(ert-deftest a3madkour-pub-author-test/fields-to-fill-bad-variant-is-user-error ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+HUGO_CUSTOM_FRONT_MATTER: :media_type hologram\n")
+    (should-error (a3madkour-pub-author--fields-to-fill "garden") :type 'user-error)))
+
+(ert-deftest a3madkour-pub-author-test/ask-by-type ()
+  (a3madkour-pub-author-test--with-site
+    (let ((ints '("abc" "7")) (texts '("" "has \"quote\"" "ok text")))
+      (a3madkour-pub-author-test--answering
+          (list (cons " status: " :default)
+                (cons " weight" (lambda () (pop ints)))
+                (cons " tagline: " (lambda () (pop texts)))
+                (cons " summary (optional): " ""))
+        (should (equal (a3madkour-pub-author--ask
+                        "research/themes" "status"
+                        (a3madkour-sections/field "research/themes" "status"))
+                       "active"))
+        (should (equal (a3madkour-pub-author--ask
+                        "research/questions" "weight" '((type . "int") (required . t)))
+                       7))
+        (should (equal (a3madkour-pub-author--ask
+                        "works/games" "tagline" '((type . "text") (required . t)))
+                       "ok text"))
+        (should (eq (a3madkour-pub-author--ask
+                     "research/themes" "summary" '((type . "text")))
+                    'skip))
+        (should (equal (a3madkour-pub-author--ask
+                        "research/questions" "started"
+                        (a3madkour-sections/field "research/questions" "started"))
+                       (format-time-string "%Y-%m-%d")))))))
+
+(ert-deftest a3madkour-pub-author-test/ask-ref-without-targets ()
+  (a3madkour-pub-author-test--with-site
+    (let ((err (should-error (a3madkour-pub-author--ask
+                              "research/questions" "theme"
+                              (a3madkour-sections/field "research/questions" "theme"))
+                             :type 'user-error)))
+      (should (string-match-p "publish a research/themes page first"
+                              (error-message-string err))))
+    (should (eq (a3madkour-pub-author--ask
+                 "research/questions" "supporting_notes"
+                 (a3madkour-sections/field "research/questions" "supporting_notes"))
+                'skip))))
+
+(ert-deftest a3madkour-pub-author-test/fields-to-fill-blank-selector-is-concept ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+HUGO_CUSTOM_FRONT_MATTER: :media_type \"\"\n")
+    (let ((blank (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))))
+      (erase-buffer)
+      (should (equal blank (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden")))))))

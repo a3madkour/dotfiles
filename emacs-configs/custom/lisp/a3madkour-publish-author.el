@@ -532,6 +532,174 @@ resolve to a file."
                     id))
       (find-file file))))
 
+;; -- internal: what a3-publish-mark asks, and how --
+
+(defmacro a3madkour-pub-author--with-contract (&rest body)
+  "Run BODY; turn a section-contract `error' into a `user-error'.
+A `user-error' passes through unchanged."
+  `(condition-case err (progn ,@body)
+     (user-error (signal (car err) (cdr err)))
+     (error (user-error "a3-publish-mark: %s" (error-message-string err)))))
+
+(defun a3madkour-pub-author--site-root ()
+  "The Hugo site root, or a `user-error' when it cannot be located."
+  (unless (bound-and-true-p a3madkour-pub/site-data-dir)
+    (user-error "a3-publish-mark: `a3madkour-pub/site-data-dir' is not set"))
+  (a3madkour-pub-yaml/site-root))
+
+(defun a3madkour-pub-author--fm-scalar (file key)
+  "Top-level scalar KEY of FILE's YAML frontmatter, unquoted, or nil."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (goto-char (point-min))
+    (when (looking-at "---[ \t]*\n\\(\\(?:.*\n\\)*?\\)---[ \t]*$")
+      (let ((fm (match-string-no-properties 1)))
+        (when (string-match (format "^%s:[ \t]*\\(.*?\\)[ \t]*$"
+                                    (regexp-quote key))
+                            fm)
+          (let ((v (match-string 1 fm)))
+            (if (string-match-p "\\`\".*\"\\'" v)
+                (condition-case nil (read v) (error (substring v 1 -1)))
+              v)))))))
+
+(defun a3madkour-pub-author--bundles (section)
+  "The index.md of every page bundle under content/SECTION/, or nil."
+  (let ((dir (expand-file-name (concat "content/" section)
+                               (a3madkour-pub-author--site-root))))
+    (when (file-directory-p dir)
+      (cl-loop for sub in (directory-files dir t "\\`[^._]")
+               for md = (expand-file-name "index.md" sub)
+               when (and (file-directory-p sub) (file-exists-p md))
+               collect md))))
+
+(defun a3madkour-pub-author--published-targets (to)
+  "Published pages of section TO as ((SLUG . TITLE) ...), sorted by slug.
+TITLE is the bundle frontmatter's title, falling back to SLUG."
+  (sort (mapcar (lambda (md)
+                  (let ((slug (file-name-nondirectory
+                               (directory-file-name (file-name-directory md)))))
+                    (cons slug (or (a3madkour-pub-author--fm-scalar md "title")
+                                   slug))))
+                (a3madkour-pub-author--bundles to))
+        (lambda (a b) (string< (car a) (car b)))))
+
+(defun a3madkour-pub-author--next-weight (section)
+  "Largest numeric weight among SECTION's published pages + 10, or 10."
+  (let ((ws (cl-loop for md in (a3madkour-pub-author--bundles section)
+                     for w = (a3madkour-pub-author--fm-scalar md "weight")
+                     when (and w (string-match-p "\\`[0-9]+\\'" w))
+                     collect (string-to-number w))))
+    (if ws (+ 10 (apply #'max ws)) 10)))
+
+(defun a3madkour-pub-author--selector-value (on)
+  "Buffer value of variant selector ON, or nil when absent or blank.
+A blank value selects the same case as an absent field (matches the
+site's check_fields)."
+  (let ((v (and on (a3madkour-pub-author--cfm-get on))))
+    (and v (string-match-p "[^ \t]" v) v)))
+
+(defun a3madkour-pub-author--fields-to-fill (section)
+  "SECTION's fields `a3-publish-mark' must supply, as ((NAME . SPEC) ...).
+A field qualifies when it is not `from: pipeline', is `required' or
+`ask', and is absent from the buffer.  The variant case comes from the
+buffer's value of the section's `variants.on' field.  A `store: data'
+section (library) yields nil: `a3-library-insert-item' writes its items."
+  (let ((spec (a3madkour-sections/spec section)))
+    (unless (equal (alist-get 'store spec) "data")
+      (let* ((on (alist-get 'on (alist-get 'variants spec)))
+             (vcase (a3madkour-pub-author--with-contract
+                     (a3madkour-sections/variant-case
+                      section (a3madkour-pub-author--selector-value on)))))
+        (cl-remove-if-not
+         (lambda (cell)
+           (let ((fs (cdr cell)))
+             (and (not (equal (alist-get 'from fs) "pipeline"))
+                  (or (alist-get 'required fs) (alist-get 'ask fs))
+                  (not (a3madkour-pub-author--field-present-p (car cell))))))
+         (a3madkour-sections/fields section vcase))))))
+
+(defconst a3madkour-pub-author--string-shapes
+  '(("int" "\\`[0-9]+\\'" "a whole number")
+    ("date" "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" "a YYYY-MM-DD date"))
+  "Per-type (REGEXP DESCRIPTION) a typed answer must match.")
+
+(defun a3madkour-pub-author--ask-string (name type required keyword-p prompt)
+  "Read field NAME of string-entered TYPE; re-prompt until acceptable.
+An empty answer returns `skip' unless REQUIRED.  A double quote is
+refused unless KEYWORD-P (custom front matter cannot carry one)."
+  (let ((shape (cdr (assoc type a3madkour-pub-author--string-shapes)))
+        v done)
+    (while (not done)
+      (setq v (string-trim (read-string prompt)))
+      (cond
+       ((string-empty-p v)
+        (if required (message "%s is required" name) (setq done t)))
+       ((and (not keyword-p) (string-match-p "\"" v))
+        (message "%s: a double quote cannot be written to \
+#+HUGO_CUSTOM_FRONT_MATTER" name))
+       ((and shape (not (string-match-p (car shape) v)))
+        (message "%s must be %s" name (cadr shape)))
+       (t (setq done t))))
+    (cond ((string-empty-p v) 'skip)
+          ((equal type "int") (string-to-number v))
+          ((equal type "list") (split-string v "[ \t]+" t))
+          (t v))))
+
+(defun a3madkour-pub-author--ask-ref (name spec prompt)
+  "Pick field NAME's ref/refs value (SPEC) from published targets."
+  (let* ((to (alist-get 'to spec))
+         (required (alist-get 'required spec))
+         (choices (mapcar (lambda (c)
+                            (cons (format "%s (%s)" (cdr c) (car c)) (car c)))
+                          (a3madkour-pub-author--published-targets to))))
+    (cond
+     ((and (null choices) required)
+      (user-error "a3-publish-mark: %s needs a published %s page; \
+publish a %s page first" name to to))
+     ((null choices) 'skip)
+     ((equal (alist-get 'type spec) "ref")
+      (let (pick)
+        (while (progn (setq pick (completing-read prompt (mapcar #'car choices)
+                                                  nil t))
+                      (and required (string-empty-p pick))))
+        (if (string-empty-p pick) 'skip (cdr (assoc pick choices)))))
+     (t
+      (let (picks)
+        (while (progn (setq picks (completing-read-multiple
+                                   prompt (mapcar #'car choices) nil t))
+                      (and required (null picks))))
+        (if picks
+            (mapcar (lambda (p) (cdr (assoc p choices))) picks)
+          'skip))))))
+
+(defun a3madkour-pub-author--ask (section name spec)
+  "Obtain the value of SECTION's field NAME (SPEC), prompting as needed.
+Returns the value, or `skip' for an optional field left empty.  Writes
+nothing.  Signals `user-error' for a required ref with no targets."
+  (let* ((type (alist-get 'type spec))
+         (required (alist-get 'required spec))
+         (fill (alist-get 'fill spec))
+         (keyword-p (assoc name a3madkour-pub-author--keyword-fields))
+         (prompt (format "%s %s%s: " section name (if required "" " (optional)"))))
+    (cond
+     ((equal fill "today") (format-time-string "%Y-%m-%d"))
+     ((equal fill "next-weight") (a3madkour-pub-author--next-weight section))
+     ((equal type "enum")
+      (let (v)
+        (while (progn (setq v (completing-read prompt (alist-get 'values spec)
+                                               nil t nil nil
+                                               (alist-get 'default spec)))
+                      (and required (string-empty-p v))))
+        (if (string-empty-p v) 'skip v)))
+     ((equal type "bool")
+      (y-or-n-p (format "%s %s? (default %s) " section name
+                        (if (alist-get 'default spec) "yes" "no"))))
+     ((member type '("ref" "refs"))
+      (a3madkour-pub-author--ask-ref name spec prompt))
+     ((member type '("text" "int" "date" "list"))
+      (a3madkour-pub-author--ask-string name type required keyword-p prompt))
+     (t (error "a3-publish-mark: no prompt for field %s of type %S" name type)))))
+
 (provide 'a3madkour-publish-author)
 
 ;;; a3madkour-publish-author.el ends here
