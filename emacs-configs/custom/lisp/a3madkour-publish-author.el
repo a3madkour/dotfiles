@@ -7,8 +7,8 @@
 ;;   a3-library-insert-item / insert-extras — scaffold library-*.org entries
 ;;   a3-publish-jump-to-source — manifest-driven nav from content/ → org
 ;;
-;; All six compose existing primitives (sections registry, library config,
-;; keywords API, publish manifest).  No new tables.
+;; All six compose existing primitives (the section registry and the site's
+;; data/sections.json contract, keywords API, publish manifest).  No new tables.
 ;;
 ;; See `docs/superpowers/specs/2026-06-08-emacs-publish-author-helpers-design.md'.
 
@@ -270,24 +270,67 @@ A line left with no keys is deleted with its newline."
 
 ;; -- a3-publish-mark --
 
+(defmacro a3madkour-pub-author--with-contract (&rest body)
+  "Run BODY; turn a section-contract `error' into a `user-error'.
+A `user-error' passes through unchanged."
+  `(condition-case err (progn ,@body)
+     (user-error (signal (car err) (cdr err)))
+     (error (user-error "a3-publish-mark: %s" (error-message-string err)))))
+
+(defun a3madkour-pub-author--stale-fields (section)
+  "Fields in the buffer that SECTION's contract does not list.
+Candidates are the custom front matter keys plus description/summary;
+`#+TITLE:' is never offered for removal."
+  (let ((legal (a3madkour-sections/emitted-keys section))
+        (present (append
+                  (cl-loop for (name . _kw) in a3madkour-pub-author--keyword-fields
+                           when (and (not (equal name "title"))
+                                     (a3madkour-pub-author--field-present-p name))
+                           collect name)
+                  (a3madkour-pub-author--cfm-keys))))
+    (cl-remove-if (lambda (n) (member n legal))
+                  (delete-dups present))))
+
+(defun a3madkour-pub-author--gather (section)
+  "Collect every value SECTION still needs; write nothing.
+Returns (:values ((NAME TYPE VALUE) ...) :by-hand (NAME ...)).  BY-HAND
+lists required `structured'/`object' fields, which are not prompted."
+  (let (values by-hand)
+    (dolist (cell (a3madkour-pub-author--fields-to-fill section))
+      (let* ((name (car cell))
+             (fs (cdr cell))
+             (type (alist-get 'type fs)))
+        (if (member type '("structured" "object"))
+            (when (alist-get 'required fs) (push name by-hand))
+          (let ((v (a3madkour-pub-author--ask section name fs)))
+            (unless (eq v 'skip)
+              (push (list name type v) values))))))
+    (list :values (nreverse values) :by-hand (nreverse by-hand))))
+
 ;;;###autoload
 (cl-defun a3-publish-mark (section)
-  "Mark the current org buffer for publish at SECTION.
+  "Mark the current org buffer for publish at SECTION and fill its fields.
 
-Idempotently sets `#+HUGO_PUBLISH: t' + `#+HUGO_SECTION: SECTION' in the
-buffer's preamble.  Reads SECTION via `completing-read' over
-`a3madkour-pub/sections' (defaulting to the current `#+HUGO_SECTION:'
-value if set).
+Sets `#+HUGO_PUBLISH: t' + `#+HUGO_SECTION: SECTION', then supplies
+every field SECTION's contract (data/sections.json) requires or marks
+`ask' that the publisher cannot derive and the buffer lacks: prompting
+for each (enum, bool, ref/refs over published pages, text) or filling it
+(today, next weight).  title/description/summary are written as
+`#+TITLE:'/`#+HUGO_DESCRIPTION:'/`#+HUGO_SUMMARY:', everything else as
+`#+HUGO_CUSTOM_FRONT_MATTER: :key value'.  A field already present is
+never prompted for or overwritten.
+
+Every value is gathered BEFORE anything is written, so `C-g' (or a
+`user-error' such as a required ref with no published targets) leaves
+the buffer untouched.
 
 Cross-section guard: if the buffer already has `#+HUGO_SECTION: <other>'
-and SECTION differs, prompts `y-or-n-p' before changing.  Declining the
-prompt aborts the entire command — neither keyword is touched and the
-command returns nil.
+and SECTION differs, prompts `y-or-n-p' before changing; declining
+aborts and returns nil.  On a change, offers (one `y-or-n-p') to remove
+the fields the new section's contract does not list.
 
-Refuses outside `org-mode' or in a read-only buffer.
-
-Returns the picked SECTION string, or nil if cross-section confirm was
-declined."
+Refuses outside `org-mode', in a read-only buffer, or when the contract
+is missing or malformed.  Returns SECTION, or nil if declined."
   (interactive
    (let ((current (a3madkour-pub-keywords/extract "HUGO_SECTION")))
      (list (completing-read "Section: " a3madkour-pub/sections
@@ -296,16 +339,33 @@ declined."
     (user-error "a3-publish-mark: current buffer is not org-mode"))
   (when buffer-read-only
     (user-error "a3-publish-mark: buffer is read-only"))
+  (a3madkour-pub-author--with-contract (a3madkour-sections/spec section))
   (let ((current (a3madkour-pub-keywords/extract "HUGO_SECTION")))
     (when (and current
                (not (string= current section))
                (not (y-or-n-p
                      (format "Move from `%s' to `%s'? (next publish-living will record slug-shift) "
                              current section))))
-      (cl-return-from a3-publish-mark nil)))
-  (a3madkour-pub-author--upsert-keyword "HUGO_PUBLISH" "t")
-  (a3madkour-pub-author--upsert-keyword "HUGO_SECTION" section)
-  section)
+      (cl-return-from a3-publish-mark nil))
+    (let* ((stale (and current
+                       (not (string-empty-p current))
+                       (not (string= current section))
+                       (a3madkour-pub-author--stale-fields section)))
+           (remove (and stale
+                        (y-or-n-p (format "Remove fields not in %s (%s)? "
+                                          section (string-join stale ", ")))))
+           (plan (a3madkour-pub-author--gather section)))
+      ;; Everything above only read and prompted; everything below writes.
+      (a3madkour-pub-author--upsert-keyword "HUGO_PUBLISH" "t")
+      (a3madkour-pub-author--upsert-keyword "HUGO_SECTION" section)
+      (when remove
+        (mapc #'a3madkour-pub-author--remove-field stale))
+      (dolist (v (plist-get plan :values))
+        (apply #'a3madkour-pub-author--write-field v))
+      (when (plist-get plan :by-hand)
+        (message "a3-publish-mark: %s also needs %s (structured; fill in by hand)"
+                 section (string-join (plist-get plan :by-hand) ", ")))
+      section)))
 
 ;; -- a3-publish-unmark --
 
@@ -533,13 +593,6 @@ resolve to a file."
       (find-file file))))
 
 ;; -- internal: what a3-publish-mark asks, and how --
-
-(defmacro a3madkour-pub-author--with-contract (&rest body)
-  "Run BODY; turn a section-contract `error' into a `user-error'.
-A `user-error' passes through unchanged."
-  `(condition-case err (progn ,@body)
-     (user-error (signal (car err) (cdr err)))
-     (error (user-error "a3-publish-mark: %s" (error-message-string err)))))
 
 (defun a3madkour-pub-author--site-root ()
   "The Hugo site root, or a `user-error' when it cannot be located."

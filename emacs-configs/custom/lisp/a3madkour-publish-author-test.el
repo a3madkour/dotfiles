@@ -7,6 +7,8 @@
 (require 'ob-core)
 (require 'a3madkour-publish-author)
 (require 'a3madkour-sections-fixture)
+(require 'a3madkour-publish-research)
+(require 'a3madkour-publish-async)
 
 (ert-deftest a3madkour-pub-author-test/skeleton-loaded ()
   "The author module loads and its provide marker is registered."
@@ -492,9 +494,6 @@ when caller passes the same answer to y-or-n-p)."
     (should (string-match-p "^#\\+HUGO_DESCRIPTION: A \"quoted\" line\\.$" (buffer-string)))
     (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" (buffer-string)))))
 
-(provide 'a3madkour-publish-author-test)
-;;; a3madkour-publish-author-test.el ends here
-
 ;; -- Section registry Tasks 8-9: prompt stubs over a temp site --
 
 (defmacro a3madkour-pub-author-test--with-site (&rest body)
@@ -635,3 +634,205 @@ returns a one-element list."
     (let ((blank (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))))
       (erase-buffer)
       (should (equal blank (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden")))))))
+
+;; -- Section registry Task 9: the a3-publish-mark fill-in --
+
+(ert-deftest a3madkour-pub-author-test/mark-theme-fills-status-description-weight ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "alpha" "title" "\"Alpha\"" "weight" "10")
+    (a3madkour-pub-author-test--page "research/themes" "beta" "title" "\"Beta\"" "weight" "30")
+    (insert "#+title: New theme\n\nBody\n")
+    (a3madkour-pub-author-test--answering
+        '((" description: " . "What the theme asks.")
+          (" status: " . :default))
+      (should (equal (a3-publish-mark "research/themes") "research/themes")))
+    (let ((s (buffer-string)))
+      (should (string-match-p "^#\\+HUGO_PUBLISH: t$" s))
+      (should (string-match-p "^#\\+HUGO_SECTION: research/themes$" s))
+      (should (string-match-p "^#\\+HUGO_DESCRIPTION: What the theme asks\\.$" s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :weight 40$" s)))))
+
+(defun a3madkour-pub-author-test--question-site ()
+  "Publish one theme and two garden notes under the current site root."
+  (a3madkour-pub-author-test--page "research/themes" "procedural-narrative"
+                                   "title" "\"Procedural narrative\"")
+  (a3madkour-pub-author-test--page "garden" "note-a" "title" "\"Note A\"")
+  (a3madkour-pub-author-test--page "garden" "note-b" "title" "\"Note B\""))
+
+(defconst a3madkour-pub-author-test--question-answers
+  '((" description: " . "Does it hold?")
+    (" status: " . :default)
+    (" theme: " . "Procedural narrative (procedural-narrative)")
+    (" supporting_notes (optional): " . ("Note A (note-a)" "Note B (note-b)"))))
+
+(ert-deftest a3madkour-pub-author-test/mark-question-picks-theme-from-published-set ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--question-site)
+    (insert "#+title: New question\n")
+    (a3madkour-pub-author-test--answering a3madkour-pub-author-test--question-answers
+      (a3-publish-mark "research/questions"))
+    (let ((s (buffer-string)))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :theme procedural-narrative$" s))
+      ;; Branch A form (Task 1); under Branch B: ":supporting_notes '(note-a note-b)".
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :supporting_notes note-a note-b$" s))
+      (should (string-match-p (format "^#\\+HUGO_CUSTOM_FRONT_MATTER: :started %s$"
+                                      (format-time-string "%Y-%m-%d"))
+                              s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" s)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-second-run-asks-nothing ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--question-site)
+    (insert "#+title: New question\n")
+    (a3madkour-pub-author-test--answering a3madkour-pub-author-test--question-answers
+      (a3-publish-mark "research/questions"))
+    (let ((after-first (buffer-string)))
+      (a3madkour-pub-author-test--answering nil
+        (a3-publish-mark "research/questions"))
+      (should (equal (buffer-string) after-first)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-never-overwrites-a-present-field ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: T\n#+HUGO_DESCRIPTION: Kept.\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant\n")
+    (a3madkour-pub-author-test--answering nil
+      (a3-publish-mark "research/themes"))
+    (let ((s (buffer-string)))
+      (should (string-match-p "^#\\+HUGO_DESCRIPTION: Kept\\.$" s))
+      (should (string-match-p ":status dormant" s))
+      (should-not (string-match-p ":status active" s))
+      (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :weight 10$" s)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-quit-mid-way-changes-nothing ()
+  "C-g at the third prompt, after two were answered: nothing is written,
+not even #+HUGO_PUBLISH."
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--question-site)
+    (insert "#+title: New question\n")
+    (let ((before (buffer-string)))
+      (a3madkour-pub-author-test--answering
+          (list (cons " description: " "Does it hold?")
+                (cons " status: " :default)
+                (cons " theme: " (lambda () (signal 'quit nil))))
+        ;; Not `should-error': it catches only `error' conditions, and
+        ;; `quit' is not one (verified: it escapes `should-error').
+        (should (eq (condition-case nil
+                        (progn (a3-publish-mark "research/questions") 'returned)
+                      (quit 'quit))
+                    'quit)))
+      (should (equal (buffer-string) before)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-required-ref-without-targets-errors ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: New question\n")
+    (let ((before (buffer-string)))
+      (a3madkour-pub-author-test--answering
+          '((" description: " . "Q?") (" status: " . :default))
+        (let ((err (should-error (a3-publish-mark "research/questions")
+                                 :type 'user-error)))
+          (should (string-match-p "publish a research/themes page first"
+                                  (error-message-string err)))))
+      (should (equal (buffer-string) before)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-fill-keeps-drawer-first ()
+  (a3madkour-pub-author-test--with-site
+    (insert ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: T\n")
+    (a3madkour-pub-author-test--answering
+        '((" description: " . "D.") (" status: " . :default))
+      (a3-publish-mark "research/themes"))
+    (should (string-prefix-p ":PROPERTIES:\n:ID:       abc-123\n:END:\n" (buffer-string)))
+    (should (eq (org-element-type (org-element-at-point (point-min))) 'property-drawer))
+    (should (equal (org-entry-get (point-min) "ID") "abc-123"))))
+
+(ert-deftest a3madkour-pub-author-test/mark-section-change-offers-removal ()
+  (dolist (accept '(t nil))
+    (a3madkour-pub-author-test--with-site
+      (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n"
+              "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026 :topic_map a b\n#+title: T\n")
+      (a3madkour-pub-author-test--answering
+          (list (cons "\\`Move from" t)
+                (cons "\\`Remove fields not in research/themes (year, topic_map)" accept)
+                (cons " description: " "D.")
+                (cons " status: " :default))
+        (a3-publish-mark "research/themes"))
+      (let ((s (buffer-string)))
+        (should (string-match-p ":status active" s))
+        (if accept
+            (progn (should-not (string-match-p "topic_map" s))
+                   (should-not (string-match-p ":year" s)))
+          (should (string-match-p ":year 2026 :topic_map a b" s)))))))
+
+(ert-deftest a3madkour-pub-author-test/mark-garden-media-variant-asks-its-fields ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: A book\n#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
+    (a3madkour-pub-author-test--answering
+        '((" status: " . "finished") (" creator: " . "Example Author"))
+      (a3-publish-mark "garden"))
+    (should (string-match-p ":status finished" (buffer-string)))
+    (should (string-match-p ":creator \"Example Author\"" (buffer-string)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-library-and-structured ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: Shelf\n")
+    (a3madkour-pub-author-test--answering nil
+      (a3-publish-mark "library/reading"))
+    (should (string-match-p "^#\\+HUGO_SECTION: library/reading$" (buffer-string))))
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: Soup\n")
+    (let (said)
+      (cl-letf (((symbol-function 'message)
+                 (lambda (fmt &rest args) (push (apply #'format fmt args) said))))
+        (a3madkour-pub-author-test--answering nil
+          (a3-publish-mark "recipes")))
+      (should (cl-some (lambda (m) (string-match-p "sources, ingredients, steps" m))
+                       said)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-errors-on-missing-contract ()
+  (a3madkour-sections-test--with-root nil
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+title: T\n")
+      (let ((err (should-error (a3-publish-mark "garden") :type 'user-error)))
+        (should (string-match-p "contract not found at" (error-message-string err))))
+      (should (equal (buffer-string) "#+title: T\n")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-output-publishes-through-ox-hugo ()
+  "End to end: what mark writes for a question reaches the bundle with
+`theme' as a string and `supporting_notes' as a YAML list."
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--question-site)
+    (let* ((root (a3madkour-pub-yaml/site-root))
+           (notes-dir (make-temp-file "a3-mark-e2e-notes" t))
+           (src (expand-file-name "marked-question.org" notes-dir)))
+      (unwind-protect
+          (progn
+            (make-directory (expand-file-name "content/research/questions" root) t)
+            (with-temp-file (expand-file-name "data/url-history.yaml" root)
+              (insert "notes: []\n"))
+            (insert ":PROPERTIES:\n:ID: 44444444-aaaa-bbbb-cccc-dddddddddddd\n"
+                    ":LAST_MODIFIED: 2026-05-30\n:END:\n"
+                    "#+title: Marked question\n#+HUGO_BASE_DIR: " root "\n\nBody.\n")
+            (a3madkour-pub-author-test--answering a3madkour-pub-author-test--question-answers
+              (a3-publish-mark "research/questions"))
+            (write-region (point-min) (point-max) src)
+            (let ((a3madkour-pub/org-notes-dir notes-dir) (status nil))
+              (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+                (a3madkour-pub/begin-publish)
+                (a3madkour-pub-research/publish-research-file
+                 src (make-a3-pub-async-run) :on-done (lambda (s) (setq status s)))
+                (a3madkour-pub/finish-publish))
+              (should (eq status 'ok)))
+            (let ((md (with-temp-buffer
+                        (insert-file-contents
+                         (expand-file-name
+                          "content/research/questions/marked-question/index.md" root))
+                        (buffer-string))))
+              (should (string-match-p "^theme: \"procedural-narrative\"$" md))
+              (should (string-match-p "^supporting_notes: \\[\"note-a\", \"note-b\"\\]$" md))
+              (should (string-match-p "^description: \"Does it hold\\?\"$" md))
+              (should (string-match-p "^status: \"active\"$" md))))
+        (delete-directory notes-dir t)))))
+
+(provide 'a3madkour-publish-author-test)
+;;; a3madkour-publish-author-test.el ends here
