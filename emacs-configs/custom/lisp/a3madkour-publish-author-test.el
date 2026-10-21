@@ -4,6 +4,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'ob-core)
 (require 'a3madkour-publish-author)
 (require 'a3madkour-sections-fixture)
 
@@ -371,6 +372,125 @@ when caller passes the same answer to y-or-n-p)."
                          '(("id-foo" "/essays/foo/" "live")))))
             ((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil)))
     (should-error (a3-publish-jump-to-source) :type 'user-error)))
+
+;; -- Section registry Task 7: custom front matter helpers --
+
+(ert-deftest a3madkour-pub-author-test/cfm-segments-split-like-ox-hugo ()
+  (should (equal (a3madkour-pub-author--cfm-segments ":status active :weight 10")
+                 '(("status" . ":status active") ("weight" . ":weight 10"))))
+  (should (equal (a3madkour-pub-author--cfm-segments ":tagline \"a :b c\" :year 2026")
+                 '(("tagline" . ":tagline \"a :b c\"") ("year" . ":year 2026"))))
+  (should (null (a3madkour-pub-author--cfm-segments "   "))))
+
+(ert-deftest a3madkour-pub-author-test/cfm-keys-span-every-line ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :status active :weight 10\n"
+            "#+hugo_custom_front_matter: :theme t-1\n")
+    (should (equal (a3madkour-pub-author--cfm-keys) '("status" "weight" "theme")))
+    (should (a3madkour-pub-author--field-present-p "weight"))
+    (should-not (a3madkour-pub-author--field-present-p "description"))
+    (should (equal (a3madkour-pub-author--cfm-get "theme") "t-1"))
+    (should (equal (a3madkour-pub-author--cfm-get "weight") "10"))
+    (should-not (a3madkour-pub-author--cfm-get "media_type"))))
+
+(ert-deftest a3madkour-pub-author-test/field-present-reads-dedicated-keywords ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n#+HUGO_DESCRIPTION: D\n#+HUGO_SUMMARY:\n")
+    (should (a3madkour-pub-author--field-present-p "title"))
+    (should (a3madkour-pub-author--field-present-p "description"))
+    ;; Present with no value counts as absent: mark fills it.
+    (should-not (a3madkour-pub-author--field-present-p "summary"))))
+
+(ert-deftest a3madkour-pub-author-test/upsert-cfm-key-replaces-one-segment ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+HUGO_SECTION: research/themes\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :status active :weight 10\n")
+    (a3madkour-pub-author--upsert-cfm-key "weight" "20")
+    (should (equal (buffer-string)
+                   (concat "#+HUGO_SECTION: research/themes\n"
+                           "#+HUGO_CUSTOM_FRONT_MATTER: :status active :weight 20\n")))))
+
+(ert-deftest a3madkour-pub-author-test/upsert-cfm-key-appends-after-last-cfm-line ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:ID: x-1\n:END:\n"
+            "#+HUGO_SECTION: research/themes\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :status active\n"
+            "#+title: T\n\nBody\n")
+    (a3madkour-pub-author--upsert-cfm-key "weight" "10")
+    (should (equal (buffer-string)
+                   (concat ":PROPERTIES:\n:ID: x-1\n:END:\n"
+                           "#+HUGO_SECTION: research/themes\n"
+                           "#+HUGO_CUSTOM_FRONT_MATTER: :status active\n"
+                           "#+HUGO_CUSTOM_FRONT_MATTER: :weight 10\n"
+                           "#+title: T\n\nBody\n")))))
+
+(ert-deftest a3madkour-pub-author-test/upsert-cfm-key-first-line-goes-after-section ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:ID: x-1\n:END:\n#+HUGO_SECTION: garden\n#+title: T\n")
+    (a3madkour-pub-author--upsert-cfm-key "year" "2026")
+    (should (equal (buffer-string)
+                   (concat ":PROPERTIES:\n:ID: x-1\n:END:\n#+HUGO_SECTION: garden\n"
+                           "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026\n#+title: T\n")))))
+
+(ert-deftest a3madkour-pub-author-test/upsert-cfm-key-keeps-drawer-first ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: T\n")
+    (a3madkour-pub-author--upsert-cfm-key "year" "2026")
+    (should (string-prefix-p ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+HUGO_CUSTOM_FRONT_MATTER: :year 2026\n"
+                             (buffer-string)))
+    (should (equal (org-entry-get (point-min) "ID") "abc-123"))))
+
+(ert-deftest a3madkour-pub-author-test/remove-cfm-key-keeps-neighbours ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+HUGO_CUSTOM_FRONT_MATTER: :status active :topic_map a b\n"
+            "#+HUGO_CUSTOM_FRONT_MATTER: :topic_map c\n"
+            "#+title: T\n")
+    (a3madkour-pub-author--remove-cfm-key "topic_map")
+    (should (equal (buffer-string)
+                   "#+HUGO_CUSTOM_FRONT_MATTER: :status active\n#+title: T\n"))))
+
+(ert-deftest a3madkour-pub-author-test/remove-field-handles-keyword-fields ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n#+HUGO_SUMMARY: S\n#+HUGO_CUSTOM_FRONT_MATTER: :weight 10\n")
+    (a3madkour-pub-author--remove-field "summary")
+    (a3madkour-pub-author--remove-field "weight")
+    (should (equal (buffer-string) "#+title: T\n"))))
+
+(ert-deftest a3madkour-pub-author-test/cfm-value-round-trips-through-ox-hugo-parser ()
+  "Text is quoted so ox-hugo's parser returns it verbatim: spaces, a
+` :' that would otherwise start a new key, a colon, and digits that
+`org-babel-read' would turn into a number."
+  (dolist (v '("plain" "two words" "A: colon" "x :y z" "2026"))
+    (let ((parsed (org-babel-parse-header-arguments
+                   (format ":k %s" (a3madkour-pub-author--cfm-value "text" v)))))
+      (should (equal (cdr (assq :k parsed)) v))))
+  (should (equal (a3madkour-pub-author--cfm-value "int" 40) "40"))
+  (should (equal (a3madkour-pub-author--cfm-value "bool" t) "true"))
+  (should (equal (a3madkour-pub-author--cfm-value "bool" nil) "false"))
+  (should (equal (a3madkour-pub-author--cfm-value "enum" "active") "active"))
+  (should (equal (a3madkour-pub-author--cfm-value "date" "2026-10-20") "2026-10-20"))
+  (should (equal (a3madkour-pub-author--cfm-value "list" '("a" "b")) "a b"))
+  ;; Branch A (Task 1).  Under Branch B this line is instead:
+  ;;   (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "'(a b)"))
+  (should (equal (a3madkour-pub-author--cfm-value "refs" '("a" "b")) "a b")))
+
+(ert-deftest a3madkour-pub-author-test/write-field-routes-keyword-vs-cfm ()
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+HUGO_SECTION: research/themes\n#+title: T\n")
+    (a3madkour-pub-author--write-field "description" "text" "A \"quoted\" line.")
+    (a3madkour-pub-author--write-field "status" "enum" "active")
+    (should (string-match-p "^#\\+HUGO_DESCRIPTION: A \"quoted\" line\\.$" (buffer-string)))
+    (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status active$" (buffer-string)))))
 
 (provide 'a3madkour-publish-author-test)
 ;;; a3madkour-publish-author-test.el ends here

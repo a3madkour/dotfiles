@@ -22,6 +22,9 @@
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-id)
+(require 'ob-core)          ; the header-argument parser ox-hugo uses
+(require 'a3madkour-publish-yaml)
+(require 'a3madkour-sections)
 
 ;; -- a3-publish-status --
 
@@ -101,6 +104,169 @@ verbatim — caller is responsible for any escaping."
                    (re-search-forward "^[ \t]*:END:[ \t]*$" nil t))
           (forward-line 1))
         (insert (format "#+%s: %s\n" key val))))))
+
+;; -- internal: #+HUGO_CUSTOM_FRONT_MATTER: by (keyword, :key) --
+;;
+;; A note carries many `#+HUGO_CUSTOM_FRONT_MATTER:' lines and one line may
+;; carry several keys, so `--upsert-keyword' (one value per keyword) cannot
+;; address them.  Values are split exactly where ox-hugo splits them: its
+;; `org-hugo--parse-property-arguments' is `org-babel-parse-header-arguments',
+;; which cuts on a colon preceded by whitespace, outside quotes and parens.
+
+(defconst a3madkour-pub-author--keyword-fields
+  '(("title" . "TITLE")
+    ("description" . "HUGO_DESCRIPTION")
+    ("summary" . "HUGO_SUMMARY"))
+  "Fields written as their own `#+KEYWORD:' line, not a custom key.
+Identical across sections (spec §6 step 4).")
+
+(defconst a3madkour-pub-author--cfm-re
+  "^#\\+HUGO_CUSTOM_FRONT_MATTER:[ \t]*\\(.*\\)$"
+  "A custom front matter line; group 1 is its value.")
+
+(defun a3madkour-pub-author--cfm-segments (value)
+  "Split custom front matter VALUE into ((KEY . SEGMENT) ...).
+KEY is the key without its colon; SEGMENT the trimmed `:key value' text."
+  (when (and value (string-match-p "[^ \t]" value))
+    (let* ((raw (org-babel-balanced-split value '((32 9) . 58)))
+           (segs (cons (car raw)
+                       (mapcar (lambda (r) (concat ":" r)) (cdr raw)))))
+      (delq nil
+            (mapcar (lambda (s)
+                      (let ((s (string-trim s)))
+                        (when (string-match "\\`:\\([^ \t]+\\)" s)
+                          (cons (match-string 1 s) s))))
+                    segs)))))
+
+(defun a3madkour-pub-author--cfm-lines ()
+  "Every custom front matter line as (BEG END VALUE), in buffer order."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((case-fold-search t) out)
+      (while (re-search-forward a3madkour-pub-author--cfm-re nil t)
+        (push (list (match-beginning 0) (match-end 0)
+                    (match-string-no-properties 1))
+              out))
+      (nreverse out))))
+
+(defun a3madkour-pub-author--cfm-keys ()
+  "Every key named on any custom front matter line, in buffer order."
+  (cl-loop for (_beg _end value) in (a3madkour-pub-author--cfm-lines)
+           append (mapcar #'car (a3madkour-pub-author--cfm-segments value))))
+
+(defun a3madkour-pub-author--cfm-get (key)
+  "Value of custom front matter KEY as a string, or nil.
+Parsed as ox-hugo parses it; the last line naming KEY wins."
+  (let ((sym (intern (concat ":" key))) val)
+    (dolist (l (a3madkour-pub-author--cfm-lines) val)
+      (let ((cell (assq sym (org-babel-parse-header-arguments (nth 2 l) t))))
+        (when cell
+          (setq val (format "%s" (cdr cell))))))))
+
+(defun a3madkour-pub-author--field-present-p (name)
+  "Non-nil when field NAME already has a value in the buffer.
+Reads the dedicated keyword for title/description/summary (a keyword with
+an empty value counts as absent), else the custom front matter keys."
+  (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
+    (if kw
+        (let ((v (a3madkour-pub-keywords/extract kw)))
+          (and v (not (string-empty-p v))))
+      (and (member name (a3madkour-pub-author--cfm-keys)) t))))
+
+(defun a3madkour-pub-author--cfm-value (type value)
+  "Render VALUE of field TYPE for a `:key VALUE' custom front matter segment.
+Text is always double-quoted (the caller has rejected embedded quotes), so
+spaces, ` :' and digit-only strings survive ox-hugo's parser verbatim."
+  (pcase type
+    ("text" (format "\"%s\"" value))
+    ("int" (number-to-string value))
+    ("bool" (if value "true" "false"))
+    ("list" (mapconcat #'identity value " "))
+    ;; Branch A (Task 1: the space list reaches the page as a YAML list).
+    ;; Branch B replaces this line with:
+    ;;   ("refs" (format "'(%s)" (mapconcat #'identity value " ")))
+    ("refs" (mapconcat #'identity value " "))
+    (_ value)))
+
+(defun a3madkour-pub-author--cfm-insert-point ()
+  "Where a new custom front matter line goes: after the last such line,
+else after `#+HUGO_SECTION:', else after a leading file property drawer,
+else at `point-min'."
+  (save-excursion
+    (let ((lines (a3madkour-pub-author--cfm-lines))
+          (case-fold-search t))
+      (cond
+       (lines
+        (goto-char (nth 1 (car (last lines))))
+        (forward-line 1))
+       ((progn (goto-char (point-min))
+               (re-search-forward "^#\\+HUGO_SECTION:.*$" nil t))
+        (forward-line 1))
+       (t
+        (goto-char (point-min))
+        (when (and (looking-at "^[ \t]*:PROPERTIES:[ \t]*$")
+                   (re-search-forward "^[ \t]*:END:[ \t]*$" nil t))
+          (forward-line 1))))
+      (point))))
+
+(defun a3madkour-pub-author--upsert-cfm-key (key rendered)
+  "Set custom front matter KEY to RENDERED (already a segment value).
+A line naming KEY has that one segment replaced, its other keys kept;
+otherwise a new `#+HUGO_CUSTOM_FRONT_MATTER: :KEY RENDERED' line is
+inserted (see `--cfm-insert-point').  Hoists a displaced file property
+drawer first, as `--upsert-keyword' does."
+  (a3madkour-pub-author--hoist-file-property-drawer)
+  (let ((seg (format ":%s %s" key rendered))
+        (hit (cl-find-if (lambda (l)
+                           (assoc key (a3madkour-pub-author--cfm-segments (nth 2 l))))
+                         (a3madkour-pub-author--cfm-lines))))
+    (save-excursion
+      (if hit
+          (let ((segs (a3madkour-pub-author--cfm-segments (nth 2 hit))))
+            (setcdr (assoc key segs) seg)
+            (delete-region (nth 0 hit) (nth 1 hit))
+            (goto-char (nth 0 hit))
+            (insert "#+HUGO_CUSTOM_FRONT_MATTER: " (mapconcat #'cdr segs " ")))
+        (goto-char (a3madkour-pub-author--cfm-insert-point))
+        (unless (bolp) (insert "\n"))
+        (insert "#+HUGO_CUSTOM_FRONT_MATTER: " seg "\n")))))
+
+(defun a3madkour-pub-author--remove-cfm-key (key)
+  "Remove KEY's segment from every custom front matter line.
+A line left with no keys is deleted with its newline."
+  (save-excursion
+    ;; Bottom-up, so earlier lines' positions stay valid.
+    (dolist (l (reverse (a3madkour-pub-author--cfm-lines)))
+      (let* ((segs (a3madkour-pub-author--cfm-segments (nth 2 l)))
+             (kept (cl-remove-if (lambda (s) (equal (car s) key)) segs)))
+        (unless (equal kept segs)
+          (if kept
+              (progn
+                (delete-region (nth 0 l) (nth 1 l))
+                (goto-char (nth 0 l))
+                (insert "#+HUGO_CUSTOM_FRONT_MATTER: "
+                        (mapconcat #'cdr kept " ")))
+            (delete-region (nth 0 l) (min (point-max) (1+ (nth 1 l))))))))))
+
+(defun a3madkour-pub-author--remove-field (name)
+  "Remove field NAME: its keyword line, or its custom front matter key."
+  (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
+    (if (not kw)
+        (a3madkour-pub-author--remove-cfm-key name)
+      (save-excursion
+        (goto-char (point-min))
+        (let ((case-fold-search t))
+          (while (re-search-forward
+                  (format "^#\\+%s:.*\n?" (regexp-quote kw)) nil t)
+            (replace-match "" t t)))))))
+
+(defun a3madkour-pub-author--write-field (name type value)
+  "Write field NAME (of TYPE) with VALUE into the buffer preamble."
+  (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
+    (if kw
+        (a3madkour-pub-author--upsert-keyword kw value)
+      (a3madkour-pub-author--upsert-cfm-key
+       name (a3madkour-pub-author--cfm-value type value)))))
 
 ;; -- a3-publish-mark --
 
