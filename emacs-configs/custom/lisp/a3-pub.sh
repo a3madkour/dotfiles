@@ -178,6 +178,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
+    -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
     -l a3madkour-publish-assets \
     -l a3madkour-publish-unpublish \
@@ -235,11 +236,13 @@ if [ "${1:-}" = "--publish-living" ]; then
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
+    -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
     -l a3madkour-publish-assets \
     -l a3madkour-publish-unpublish \
     -l a3madkour-publish-export \
     -l a3madkour-publish-frontmatter \
+    -l a3madkour-sections \
     -l a3madkour-publish-living \
     -l a3madkour-publish-deliberate \
     -l a3madkour-publish-garden \
@@ -315,11 +318,13 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
+    -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
     -l a3madkour-publish-assets \
     -l a3madkour-publish-unpublish \
     -l a3madkour-publish-export \
     -l a3madkour-publish-frontmatter \
+    -l a3madkour-sections \
     -l a3madkour-publish-living \
     -l a3madkour-publish-deliberate \
     -l a3madkour-publish-garden \
@@ -380,6 +385,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
     -l a3madkour-publish \
+    -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
     -l a3madkour-publish-assets \
     -l a3madkour-publish-unpublish \
@@ -411,11 +417,13 @@ exec emacs --batch \
   --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
   -L "$LISP_DIR" \
   -l a3madkour-publish \
+  -l a3madkour-publish-registry \
   -l a3madkour-publish-rewrite \
   -l a3madkour-publish-assets \
   -l a3madkour-publish-unpublish \
   -l a3madkour-publish-export \
   -l a3madkour-publish-frontmatter \
+  -l a3madkour-sections \
   -l a3madkour-publish-living \
   -l a3madkour-publish-deliberate \
   -l a3madkour-publish-garden \

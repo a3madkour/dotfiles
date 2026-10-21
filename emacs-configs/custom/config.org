@@ -5239,6 +5239,11 @@ Placed late so org-roam (loaded eagerly at `*** Org roam' above) is on the
 load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 `yaml' is needed by `a3madkour-publish-export' / `-history' on the same chain.
 #+begin_src emacs-lisp
+;; The section registry and the reader for the site's data/sections.json
+;; contract.  Both also arrive transitively through the modules below; named
+;; here so the dependency is visible (plan-wrapper rule).
+(require 'a3madkour-publish-registry)
+(require 'a3madkour-sections)
 (require 'a3madkour-publish-deliberate)
 ;; The living path and its per-section handlers, in `a3-pub.sh --publish-living'
 ;; order.  A living run only republishes sections whose handler is loaded, so a
