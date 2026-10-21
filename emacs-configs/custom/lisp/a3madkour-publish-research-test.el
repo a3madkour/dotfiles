@@ -338,6 +338,79 @@ Body before.
       (delete-directory notes-dir t)
       (delete-directory site-dir t))))
 
+;;; Spike (section-registry plan Task 1): how a `refs' value written by
+;;; `a3-publish-mark' reaches the page.  `#+HUGO_CUSTOM_FRONT_MATTER:' values
+;;; go through `org-babel-parse-header-arguments' inside ox-hugo, so
+;;; `:k a b' arrives as the STRING "a b" while `:k '(a b)' arrives as a
+;;; LIST of symbols.  These tests pin which form ends up as a YAML list in
+;;; the published bundle, through the real research handler and ox-hugo.
+
+(defun a3madkour-pub-research-test--publish-question (cfm-line)
+  "Publish a research question carrying CFM-LINE; return (STATUS . TEXT).
+STATUS is what the handler passed to ON-DONE; TEXT is the bundle's
+index.md, or nil when no bundle was written."
+  (let* ((notes-dir (make-temp-file "a3-pub-research-notes-" t))
+         (site-dir  (make-temp-file "a3-pub-research-site-" t))
+         (src (expand-file-name "research-questions-refs.org" notes-dir))
+         (out (expand-file-name
+               "content/research/questions/refs-question/index.md" site-dir))
+         (status 'never-called))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "data" site-dir) t)
+          (make-directory (expand-file-name "content/research/questions" site-dir) t)
+          (with-temp-file (expand-file-name "data/url-history.yaml" site-dir)
+            (insert "notes: []\n"))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n"
+                    ":ID: 33333333-aaaa-bbbb-cccc-dddddddddddd\n"
+                    ":LAST_MODIFIED: 2026-05-30\n"
+                    ":END:\n"
+                    "#+title: Refs question\n"
+                    "#+HUGO_PUBLISH: t\n"
+                    "#+HUGO_SECTION: research/questions\n"
+                    "#+HUGO_BASE_DIR: " site-dir "\n"
+                    "#+HUGO_DESCRIPTION: A question.\n"
+                    "#+HUGO_CUSTOM_FRONT_MATTER: :theme procedural-narrative\n"
+                    "#+HUGO_CUSTOM_FRONT_MATTER: :status active\n"
+                    cfm-line "\n"
+                    "\nBody.\n"))
+          (let ((a3madkour-pub/site-data-dir
+                 (file-name-as-directory (expand-file-name "data" site-dir)))
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore))
+              (a3madkour-pub/begin-publish)
+              (a3madkour-pub-research/publish-research-file
+               src (make-a3-pub-async-run)
+               :on-done (lambda (s) (setq status s)))
+              (a3madkour-pub/finish-publish)))
+          (cons status
+                (and (file-exists-p out)
+                     (with-temp-buffer
+                       (insert-file-contents out)
+                       (buffer-string)))))
+      (delete-directory notes-dir t)
+      (delete-directory site-dir t))))
+
+(ert-deftest a3madkour-pub-research--refs-space-list-exports-as-yaml-list ()
+  "`:supporting_notes a b' — the form `a3-publish-mark' writes for a refs
+field — reaches the page as a YAML list."
+  (let ((res (a3madkour-pub-research-test--publish-question
+              "#+HUGO_CUSTOM_FRONT_MATTER: :supporting_notes example-note-one example-note-two")))
+    (should (eq (car res) 'ok))
+    (should (string-match-p
+             "^supporting_notes: \\[\"example-note-one\", \"example-note-two\"\\]$"
+             (cdr res)))))
+
+(ert-deftest a3madkour-pub-research--refs-quoted-list-exports-as-yaml-list ()
+  "`:supporting_notes \\='(a b)' — ox-hugo's documented list form."
+  (let ((res (a3madkour-pub-research-test--publish-question
+              "#+HUGO_CUSTOM_FRONT_MATTER: :supporting_notes '(example-note-one example-note-two)")))
+    (should (eq (car res) 'ok))
+    (should (string-match-p
+             "^supporting_notes: \\[\"example-note-one\", \"example-note-two\"\\]$"
+             (cdr res)))))
+
 (ert-deftest a3madkour-pub-research-test/publisher-threads-id-to-asset-validate ()
   "publish-research-file passes the note's :id as source-note-id to asset-validate-and-copy."
   (let ((captured-id 'unset)
