@@ -762,6 +762,18 @@ section (library) yields nil: `a3-library-insert-item' writes its items."
                     (not (a3madkour-pub-author--field-present-p (car cell)))))))
          (a3madkour-sections/fields section vcase))))))
 
+(defun a3madkour-pub-author/missing-required (file section)
+  "Required SECTION fields FILE lacks, by name: what mark would still ask.
+These are the fields the pipeline cannot supply, so a bundle published
+without them fails the site's fixture linter.  A contract error (say an
+unknown variant case) signals a `user-error'."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (delay-mode-hooks (org-mode))
+    (cl-loop for (name . spec) in (a3madkour-pub-author--fields-to-fill section)
+             when (alist-get 'required spec)
+             collect name)))
+
 (defconst a3madkour-pub-author--string-shapes
   '(("int" "\\`[0-9]+\\'" "a whole number")
     ("date" "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" "a YYYY-MM-DD date"))

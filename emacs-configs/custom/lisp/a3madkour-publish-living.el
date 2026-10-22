@@ -21,6 +21,7 @@
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
 (require 'a3madkour-publish-unpublish)
+(require 'a3madkour-publish-author)    ; the contract gate
 
 (defun a3madkour-pub-living--collect-triples ()
   "Return (section file handler) triples for every living-section file
@@ -38,23 +39,44 @@ is not checked here (see `a3madkour-pub-living--dispatch')."
               (push (list section file handler) triples))))))
     (nreverse triples)))
 
+(defun a3madkour-pub-living--contract-gap (file section)
+  "Why FILE cannot publish under SECTION's contract, or nil when it can.
+A missing file is left to its handler to report."
+  (when (file-readable-p file)
+    (condition-case err
+        (let ((missing (a3madkour-pub-author/missing-required file section)))
+          (when missing
+            (format "%s: missing required %s for %s; run M-x a3-publish-mark"
+                    file (string-join missing ", ") section)))
+      (user-error (format "%s: %s" file (error-message-string err))))))
+
 (defun a3madkour-pub-living--dispatch (triple run report)
   "Run TRIPLE's handler on its file, reporting the outcome via REPORT.
 A handler that is not `fboundp' reports `err' and logs a
-`handler-missing' step naming the function."
-  (let ((section (nth 0 triple))
-        (file (nth 1 triple))
-        (handler (nth 2 triple)))
-    (if (not (fboundp handler))
-        (let ((msg (format "%s: handler `%s' for section %s is not loaded"
-                           file handler section)))
-          (message "a3-publish-living: %s" msg)
-          (a3-pub-async/log-step run "handler-missing" :err :err-snippet msg)
-          (funcall report 'err))
+`handler-missing' step naming the function.  A file lacking a field its
+section requires reports `err' and logs a `contract' step instead of
+publishing a bundle the site would reject (S1 row 24)."
+  (let* ((section (nth 0 triple))
+         (file (nth 1 triple))
+         (handler (nth 2 triple))
+         (gap (and (fboundp handler)
+                   (a3madkour-pub-living--contract-gap file section))))
+    (cond
+     ((not (fboundp handler))
+      (let ((msg (format "%s: handler `%s' for section %s is not loaded"
+                         file handler section)))
+        (message "a3-publish-living: %s" msg)
+        (a3-pub-async/log-step run "handler-missing" :err :err-snippet msg)
+        (funcall report 'err)))
+     (gap
+      (message "a3-publish-living: %s" gap)
+      (a3-pub-async/log-step run "contract" :err :err-snippet gap)
+      (funcall report 'err))
+     (t
       (condition-case _err
           (funcall handler file run
                    :on-done (lambda (s) (funcall report s)))
-        (error (funcall report 'err))))))
+        (error (funcall report 'err)))))))
 
 ;;;###autoload
 (defun a3-publish-living ()

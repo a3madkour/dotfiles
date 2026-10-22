@@ -334,5 +334,67 @@ was silently skipped, so its pages looked removed (S1 row 9)."
                                             (nth 2 l))))
                      logged))))
 
+(defun a3-pub-living-test--theme (dir filetags)
+  "Write a research theme note under DIR tagged FILETAGS; return its path.
+Every required authored field is present, so only the tags can be missing."
+  (let ((f (expand-file-name "theme.org" dir)))
+    (with-temp-file f
+      (insert ":PROPERTIES:\n:ID: 3e650e6f-0000-0000-0000-000000000000\n:END:\n"
+              "#+title: A Theme\n"
+              "#+HUGO_SECTION: research/themes\n"
+              "#+HUGO_PUBLISH: t\n"
+              "#+HUGO_DESCRIPTION: one line\n"
+              "#+HUGO_CUSTOM_FRONT_MATTER: :status \"active\"\n"
+              "#+HUGO_CUSTOM_FRONT_MATTER: :weight 10\n"
+              "#+filetags: " filetags "\n"))
+    f))
+
+(defmacro a3-pub-living-test--gate (filetags &rest body)
+  "Run `a3-publish-living' over one theme note tagged FILETAGS.
+Binds `ran' (the handler was called), `logged' ((LABEL STATUS SNIPPET) ...)
+and `captured' (the finish status) for BODY."
+  (declare (indent 1))
+  `(let ((dir (make-temp-file "living-gate-" t))
+         (captured 'unset) (logged nil) (ran nil))
+     (unwind-protect
+         (let ((file (a3-pub-living-test--theme dir ,filetags)))
+           (a3-pub-living-test--capture-finish-status captured
+             (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                        (lambda () (list (list "research/themes" file 'ok-h))))
+                       ((symbol-function 'ok-h)
+                        (lambda (_f _r &rest rest)
+                          (setq ran t)
+                          (funcall (plist-get rest :on-done) 'ok)))
+                       ((symbol-function 'a3-pub-async/log-step)
+                        (lambda (_run label status &rest kw)
+                          (push (list label status (plist-get kw :err-snippet))
+                                logged))))
+               (a3-publish-living)))
+           ,@body)
+       (delete-directory dir t))))
+
+(ert-deftest a3madkour-pub-living-test/note-missing-required-field-is-not-published ()
+  "A note whose contract lacks a required field mark would ask for is not
+handed to its handler: the file reports `err', and a `contract' step names
+the field and `a3-publish-mark'.  S1 row 24: a theme tagged only `:TODO:'
+was published without `tags', and only CI's fixture linter noticed."
+  (a3-pub-living-test--gate ":TODO:"
+    (should-not ran)
+    (should (eq captured 'err))
+    (should (cl-some (lambda (l)
+                       (and (equal (nth 0 l) "contract")
+                            (eq (nth 1 l) :err)
+                            (string-match-p "\\btags\\b" (nth 2 l))
+                            (string-match-p "a3-publish-mark" (nth 2 l))))
+                     logged))))
+
+(ert-deftest a3madkour-pub-living-test/note-meeting-contract-is-published ()
+  "Contrast: the same theme with a real tag reaches its handler, and the
+run finishes `ok'."
+  (a3-pub-living-test--gate ":TODO:pcg:"
+    (should ran)
+    (should (eq captured 'ok))
+    (should-not (assoc "contract" logged))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here
