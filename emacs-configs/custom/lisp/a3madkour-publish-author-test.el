@@ -513,13 +513,20 @@ KV alternates key and already-rendered YAML value strings."
       (while kv (insert (format "%s: %s\n" (pop kv) (pop kv))))
       (insert "---\nBody\n"))))
 
+(defvar vertico-preselect)
+
+(defun a3madkour-pub-author-test--prompt-preselected-p ()
+  "Non-nil when Vertico would preselect the input line."
+  (and (boundp 'vertico-preselect) (eq vertico-preselect 'prompt)))
+
 (defmacro a3madkour-pub-author-test--answering (answers &rest body)
   "Run BODY with every prompt answered from ANSWERS, or the test fails.
 ANSWERS is an alist (REGEXP . ANSWER) matched against the prompt text.
 ANSWER is returned as-is, except: a function is called; for
 `completing-read' the keyword `:default' returns the DEF argument and
 `:first' the first candidate; for `completing-read-multiple' `:first'
-returns a one-element list."
+returns a one-element list.  `:ret' is Vertico's RET on untouched input:
+the empty answer when `vertico-preselect' is `prompt', else a candidate."
   (declare (indent 1))
   `(let ((answers ,answers))
      (cl-flet ((answer (prompt)
@@ -533,11 +540,16 @@ returns a one-element list."
                     (let ((v (answer prompt)))
                       (cond ((eq v :default) def)
                             ((eq v :first) (car coll))
+                            ((eq v :ret) (if (a3madkour-pub-author-test--prompt-preselected-p)
+                                             "" (car coll)))
                             (t v)))))
                  ((symbol-function 'completing-read-multiple)
                   (lambda (prompt coll &rest _)
                     (let ((v (answer prompt)))
-                      (if (eq v :first) (list (car coll)) v))))
+                      (cond ((eq v :first) (list (car coll)))
+                            ((eq v :ret) (unless (a3madkour-pub-author-test--prompt-preselected-p)
+                                           (list (car coll))))
+                            (t v)))))
                  ((symbol-function 'read-string)
                   (lambda (prompt &rest _) (answer prompt)))
                  ((symbol-function 'y-or-n-p)
@@ -627,6 +639,41 @@ returns a one-element list."
                  "research/questions" "supporting_notes"
                  (a3madkour-sections/field "research/questions" "supporting_notes"))
                 'skip))))
+
+(ert-deftest a3madkour-pub-author-test/optional-pick-ret-on-untouched-input-skips ()
+  "Under Vertico, RET on an untouched optional pick-list skips the field.
+Vertico preselects the first candidate by default and RET submits it under
+require-match, so optional pick-lists must preselect the empty input.
+A required pick-list and an enum with a default keep Vertico's default."
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--question-site)
+    (let ((vertico-preselect 'directory))
+      (a3madkour-pub-author-test--answering
+          '((" supporting_notes (optional): " . :ret)
+            (" related (optional): " . :ret)
+            (" mood (optional): " . :ret)
+            (" status: " . :ret)
+            (" theme: " . :ret))
+        (should (eq (a3madkour-pub-author--ask
+                     "research/questions" "supporting_notes"
+                     (a3madkour-sections/field "research/questions" "supporting_notes"))
+                    'skip))
+        (should (eq (a3madkour-pub-author--ask
+                     "research/questions" "related"
+                     '((type . "ref") (to . "garden")))
+                    'skip))
+        (should (eq (a3madkour-pub-author--ask
+                     "research/questions" "mood"
+                     '((type . "enum") (values . ("calm" "tense"))))
+                    'skip))
+        (should (equal (a3madkour-pub-author--ask
+                        "research/questions" "theme"
+                        (a3madkour-sections/field "research/questions" "theme"))
+                       "procedural-narrative"))
+        (should (stringp (a3madkour-pub-author--ask
+                          "research/themes" "status"
+                          (a3madkour-sections/field "research/themes" "status"))))
+        (should (eq vertico-preselect 'directory))))))
 
 (ert-deftest a3madkour-pub-author-test/fields-to-fill-blank-selector-is-concept ()
   (a3madkour-pub-author-test--with-site

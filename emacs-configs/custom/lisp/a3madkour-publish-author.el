@@ -705,13 +705,27 @@ backslash, which org's header-argument reader would consume."
           ((equal type "list") (split-string v "[ \t]+" t))
           (t v))))
 
+(defvar vertico-preselect)
+
+(defun a3madkour-pub-author--optional-pick (optional read)
+  "Call READ, a pick-list read, with the empty input preselected if OPTIONAL.
+An empty answer is how `completing-read' says \"no value\", even under
+require-match, and the callers map it to `skip'.  Vertico preselects the
+first candidate instead, so RET on an optional field filled it; `prompt'
+makes RET on untouched input submit the empty answer.  Without Vertico
+RET on empty input already returns \"\", so nothing is bound."
+  (if (and optional (boundp 'vertico-preselect))
+      (let ((vertico-preselect 'prompt)) (funcall read))
+    (funcall read)))
+
 (defun a3madkour-pub-author--ask-ref (name spec prompt)
   "Pick field NAME's ref/refs value (SPEC) from published targets."
   (let* ((to (alist-get 'to spec))
          (required (alist-get 'required spec))
          (choices (mapcar (lambda (c)
                             (cons (format "%s (%s)" (cdr c) (car c)) (car c)))
-                          (a3madkour-pub-author--published-targets to))))
+                          (a3madkour-pub-author--published-targets to)))
+         (names (mapcar #'car choices)))
     (cond
      ((and (null choices) required)
       (user-error "a3-publish-mark: %s needs a published %s page; \
@@ -719,14 +733,16 @@ publish a %s page first" name to to))
      ((null choices) 'skip)
      ((equal (alist-get 'type spec) "ref")
       (let (pick)
-        (while (progn (setq pick (completing-read prompt (mapcar #'car choices)
-                                                  nil t))
+        (while (progn (setq pick (a3madkour-pub-author--optional-pick
+                                   (not required)
+                                   (lambda () (completing-read prompt names nil t))))
                       (and required (string-empty-p pick))))
         (if (string-empty-p pick) 'skip (cdr (assoc pick choices)))))
      (t
       (let (picks)
-        (while (progn (setq picks (completing-read-multiple
-                                   prompt (mapcar #'car choices) nil t))
+        (while (progn (setq picks (a3madkour-pub-author--optional-pick
+                                    (not required)
+                                    (lambda () (completing-read-multiple prompt names nil t))))
                       (and required (null picks))))
         (if picks
             (mapcar (lambda (p) (cdr (assoc p choices))) picks)
@@ -745,10 +761,13 @@ nothing.  Signals `user-error' for a required ref with no targets."
      ((equal fill "today") (format-time-string "%Y-%m-%d"))
      ((equal fill "next-weight") (a3madkour-pub-author--next-weight section))
      ((equal type "enum")
-      (let (v)
-        (while (progn (setq v (completing-read prompt (alist-get 'values spec)
-                                               nil t nil nil
-                                               (alist-get 'default spec)))
+      (let ((default (alist-get 'default spec)) v)
+        ;; With a default, RET submitting it is the intended answer.
+        (while (progn (setq v (a3madkour-pub-author--optional-pick
+                               (not (or required default))
+                               (lambda ()
+                                 (completing-read prompt (alist-get 'values spec)
+                                                  nil t nil nil default))))
                       (and required (string-empty-p v))))
         (if (string-empty-p v) 'skip v)))
      ((equal type "bool")
