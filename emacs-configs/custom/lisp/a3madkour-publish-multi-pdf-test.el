@@ -50,16 +50,21 @@ Sync shim makes this deterministic."
     (should done)))
 
 (ert-deftest a3madkour-pub-multi-pdf/compile-chain-runs-four-passes ()
-  "compile-tex-async invokes the 4-pass sequence and fires on-done."
-  (let (cmds done)
+  "compile-tex-async invokes the 4-pass sequence and fires on-done.
+`delete-file' is stubbed like the siblings': with `file-exists-p' stubbed
+to t the stale-PDF delete would otherwise hit the real /tmp/x/foo.pdf
+(and failed whenever something else had left a plain file at /tmp/x)."
+  (let (cmds done deleted)
     (cl-letf (((symbol-function 'call-process)
                (lambda (cmd &rest _) (push cmd cmds) 0))
-              ((symbol-function 'file-exists-p) (lambda (_) t)))
+              ((symbol-function 'file-exists-p) (lambda (_) t))
+              ((symbol-function 'delete-file) (lambda (f &rest _) (push f deleted))))
       (with-a3-pub-async-sync
        (a3madkour-pub-multi-pdf--compile-tex-async
         "/tmp/x/foo.tex"
         :on-done (lambda (ok) (setq done ok)))))
     (should (= 4 (length cmds)))
+    (should (equal deleted '("/tmp/x/foo.pdf")))
     (should done)))
 
 (ert-deftest a3madkour-pub-multi-pdf/compile-chain-no-pdf-returns-nil ()
