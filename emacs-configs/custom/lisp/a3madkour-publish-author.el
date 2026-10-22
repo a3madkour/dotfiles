@@ -627,27 +627,64 @@ resolve to a file."
                when (and (file-directory-p sub) (file-exists-p md))
                collect md))))
 
+(defun a3madkour-pub-author--marked-notes (section)
+  "Org notes under `a3madkour-pub/org-notes-dir' marked live for SECTION.
+Returns `a3madkour-pub--parse-file' plists that carry a slug, skipping the
+buffer being marked.  Read uncached: `note-metadata' snapshots per publish
+run, and mark runs between runs.  A note whose keywords are invalid (a
+`user-error' from the parser) is skipped; living publish reports it."
+  (let ((dir (bound-and-true-p a3madkour-pub/org-notes-dir))
+        (self (and buffer-file-name (expand-file-name buffer-file-name))))
+    (when (and dir (file-directory-p dir))
+      (cl-loop for f in (directory-files-recursively dir "\\.org\\'")
+               for md = (and (not (equal (expand-file-name f) self))
+                             (condition-case nil (a3madkour-pub--parse-file f)
+                               (user-error nil)))
+               when (and md
+                         (eq (plist-get md :state) 'live)
+                         (equal (plist-get md :section) section)
+                         (plist-get md :slug))
+               collect md))))
+
 (defun a3madkour-pub-author--published-targets (to)
-  "Published pages of section TO as ((SLUG . TITLE) ...), sorted by slug.
-Bundles whose frontmatter says `draft: true' are not published, so are
-omitted.  TITLE is the bundle frontmatter's title, falling back to SLUG."
-  (sort (mapcar (lambda (md)
-                  (let ((slug (file-name-nondirectory
-                               (directory-file-name (file-name-directory md)))))
-                    (cons slug (or (a3madkour-pub-author--fm-scalar md "title")
-                                   slug))))
-                (cl-remove-if
-                 (lambda (md)
-                   (equal (a3madkour-pub-author--fm-scalar md "draft") "true"))
-                 (a3madkour-pub-author--bundles to)))
-        (lambda (a b) (string< (car a) (car b)))))
+  "Pages of section TO a ref may name, as ((SLUG . TITLE) ...), by slug.
+A published bundle (not `draft: true') counts, and so does an org note
+marked live for TO that has not been published yet: marking a theme and
+then its question in one session must offer that theme.  TITLE is the
+bundle frontmatter's title (falling back to SLUG), or the note's title.
+A slug present as both is listed once, with the bundle's title."
+  (let ((targets
+         (mapcar (lambda (md)
+                   (let ((slug (file-name-nondirectory
+                                (directory-file-name (file-name-directory md)))))
+                     (cons slug (or (a3madkour-pub-author--fm-scalar md "title")
+                                    slug))))
+                 (cl-remove-if
+                  (lambda (md)
+                    (equal (a3madkour-pub-author--fm-scalar md "draft") "true"))
+                  (a3madkour-pub-author--bundles to)))))
+    (dolist (md (a3madkour-pub-author--marked-notes to))
+      (unless (assoc (plist-get md :slug) targets)
+        (push (cons (plist-get md :slug)
+                    (or (plist-get md :title) (plist-get md :slug)))
+              targets)))
+    (sort targets (lambda (a b) (string< (car a) (car b))))))
 
 (defun a3madkour-pub-author--next-weight (section)
-  "Largest numeric weight among SECTION's published pages + 10, or 10."
-  (let ((ws (cl-loop for md in (a3madkour-pub-author--bundles section)
-                     for w = (a3madkour-pub-author--fm-scalar md "weight")
-                     when (and w (string-match-p "\\`[0-9]+\\'" w))
-                     collect (string-to-number w))))
+  "Largest numeric weight in SECTION + 10, or 10.
+Counts published bundles and notes marked for SECTION but not yet
+published, so two themes marked before one publish get distinct weights."
+  (let ((ws (append
+             (cl-loop for md in (a3madkour-pub-author--bundles section)
+                      for w = (a3madkour-pub-author--fm-scalar md "weight")
+                      when (and w (string-match-p "\\`[0-9]+\\'" w))
+                      collect (string-to-number w))
+             (cl-loop for md in (a3madkour-pub-author--marked-notes section)
+                      for w = (with-temp-buffer
+                                (insert-file-contents (plist-get md :file))
+                                (a3madkour-pub-author--cfm-get "weight"))
+                      when (and w (string-match-p "\\`[0-9]+\\'" w))
+                      collect (string-to-number w)))))
     (if ws (+ 10 (apply #'max ws)) 10)))
 
 (defun a3madkour-pub-author--selector-value (on)

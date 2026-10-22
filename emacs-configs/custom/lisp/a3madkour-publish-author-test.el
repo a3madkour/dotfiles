@@ -498,10 +498,20 @@ when caller passes the same answer to y-or-n-p)."
 
 (defmacro a3madkour-pub-author-test--with-site (&rest body)
   "Run BODY in an org temp buffer over a temp site root carrying the
-sections fixture (resolved through `a3madkour-pub/site-data-dir')."
+sections fixture (resolved through `a3madkour-pub/site-data-dir').
+`a3madkour-pub/org-notes-dir' is an empty notes dir under that root, so
+mark never reads the real ~/org/notes; `--note' writes into it."
   (declare (indent 0))
   `(a3madkour-sections-test--with-root a3madkour-sections-test--json
-     (with-temp-buffer (org-mode) ,@body)))
+     (let ((a3madkour-pub/org-notes-dir
+            (file-name-as-directory (expand-file-name "notes" root))))
+       (make-directory a3madkour-pub/org-notes-dir t)
+       (with-temp-buffer (org-mode) ,@body))))
+
+(defun a3madkour-pub-author-test--note (name &rest lines)
+  "Write org note NAME.org under the notes dir, one LINES element per line."
+  (with-temp-file (expand-file-name (concat name ".org") a3madkour-pub/org-notes-dir)
+    (dolist (l lines) (insert l "\n"))))
 
 (defun a3madkour-pub-author-test--page (section slug &rest kv)
   "Publish a stub content/SECTION/SLUG/index.md with frontmatter KV.
@@ -569,6 +579,47 @@ the empty answer when `vertico-preselect' is `prompt', else a candidate."
                    '(("alpha" . "Alpha") ("beta" . "Beta \"B\"")
                      ("untitled" . "untitled"))))
     (should-not (a3madkour-pub-author--published-targets "streams"))))
+
+(ert-deftest a3madkour-pub-author-test/targets-include-marked-unpublished-notes ()
+  "A note marked live for the section counts before its first publish, so
+a question marked in the same session as its theme can pick that theme.
+Drafts, unmarked notes and other sections do not; a marked note whose
+bundle exists is listed once."
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "alpha" "title" "\"Alpha\"")
+    (a3madkour-pub-author-test--note "new" "#+title: New theme"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: research/themes")
+    (a3madkour-pub-author-test--note "alpha" "#+title: Alpha"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: research/themes")
+    (a3madkour-pub-author-test--note "drafty" "#+title: Drafty"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: research/themes"
+                                     "#+HUGO_DRAFT: t")
+    (a3madkour-pub-author-test--note "private" "#+title: Private"
+                                     "#+HUGO_SECTION: research/themes")
+    (a3madkour-pub-author-test--note "garden" "#+title: G"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: garden")
+    (a3madkour-pub-author-test--note "broken" "#+HUGO_PUBLISH: t")
+    (should (equal (a3madkour-pub-author--published-targets "research/themes")
+                   '(("alpha" . "Alpha") ("new-theme" . "New theme"))))))
+
+(ert-deftest a3madkour-pub-author-test/targets-exclude-the-buffer-being-marked ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--note "self" "#+title: Self"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: research/questions")
+    (insert-file-contents (expand-file-name "self.org" a3madkour-pub/org-notes-dir))
+    (setq buffer-file-name (expand-file-name "self.org" a3madkour-pub/org-notes-dir))
+    (unwind-protect
+        (should-not (a3madkour-pub-author--published-targets "research/questions"))
+      (set-buffer-modified-p nil)
+      (setq buffer-file-name nil))))
+
+(ert-deftest a3madkour-pub-author-test/next-weight-counts-marked-unpublished-notes ()
+  (a3madkour-pub-author-test--with-site
+    (a3madkour-pub-author-test--page "research/themes" "a" "weight" "10")
+    (a3madkour-pub-author-test--note "new" "#+title: New theme"
+                                     "#+HUGO_PUBLISH: t" "#+HUGO_SECTION: research/themes"
+                                     "#+HUGO_CUSTOM_FRONT_MATTER: :weight 50")
+    (should (= (a3madkour-pub-author--next-weight "research/themes") 60))))
 
 (ert-deftest a3madkour-pub-author-test/next-weight-is-max-plus-ten ()
   (a3madkour-pub-author-test--with-site
