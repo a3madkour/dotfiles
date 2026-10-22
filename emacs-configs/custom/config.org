@@ -242,7 +242,7 @@ login shell so =exec-path= matches the terminal.
 (setq org-roam-capture-templates
       '(("d" "default" plain "%?"
 	 :target (file+head "${slug}.org"
-			    "#+title: ${title}\n#+filetags: :TODO:\n* ${title}\n* References:\n"
+			    "#+title: ${title}\n#+filetags: :TODO:\n\n* References:\n"
 							)
 	 :unnarrowed t)
 		("s" "solution" plain "%?"
