@@ -111,20 +111,39 @@ regardless of construction order in upstream code (yaml.el serializes alists
 in list order — entries get re-shuffled keys depending on how they were
 updated).")
 
+(defconst a3madkour-pub-history--history-key-order
+  '(url replaced_at reason)
+  "Canonical key order for each item of an entry's `history'.
+The order `record-publish' builds them in.  yaml.el does not return keys
+in file order, so without this every round-trip reshuffled them.")
+
+(defun a3madkour-pub-history--reorder (alist order)
+  "ALIST with the keys in ORDER first, in that order, then the rest as-is.
+Unknown keys are kept, so a key added elsewhere is never dropped."
+  (let ((known (cl-remove-if-not (lambda (k) (assq k alist)) order))
+        (extras (cl-remove-if (lambda (cell) (memq (car cell) order)) alist)))
+    (append (mapcar (lambda (k) (assq k alist)) known) extras)))
+
 (defun a3madkour-pub-history--canonicalize-entry (entry)
   "Return ENTRY (an alist) with keys re-ordered per
-`a3madkour-pub-history--canonical-key-order'.  Unknown keys are appended
+`a3madkour-pub-history--canonical-key-order', and each `history' item's
+per `a3madkour-pub-history--history-key-order'.  Unknown keys are appended
 after the canonical ones in their existing order, so adding a new key
 elsewhere in the codebase doesn't silently drop it from the emitted YAML."
-  (let* ((known (cl-remove-if-not
-                 (lambda (k) (assq k entry))
-                 a3madkour-pub-history--canonical-key-order))
-         (extras (cl-remove-if
-                  (lambda (cell)
-                    (memq (car cell)
-                          a3madkour-pub-history--canonical-key-order))
-                  entry)))
-    (append (mapcar (lambda (k) (assq k entry)) known) extras)))
+  (let ((out (a3madkour-pub-history--reorder
+              entry a3madkour-pub-history--canonical-key-order))
+        (hist (alist-get 'history entry)))
+    (if (and (sequencep hist) (> (length hist) 0))
+        (mapcar (lambda (cell)
+                  (if (eq (car cell) 'history)
+                      (cons 'history
+                            (vconcat (mapcar (lambda (item)
+                                               (a3madkour-pub-history--reorder
+                                                item a3madkour-pub-history--history-key-order))
+                                             hist)))
+                    cell))
+                out)
+      out)))
 
 (defun a3madkour-pub-history--canonicalize-manifest (manifest)
   "Return MANIFEST with each `notes' entry's keys re-ordered canonically."

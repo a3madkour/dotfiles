@@ -498,6 +498,27 @@ is ignored, so the real mtime still surfaces for genuinely first-seen files."
          (got (a3madkour-pub-history--canonicalize-entry entry)))
     (should (equal '(id state custom_field) (mapcar #'car got)))))
 
+(ert-deftest a3madkour-pub-history-test/history-items-keep-key-order-across-round-trips ()
+  "A read → write round-trip leaves the file byte-identical, history items
+included.  Only entry keys were ordered, so each publish reshuffled every
+history item's url / replaced_at / reason (a diff with no change in it)."
+  (a3-pub-history-test--with-tmp-manifest path
+    (a3madkour-pub-history/write-manifest
+     '((notes . [((id . "1") (current_url . "/a/")
+                  (history . [((reason . "removed") (url . "/a/")
+                               (replaced_at . "2026-06-01T19:24:54Z"))
+                              ((replaced_at . "2026-06-01T22:18:53Z")
+                               (reason . "republished") (url . nil))])
+                  (state . "live"))])))
+    (let ((first (with-temp-buffer (insert-file-contents path) (buffer-string))))
+      (should (string-match-p
+               "- url: \"/a/\"\n *replaced_at: \"2026-06-01T19:24:54Z\"\n *reason: removed"
+               first))
+      (dotimes (_ 2)
+        (a3madkour-pub-history/write-manifest (a3madkour-pub-history/read-manifest)))
+      (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                     first)))))
+
 (ert-deftest a3madkour-pub-history-test/write-manifest-is-byte-stable ()
   "Two writes of equivalent-but-differently-ordered manifests produce
 byte-identical YAML output."
