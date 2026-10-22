@@ -134,5 +134,62 @@ must NOT be touched — only the `key=\"&quot;V&quot;\"' pattern is sanitized."
          (sanitized (a3madkour-pub-export--strip-stray-attr-quotes input)))
     (should (equal sanitized input))))
 
+;; -- org-roam template headings: title-duplicate heading + empty headings --
+
+(defun a3madkour-pub-export-test--body (org)
+  "Export ORG (file text after the keyword preamble) and return its body."
+  (let* ((tmpdir (make-temp-file "a3-pub-export-tidy-" t))
+         (src (expand-file-name "n.org" tmpdir)))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "#+title: My Note\n#+HUGO_SECTION: garden\n"
+                    "#+HUGO_BASE_DIR: " tmpdir "/site/\n\n" org))
+          (plist-get (a3madkour-pub-export/export-file src) :body))
+      (delete-directory tmpdir t))))
+
+(ert-deftest a3madkour-pub-export-test/drops-leading-title-heading-keeps-its-body ()
+  "The org-roam template opens with `* <title>'; exported, that heading
+repeats the page title as an H2.  Its body becomes the page body and its
+children move up one level."
+  (let ((body (a3madkour-pub-export-test--body
+               "* My Note\nIntro text.\n** Part one\nDetail.\n")))
+    (should-not (string-match-p "My Note" body))
+    (should (string-match-p "Intro text\\." body))
+    (should (string-match-p "^## Part one" body))))
+
+(ert-deftest a3madkour-pub-export-test/keeps-leading-heading-that-is-not-the-title ()
+  (let ((body (a3madkour-pub-export-test--body "* Background\nText.\n")))
+    (should (string-match-p "^## Background" body))))
+
+(ert-deftest a3madkour-pub-export-test/drops-empty-headings ()
+  "The template's empty `* References:' exports as an empty H2.  A heading
+with no content and no children goes, a parent left empty by that goes
+too, and a heading with content or a property drawer stays."
+  (let ((body (a3madkour-pub-export-test--body
+               (concat "* My Note\nIntro.\n\n* References:\n\n"
+                       "* Outer\n** Inner\n\n"
+                       "* Kept\nText.\n"
+                       "* Anchor\n:PROPERTIES:\n:CUSTOM_ID: anchor\n:END:\n"))))
+    (should-not (string-match-p "References" body))
+    (should-not (string-match-p "Outer\\|Inner" body))
+    (should (string-match-p "^## Kept" body))
+    (should (string-match-p "^## Anchor" body))
+    (should (string-match-p "Intro\\." body))))
+
+(ert-deftest a3madkour-pub-export-test/tidy-leaves-source-file-unchanged ()
+  (let* ((tmpdir (make-temp-file "a3-pub-export-tidy-" t))
+         (src (expand-file-name "n.org" tmpdir))
+         (text (concat "#+title: My Note\n#+HUGO_SECTION: garden\n"
+                       "#+HUGO_BASE_DIR: " tmpdir "/site/\n\n"
+                       "* My Note\nIntro.\n\n* References:\n")))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert text))
+          (a3madkour-pub-export/export-file src)
+          (should (equal (with-temp-buffer (insert-file-contents src) (buffer-string))
+                         text)))
+      (delete-directory tmpdir t))))
+
 (provide 'a3madkour-publish-export-test)
 ;;; a3madkour-publish-export-test.el ends here

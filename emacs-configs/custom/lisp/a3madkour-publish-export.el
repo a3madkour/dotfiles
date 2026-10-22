@@ -114,6 +114,60 @@ found."
       ;; No frontmatter delimiters found.
       (cons "" text))))
 
+;; -- org-roam template headings --
+;;
+;; The capture template opens a note with `* <title>' and an empty
+;; `* References:'.  Exported as-is, the first repeats the page title as an
+;; H2 under the H1 and the second is an empty H2.  Tidied on the export's
+;; copy of the buffer (`org-export-before-parsing-functions'), so the source
+;; note is never touched and every section's handler gets the same result.
+
+(defun a3madkour-pub-export--heading-key (s)
+  "S normalized for comparing a heading with the title."
+  (downcase (string-trim (string-trim-right (string-trim s) ":"))))
+
+(defun a3madkour-pub-export--drop-title-heading ()
+  "Drop a leading level-1 heading whose text is the `#+title:'.
+Its body stays as the page body; its subheadings move up one level."
+  (let ((title (cadr (assoc "TITLE" (org-collect-keywords '("TITLE"))))))
+    (goto-char (point-min))
+    (when (and title
+               (or (org-at-heading-p) (outline-next-heading))
+               (= (org-current-level) 1)
+               (equal (a3madkour-pub-export--heading-key (org-get-heading t t t t))
+                      (a3madkour-pub-export--heading-key title)))
+      (let ((start (line-beginning-position))
+            (end (copy-marker (save-excursion (org-end-of-subtree t t) (point)))))
+        (forward-line 1)
+        (while (re-search-forward "^\\*\\(\\*+[ \t]\\)" end t)
+          (replace-match "\\1" t))
+        (delete-region start (save-excursion (goto-char start) (forward-line 1) (point)))
+        (set-marker end nil)))))
+
+(defun a3madkour-pub-export--drop-empty-headings ()
+  "Drop every heading with no content and no children.
+Walks bottom-up, so a parent emptied by dropping its children goes too.
+Whitespace is not content; a property drawer is (it may be a link target)."
+  (goto-char (point-max))
+  (while (re-search-backward org-heading-regexp nil t)
+    (let* ((start (line-beginning-position))
+           (level (org-current-level))
+           (body-start (save-excursion (forward-line 1) (point)))
+           (next (save-excursion (if (outline-next-heading) (point) (point-max))))
+           (child-p (and (< next (point-max))
+                         (save-excursion (goto-char next) (> (org-current-level) level)))))
+      (when (and (not child-p)
+                 (string-blank-p (buffer-substring-no-properties
+                                  (min body-start next) next)))
+        (delete-region start next)))
+    (goto-char (min (point) (line-beginning-position)))))
+
+(defun a3madkour-pub-export--tidy-template-headings (&optional _backend)
+  "`org-export-before-parsing-functions' entry: tidy template headings."
+  (save-excursion
+    (a3madkour-pub-export--drop-title-heading)
+    (a3madkour-pub-export--drop-empty-headings)))
+
 (defun a3madkour-pub-export/export-file (file)
   "Export FILE (an absolute `.org' path) via ox-hugo.
 
@@ -133,6 +187,9 @@ though we read+kill it immediately.  Let-bind nil to suppress the
 window-flash during publish."
   (let* ((org-hugo-front-matter-format "yaml")
          (org-export-show-temporary-export-buffer nil)
+         (org-export-before-parsing-functions
+          (append org-export-before-parsing-functions
+                  '(a3madkour-pub-export--tidy-template-headings)))
          (warnings nil)
          ;; Detect whether FILE is already open so we only kill what we create.
          (existing-buf (find-buffer-visiting file))
