@@ -43,4 +43,7 @@ exec emacs --batch \
   -l ert \
   "${load_args[@]}" \
   -f ert-run-tests-batch-and-exit \
-  "$@"
+  "$@" \
+  `# A prompt no test stubbed would block on the terminal forever; with`\
+  `# stdin at /dev/null it errors and fails that one test instead.`\
+  < /dev/null

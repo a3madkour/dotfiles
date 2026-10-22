@@ -58,7 +58,7 @@
   "mark: empty preamble → inserts #+HUGO_PUBLISH: t + #+HUGO_SECTION: <pick>."
   (with-temp-buffer
     (org-mode)
-    (insert "#+title: Test\n#+HUGO_SUMMARY: S\n\n* Heading\n")
+    (insert "#+title: Test\n#+filetags: :t:\n#+HUGO_SUMMARY: S\n\n* Heading\n")
     (a3-publish-mark "essays")
     (should (string-match-p "^#\\+HUGO_PUBLISH:[[:space:]]+t$"
                             (buffer-string)))
@@ -114,7 +114,7 @@ run precedes it, so the repair must not hoist it."
 when caller passes the same answer to y-or-n-p)."
   (with-temp-buffer
     (org-mode)
-    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: Test\n#+HUGO_SUMMARY: S\n")
+    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: Test\n#+filetags: :t:\n#+HUGO_SUMMARY: S\n")
     (cl-letf (((symbol-function 'y-or-n-p) (lambda (_p) t)))
       (a3-publish-mark "essays"))
     (should (string-match-p "^#\\+HUGO_SECTION:[[:space:]]+essays$"
@@ -126,7 +126,8 @@ when caller passes the same answer to y-or-n-p)."
   "mark: cross-section y-or-n-p → t edits proceed, returns picked section."
   (with-temp-buffer
     (org-mode)
-    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+HUGO_SUMMARY: S\n")
+    (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+HUGO_SUMMARY: S\n"
+            "#+title: T\n#+filetags: :t:\n")
     (cl-letf (((symbol-function 'y-or-n-p) (lambda (_p) t)))
       (should (equal (a3-publish-mark "essays") "essays")))))
 
@@ -580,19 +581,20 @@ the empty answer when `vertico-preselect' is `prompt', else a candidate."
 (ert-deftest a3madkour-pub-author-test/fields-to-fill-per-section ()
   (a3madkour-pub-author-test--with-site
     (insert "#+title: T\n")
+    ;; No #+filetags: a required tags field (source filetags) is asked for.
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
-                   '("description" "status" "weight")))
+                   '("tags" "description" "status" "weight")))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/questions"))
                    '("description" "status" "theme" "supporting_notes" "started")))
     (should-not (a3madkour-pub-author--fields-to-fill "garden"))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "essays"))
-                   '("summary")))
+                   '("summary" "tags")))
     (should-not (a3madkour-pub-author--fields-to-fill "library/reading"))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "recipes"))
                    '("summary")))
     (insert "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant :media_type book\n")
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
-                   '("description" "weight")))
+                   '("tags" "description" "weight")))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
                    '("creator")))))
 
@@ -688,7 +690,7 @@ A required pick-list and an enum with a default keep Vertico's default."
   (a3madkour-pub-author-test--with-site
     (a3madkour-pub-author-test--page "research/themes" "alpha" "title" "\"Alpha\"" "weight" "10")
     (a3madkour-pub-author-test--page "research/themes" "beta" "title" "\"Beta\"" "weight" "30")
-    (insert "#+title: New theme\n\nBody\n")
+    (insert "#+title: New theme\n#+filetags: :t:\n\nBody\n")
     (a3madkour-pub-author-test--answering
         '((" description: " . "What the theme asks.")
           (" status: " . :default))
@@ -699,6 +701,48 @@ A required pick-list and an enum with a default keep Vertico's default."
       (should (string-match-p "^#\\+HUGO_DESCRIPTION: What the theme asks\\.$" s))
       (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :status \"active\"$" s))
       (should (string-match-p "^#\\+HUGO_CUSTOM_FRONT_MATTER: :weight 40$" s)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-asks-tags-when-filetags-are-only-editorial ()
+  "Required `tags' (source filetags) is prompted for when every filetag is
+editorial, since the pipeline strips them and drops the key; the answer is
+appended to `#+filetags:', keeping the editorial tags.  A malformed org tag
+re-prompts."
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: New theme\n#+filetags: :TODO:\n\nBody\n")
+    (let ((tag-answers '("bad-tag" "bayes pcg")))
+      (a3madkour-pub-author-test--answering
+          (list (cons " description: " "D.")
+                (cons " status: " :default)
+                (cons " tags: " (lambda () (pop tag-answers))))
+        (a3-publish-mark "research/themes")))
+    (should (string-match-p "^#\\+filetags: :TODO:bayes:pcg:$" (buffer-string)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-creates-filetags-when-absent ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: New theme\n\nBody\n")
+    (a3madkour-pub-author-test--answering
+        '((" description: " . "D.") (" status: " . :default) (" tags: " . "pcg"))
+      (a3-publish-mark "research/themes"))
+    (should (string-match-p "^#\\+filetags: :pcg:$" (buffer-string)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-skips-tags-when-a-real-filetag-exists ()
+  "A non-editorial filetag satisfies the source: no tags prompt (an
+unexpected prompt fails the test), and an optional tags field never asks."
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: New theme\n#+filetags: :TODO:pcg:\n")
+    (a3madkour-pub-author-test--answering
+        '((" description: " . "D.") (" status: " . :default))
+      (a3-publish-mark "research/themes"))
+    (should (string-match-p "^#\\+filetags: :TODO:pcg:$" (buffer-string)))
+    (should-not (assoc "tags" (a3madkour-pub-author--fields-to-fill "research/questions")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-asks-title-when-missing ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+filetags: :pcg:\n\nBody\n")
+    (a3madkour-pub-author-test--answering
+        '((" title: " . "A theme") (" description: " . "D.") (" status: " . :default))
+      (a3-publish-mark "research/themes"))
+    (should (string-match-p "^#\\+TITLE: A theme$" (buffer-string)))))
 
 (defun a3madkour-pub-author-test--question-site ()
   "Publish one theme and two garden notes under the current site root."
@@ -740,7 +784,7 @@ A required pick-list and an enum with a default keep Vertico's default."
 
 (ert-deftest a3madkour-pub-author-test/mark-never-overwrites-a-present-field ()
   (a3madkour-pub-author-test--with-site
-    (insert "#+title: T\n#+HUGO_DESCRIPTION: Kept.\n"
+    (insert "#+title: T\n#+filetags: :t:\n#+HUGO_DESCRIPTION: Kept.\n"
             "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant\n")
     (a3madkour-pub-author-test--answering nil
       (a3-publish-mark "research/themes"))
@@ -783,7 +827,7 @@ not even #+HUGO_PUBLISH."
 
 (ert-deftest a3madkour-pub-author-test/mark-fill-keeps-drawer-first ()
   (a3madkour-pub-author-test--with-site
-    (insert ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: T\n")
+    (insert ":PROPERTIES:\n:ID:       abc-123\n:END:\n#+title: T\n#+filetags: :t:\n")
     (a3madkour-pub-author-test--answering
         '((" description: " . "D.") (" status: " . :default))
       (a3-publish-mark "research/themes"))
@@ -795,7 +839,8 @@ not even #+HUGO_PUBLISH."
   (dolist (accept '(t nil))
     (a3madkour-pub-author-test--with-site
       (insert "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n"
-              "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026 :topic_map a b\n#+title: T\n")
+              "#+HUGO_CUSTOM_FRONT_MATTER: :year 2026 :topic_map a b\n#+title: T\n"
+              "#+filetags: :t:\n")
       (a3madkour-pub-author-test--answering
           (list (cons "\\`Move from" t)
                 (cons "\\`Remove fields not in research/themes (year, topic_map)" accept)
@@ -890,7 +935,9 @@ not even #+HUGO_PUBLISH."
 (ert-deftest a3madkour-pub-author-test/fields-to-fill-real-contract ()
   "Pin what mark asks for against the REAL data/sections.json, per section."
   (a3madkour-sections-test--with-real-site
-    (let ((expect '(("research/themes" "description" "status" "weight")
+    ;; Each buffer has a #+title but no #+filetags, so a required tags
+    ;; field (source filetags) is asked for too.
+    (let ((expect '(("research/themes" "tags" "description" "status" "weight")
                     ("research/questions" "description" "status" "theme"
                      "supporting_notes" "started")
                     ("works/games" "status" "game_kind" "tagline" "year")
@@ -899,16 +946,17 @@ not even #+HUGO_PUBLISH."
                     ("streams" "platforms" "category" "archive_status")
                     ("library/reading") ("library/listening")
                     ("library/playing") ("library/watching")
-                    ("essays" "summary") ("recipes" "summary"))))
+                    ("essays" "summary" "tags") ("recipes" "summary"))))
       (dolist (e expect)
         (with-temp-buffer
           (org-mode)
+          (insert "#+title: T\n")
           (should (equal (list (car e)
                                (mapcar #'car (a3madkour-pub-author--fields-to-fill (car e))))
                          (list (car e) (cdr e))))))
       (with-temp-buffer
         (org-mode)
-        (insert "#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
+        (insert "#+title: T\n#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
         (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
                        '("status" "creator")))))))
 

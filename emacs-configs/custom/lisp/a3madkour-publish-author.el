@@ -19,6 +19,7 @@
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-publish-library)
+(require 'a3madkour-publish-frontmatter)  ; editorial-tag filter
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-id)
@@ -259,13 +260,15 @@ A line left with no keys is deleted with its newline."
                   (format "^#\\+%s:.*\n?" (regexp-quote kw)) nil t)
             (replace-match "" t t)))))))
 
-(defun a3madkour-pub-author--write-field (name type value)
-  "Write field NAME (of TYPE) with VALUE into the buffer preamble."
+(defun a3madkour-pub-author--write-field (name type value &optional source)
+  "Write field NAME (of TYPE) with VALUE into the buffer preamble.
+A field whose SOURCE is `filetags' is written as tags on `#+filetags:'."
   (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
-    (if kw
-        (a3madkour-pub-author--upsert-keyword kw value)
-      (a3madkour-pub-author--upsert-cfm-key
-       name (a3madkour-pub-author--cfm-value type value)))))
+    (cond
+     ((equal source "filetags") (a3madkour-pub-author--add-filetags value))
+     (kw (a3madkour-pub-author--upsert-keyword kw value))
+     (t (a3madkour-pub-author--upsert-cfm-key
+         name (a3madkour-pub-author--cfm-value type value))))))
 
 ;; -- a3-publish-mark --
 
@@ -303,7 +306,7 @@ lists required `structured'/`object' fields, which are not prompted."
             (when (alist-get 'required fs) (push name by-hand))
           (let ((v (a3madkour-pub-author--ask section name fs)))
             (unless (eq v 'skip)
-              (push (list name type v) values))))))
+              (push (list name type v (alist-get 'source fs)) values))))))
     (list :values (nreverse values) :by-hand (nreverse by-hand))))
 
 ;;;###autoload
@@ -654,10 +657,54 @@ site's check_fields)."
   (let ((v (and on (a3madkour-pub-author--cfm-get on))))
     (and v (string-match-p "[^ \t]" v) v)))
 
+(defun a3madkour-pub-author--filetags ()
+  "The buffer's `#+filetags:' tags, in order, or nil."
+  (let ((v (a3madkour-pub-keywords/extract "FILETAGS")))
+    (and v (split-string v ":" t "[ \t]+"))))
+
+(defun a3madkour-pub-author--source-satisfied-p (name source)
+  "Non-nil when the buffer gives pipeline field NAME a value via SOURCE.
+`title' is the `#+title:' keyword.  `filetags' needs a tag that survives
+the pipeline's editorial filter: a note tagged only `:TODO:' exports no
+tags key at all."
+  (pcase source
+    ("title" (a3madkour-pub-author--field-present-p name))
+    ("filetags" (and (a3madkour-pub-frontmatter/filter-editorial-tags
+                      (a3madkour-pub-author--filetags))
+                     t))
+    (_ (error "a3-publish-mark: field %s has unknown source %S" name source))))
+
+(defun a3madkour-pub-author--add-filetags (tags)
+  "Append TAGS to the buffer's `#+filetags:', keeping the tags it has."
+  (a3madkour-pub-author--upsert-keyword
+   "filetags"
+   (concat ":" (string-join (delete-dups (append (a3madkour-pub-author--filetags)
+                                                 tags))
+                            ":")
+           ":")))
+
+(defconst a3madkour-pub-author--org-tag-re "\\`[[:alnum:]_@#%]+\\'"
+  "One org tag: org allows letters, digits, `_', `@', `#' and `%'.")
+
+(defun a3madkour-pub-author--ask-filetags (name required prompt)
+  "Read field NAME as whitespace-separated org tags; re-prompt until valid."
+  (let (tags done)
+    (while (not done)
+      (setq tags (split-string (read-string prompt) "[ \t:]+" t))
+      (cond
+       ((and (null tags) required) (message "%s is required" name))
+       ((cl-find-if-not (lambda (tg) (string-match-p a3madkour-pub-author--org-tag-re tg))
+                        tags)
+        (message "%s: org tags may use only letters, digits, _ @ # %%" name))
+       (t (setq done t))))
+    (or tags 'skip)))
+
 (defun a3madkour-pub-author--fields-to-fill (section)
   "SECTION's fields `a3-publish-mark' must supply, as ((NAME . SPEC) ...).
-A field qualifies when it is not `from: pipeline', is `required' or
-`ask', and is absent from the buffer.  The variant case comes from the
+A field qualifies when it is `required' or `ask' and absent from the
+buffer.  A `from: pipeline' field qualifies only when it is required and
+names a buffer `source' the pipeline would find empty (see
+`--source-satisfied-p'); without a source the pipeline always derives it.  The variant case comes from the
 buffer's value of the section's `variants.on' field.  A `store: data'
 section (library) yields nil: `a3-library-insert-item' writes its items."
   (let ((spec (a3madkour-sections/spec section)))
@@ -669,9 +716,13 @@ section (library) yields nil: `a3-library-insert-item' writes its items."
         (cl-remove-if-not
          (lambda (cell)
            (let ((fs (cdr cell)))
-             (and (not (equal (alist-get 'from fs) "pipeline"))
-                  (or (alist-get 'required fs) (alist-get 'ask fs))
-                  (not (a3madkour-pub-author--field-present-p (car cell))))))
+             (if (equal (alist-get 'from fs) "pipeline")
+                 (and (alist-get 'required fs)
+                      (alist-get 'source fs)
+                      (not (a3madkour-pub-author--source-satisfied-p
+                            (car cell) (alist-get 'source fs))))
+               (and (or (alist-get 'required fs) (alist-get 'ask fs))
+                    (not (a3madkour-pub-author--field-present-p (car cell)))))))
          (a3madkour-sections/fields section vcase))))))
 
 (defconst a3madkour-pub-author--string-shapes
@@ -758,6 +809,8 @@ nothing.  Signals `user-error' for a required ref with no targets."
          (keyword-p (assoc name a3madkour-pub-author--keyword-fields))
          (prompt (format "%s %s%s: " section name (if required "" " (optional)"))))
     (cond
+     ((equal (alist-get 'source spec) "filetags")
+      (a3madkour-pub-author--ask-filetags name required prompt))
      ((equal fill "today") (format-time-string "%Y-%m-%d"))
      ((equal fill "next-weight") (a3madkour-pub-author--next-weight section))
      ((equal type "enum")
