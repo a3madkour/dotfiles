@@ -436,6 +436,10 @@ Returns:
                (> (hash-table-count removed-set) 0))
       (dolist (w (a3madkour-pub--unpublish-recheck-live-note-links removed-set))
         (push w orphan-warnings)))
+    ;; S1 row 22: a manifest no entry changed this run is never rewritten,
+    ;; so bring a non-canonical one into canonical order once, here.
+    (when (and reap (not dry-run))
+      (a3madkour-pub-history/normalize-manifest))
     ;; B.0: clear manifest snapshot now that the publish run is over.
     ;; Next publish run's begin-publish will populate it fresh.
     (setq a3madkour-pub--manifest-snapshot nil)

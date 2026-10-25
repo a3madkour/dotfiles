@@ -181,6 +181,23 @@ byte-stable across publish runs."
             (setq tmp nil))
         (when (and tmp (file-exists-p tmp)) (ignore-errors (delete-file tmp)))))))
 
+(defun a3madkour-pub-history/normalize-manifest ()
+  "Rewrite `url-history.yaml' when its bytes are not the canonical form.
+`record-publish' writes only when an entry changes, so a file serialized
+in another key order (older code, a hand edit) would otherwise keep that
+order for good.  A canonical file is not touched, and no file is created."
+  (let ((path (a3madkour-pub-history--manifest-path)))
+    (when (file-exists-p path)
+      (let ((manifest (a3madkour-pub-history/read-manifest))
+            (bytes (with-temp-buffer (insert-file-contents path) (buffer-string))))
+        (unless (equal bytes
+                       (with-temp-buffer
+                         (insert (yaml-encode
+                                  (a3madkour-pub-history--canonicalize-manifest manifest)))
+                         (unless (eq ?\n (char-before)) (insert "\n"))
+                         (buffer-string)))
+          (a3madkour-pub-history/write-manifest manifest))))))
+
 (defun a3madkour-pub-history--blank-id-p (id)
   "Return non-nil when ID is nil or an empty/whitespace-only string.
 

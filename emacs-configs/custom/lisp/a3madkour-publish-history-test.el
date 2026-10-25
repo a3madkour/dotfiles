@@ -519,6 +519,35 @@ history item's url / replaced_at / reason (a diff with no change in it)."
       (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
                      first)))))
 
+(ert-deftest a3madkour-pub-history-test/normalize-rewrites-a-shuffled-file-once ()
+  "A file written out of canonical order is rewritten into it, and a
+canonical file is left alone (not even touched).  `record-publish' writes
+only when an entry changes, so a file shuffled by older code otherwise
+stayed shuffled however many publishes ran (S1 row 22)."
+  (a3-pub-history-test--with-tmp-manifest path
+    (with-temp-file path
+      (insert "notes: \n- id: \"1\"\n  current_url: \"/a/\"\n  history: \n"
+              "  - reason: removed\n    url: \"/a/\"\n"
+              "    replaced_at: \"2026-06-01T19:24:54Z\"\n  state: live\n"))
+    (a3madkour-pub-history/normalize-manifest)
+    (let ((once (with-temp-buffer (insert-file-contents path) (buffer-string))))
+      (should (string-match-p
+               "- url: \"/a/\"\n *replaced_at: \"2026-06-01T19:24:54Z\"\n *reason: removed"
+               once))
+      (set-file-times path '(0 0))
+      (a3madkour-pub-history/normalize-manifest)
+      (should (equal (with-temp-buffer (insert-file-contents path) (buffer-string))
+                     once))
+      (should (time-equal-p (file-attribute-modification-time (file-attributes path))
+                            '(0 0))))))
+
+(ert-deftest a3madkour-pub-history-test/normalize-without-a-file-writes-nothing ()
+  "No manifest yet: normalizing creates none."
+  (a3-pub-history-test--with-tmp-manifest path
+    (when (file-exists-p path) (delete-file path))
+    (a3madkour-pub-history/normalize-manifest)
+    (should-not (file-exists-p path))))
+
 (ert-deftest a3madkour-pub-history-test/write-manifest-is-byte-stable ()
   "Two writes of equivalent-but-differently-ordered manifests produce
 byte-identical YAML output."

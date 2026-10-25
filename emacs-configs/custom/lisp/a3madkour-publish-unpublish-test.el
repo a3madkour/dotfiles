@@ -1416,6 +1416,27 @@ status rather than preview intent."
       (when (file-exists-p manifest-path) (delete-file manifest-path))
       (delete-directory content-root t))))
 
+(ert-deftest a3madkour-pub-unpublish-test/finish-publish-normalizes-manifest-only-when-reaping ()
+  "A run that reaps ends by normalizing `url-history.yaml'; a failed run
+(`:reap nil') and a dry run leave the file as they found it (S1 row 22)."
+  (let ((manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+        calls)
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path))
+                  ((symbol-function 'a3madkour-pub/walk-published-source-set)
+                   (lambda () (make-hash-table :test 'equal)))
+                  ((symbol-function 'a3madkour-pub-history/normalize-manifest)
+                   (lambda () (push 'normalized calls))))
+          (a3madkour-pub-history/write-manifest '((notes . [])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (a3madkour-pub/finish-publish :reap nil)
+          (a3madkour-pub/finish-publish :dry-run t)
+          (should-not calls)
+          (a3madkour-pub/finish-publish)
+          (should (equal calls '(normalized))))
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
 ;; -- P4.4: recheck skips a source note that is itself removed this publish --
 
 (ert-deftest a3madkour-pub-unpublish-test/recheck-skips-self-source-being-removed ()
