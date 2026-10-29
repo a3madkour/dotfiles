@@ -7,9 +7,11 @@
 ;; watching}.org), normalizes each heading to a YAML row plist, renders
 ;; the corresponding data/<medium>.yaml deterministically.
 ;;
-;; Registered in `a3madkour-pub-registry' as four entries
-;; (one per library-<medium> section symbol, all pointing at the same
-;; `publish-library-file' entry point).
+;; Shelves are now collected from item notes by
+;; `a3madkour-publish-library-notes'; the registry's four `library/*'
+;; entries point at `refuse-shelf-file'.  `publish-library-file' stays
+;; until it is removed, and its row renderer and extras table are shared
+;; with the collector.
 
 ;;; Code:
 
@@ -26,7 +28,7 @@
 (defun a3madkour-pub-library/sections ()
   "The library section strings (e.g. \"library/reading\"), from the registry."
   (a3madkour-pub-registry/sections-for-handler
-   'a3madkour-pub-library/publish-library-file))
+   'a3madkour-pub-library/refuse-shelf-file))
 
 (defun a3madkour-pub-library--config-for (section)
   "Return (yaml-file default-mt allowed-mt allowed-status) for SECTION.
@@ -443,6 +445,20 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))
+
+(cl-defun a3madkour-pub-library/refuse-shelf-file (file run &key on-done)
+  "Refuse library shelf FILE: shelves are collected from item notes.
+The registry's handler for every `library/*' section.  Logs the fix to
+RUN (when given) and reports \='err via ON-DONE; writes nothing.  The
+shelves themselves are built by `a3madkour-pub-library-notes/build-shelves'."
+  (let ((msg (format "%s: library shelves are built from item notes; remove #+HUGO_SECTION: %s (see a3-library-add)"
+                     file
+                     (or (ignore-errors (a3madkour-pub/note-section file))
+                         "library/…"))))
+    (message "a3madkour-pub-library: %s" msg)
+    (when run
+      (a3-pub-async/log-step run "library-shelf-file" :err :err-snippet msg))
+    (when on-done (funcall on-done 'err))))
 
 (defun a3madkour-pub-library/planned-steps (_file)
   "Return rough step count for B.2 library handler."

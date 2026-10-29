@@ -37,16 +37,16 @@
     ("works/poetry"       :mode deliberate
      :handler a3madkour-pub-poetry/publish-poetry-file)
     ("library/reading"    :mode living
-     :handler a3madkour-pub-library/publish-library-file
+     :handler a3madkour-pub-library/refuse-shelf-file
      :data-file "reading.yaml"   :default-medium "book")
     ("library/listening"  :mode living
-     :handler a3madkour-pub-library/publish-library-file
+     :handler a3madkour-pub-library/refuse-shelf-file
      :data-file "listening.yaml" :default-medium "album")
     ("library/playing"    :mode living
-     :handler a3madkour-pub-library/publish-library-file
+     :handler a3madkour-pub-library/refuse-shelf-file
      :data-file "playing.yaml"   :default-medium "game")
     ("library/watching"   :mode living
-     :handler a3madkour-pub-library/publish-library-file
+     :handler a3madkour-pub-library/refuse-shelf-file
      :data-file "watching.yaml"  :default-medium "film")
     ("streams"            :mode nil :handler nil)
     ("recipes"            :mode living

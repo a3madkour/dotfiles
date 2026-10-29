@@ -248,6 +248,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
     -l a3madkour-library-items \
+    -l a3madkour-publish-library-notes \
     -l a3madkour-publish-research \
     -l a3madkour-recipe-lint \
     -l a3madkour-publish-recipes \
@@ -331,6 +332,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     -l a3madkour-publish-garden \
     -l a3madkour-publish-library \
     -l a3madkour-library-items \
+    -l a3madkour-publish-library-notes \
     -l a3madkour-publish-research \
     -l a3madkour-recipe-lint \
     -l a3madkour-publish-recipes \

@@ -23,6 +23,7 @@
 (require 'a3madkour-publish-unpublish)
 (require 'a3madkour-publish-author)    ; the contract gate
 (require 'a3madkour-library-items)     ; the item-note `:site:' gate
+(require 'a3madkour-publish-library-notes) ; the shelf collector
 
 (defun a3madkour-pub-living--collect-triples ()
   "Return (section file handler) triples for every living-section file
@@ -56,6 +57,31 @@ handler to report."
               (format "%s: missing required %s for %s; run M-x a3-publish-mark"
                       file (string-join missing ", ") section)))
         (user-error (format "%s: %s" file (error-message-string err)))))))
+
+(defun a3madkour-pub-living--library-item-files (triples)
+  "The live garden library item notes among TRIPLES' files.
+These are what the shelf collector reads; drafts are left out."
+  (cl-loop for (section file _handler) in triples
+           when (and (equal section "garden")
+                     (file-readable-p file)
+                     (eq (a3madkour-pub/published-p file) 'live)
+                     (a3madkour-library/item-p file))
+           collect file))
+
+(defun a3madkour-pub-living--build-shelves (triples run)
+  "Rebuild the library shelves from TRIPLES' item notes; return \='ok or \='err.
+An error is logged to RUN as a `library-shelves' step, never signalled,
+so the run still finishes."
+  (condition-case err
+      (progn
+        (a3madkour-pub-library-notes/build-shelves
+         (a3madkour-pub-living--library-item-files triples))
+        'ok)
+    (error
+     (let ((msg (format "library shelves: %s" (error-message-string err))))
+       (message "a3-publish-living: %s" msg)
+       (a3-pub-async/log-step run "library-shelves" :err :err-snippet msg)
+       'err))))
 
 (defun a3madkour-pub-living--dispatch (triple run report)
   "Run TRIPLE's handler on its file, reporting the outcome via REPORT.
@@ -91,7 +117,8 @@ publishing a bundle the site would reject (S1 row 24)."
 
 Async lifecycle: walks every living section's source set into a flat
 \(section file handler) triple list, dispatches each in parallel, and
-calls finish-publish once after the barrier reports done."
+rebuilds the library shelves once after the barrier reports done, then
+calls finish-publish."
   (interactive)
   (let* ((triples (a3madkour-pub-living--collect-triples))
          (n (length triples))
@@ -99,17 +126,21 @@ calls finish-publish once after the barrier reports done."
                :scope 'living
                :source-label (format "living (%d notes)" n)
                :planned-steps n)))
-    (if (zerop n)
-        (a3-pub-async/finish-publish run :scope 'living :status 'ok)
-      (let ((report (a3-pub-async/barrier
-                     n :on-all-done
-                     (lambda (results)
-                       (let ((status (if (cl-some (lambda (r) (eq r 'err)) results)
-                                         'err 'ok)))
-                         (a3-pub-async/finish-publish
-                          run :scope 'living :status status))))))
-        (dolist (triple triples)
-          (a3madkour-pub-living--dispatch triple run report))))))
+    (let ((on-all-done
+           ;; The shelves are collected after every handler (their rows need
+           ;; the garden bundles) and before finish-publish, even on an
+           ;; empty run: a library with nothing shared must empty.
+           (lambda (results)
+             (let* ((shelves (a3madkour-pub-living--build-shelves triples run))
+                    (status (if (or (eq shelves 'err) (memq 'err results))
+                                'err 'ok)))
+               (a3-pub-async/finish-publish
+                run :scope 'living :status status)))))
+      (if (zerop n)
+          (funcall on-all-done nil)
+        (let ((report (a3-pub-async/barrier n :on-all-done on-all-done)))
+          (dolist (triple triples)
+            (a3madkour-pub-living--dispatch triple run report)))))))
 
 (provide 'a3madkour-publish-living)
 

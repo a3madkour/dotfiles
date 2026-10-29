@@ -53,7 +53,7 @@
 
 (ert-deftest a3madkour-pub-registry--library-entries-carry-data-config ()
   (let ((libs (a3madkour-pub-registry/sections-for-handler
-               'a3madkour-pub-library/publish-library-file)))
+               'a3madkour-pub-library/refuse-shelf-file)))
     (should (equal libs '("library/reading" "library/listening"
                           "library/playing" "library/watching")))
     (dolist (s libs)
@@ -71,7 +71,7 @@
     (should (equal (sort (a3madkour-pub-registry/names) #'string<)
                    (sort (a3madkour-sections/names) #'string<)))
     (dolist (s (a3madkour-pub-registry/sections-for-handler
-                'a3madkour-pub-library/publish-library-file))
+                'a3madkour-pub-library/refuse-shelf-file))
       (should (member (a3madkour-pub-registry/get s :default-medium)
                       (a3madkour-sections/enum s "media_type"))))))
 
