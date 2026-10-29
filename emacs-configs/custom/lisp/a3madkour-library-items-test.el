@@ -162,5 +162,61 @@
     (should (string-match-p "Public sub\\." b))
     (should-not (string-match-p "SECRET\\|Private" b))))
 
+(defmacro a3madkour-library-items-test--with-copy (var text &rest body)
+  "Write TEXT to a note in a temp dir, bind VAR to its site-only copy's
+text and `dir' to the note's directory, run BODY."
+  (declare (indent 2))
+  `(let* ((dir (file-name-as-directory (make-temp-file "lib-copy-" t)))
+          (note (expand-file-name "note.org" dir)))
+     (unwind-protect
+         (progn
+           (with-temp-file note (insert ,text))
+           (let* ((tmp (a3madkour-library/site-only-copy note))
+                  (,var (unwind-protect
+                            (with-temp-buffer
+                              (insert-file-contents tmp)
+                              (buffer-string))
+                          (delete-file tmp))))
+             (should (string-prefix-p
+                      (file-name-as-directory
+                       (file-truename temporary-file-directory))
+                      (file-truename tmp)))
+             ,@body))
+       (delete-directory dir t))))
+
+(ert-deftest a3madkour-library-items-test/site-only-copy-keeps-drawer-keywords-site ()
+  "The copy is the file drawer, the `#+' keywords and the site body only."
+  (a3madkour-library-items-test--with-copy c
+      (concat ":PROPERTIES:\n:ID: x-1\n:LIBRARY_MEDIA_TYPE: book\n:END:\n"
+              "#+title: Example 1\n#+INCLUDE: \"other.org\"\n#+filetags: :Ref:\n"
+              "Preamble SECRET.\n* Types\nSECRET\n* Notes :site:\nPublic.\n* After\nSECRET\n")
+    (should (string-match-p "\\`:PROPERTIES:\n:ID: x-1\n:LIBRARY_MEDIA_TYPE: book\n:END:\n" c))
+    (should (string-match-p "^#\\+title: Example 1$" c))
+    (should (string-match-p "^#\\+filetags: :Ref:$" c))
+    (should (string-match-p "^Public\\.$" c))
+    (should-not (string-match-p "SECRET\\|INCLUDE\\|Notes\\|Types" c))))
+
+(ert-deftest a3madkour-library-items-test/site-only-copy-absolutizes-relative-links ()
+  "Relative file and asset links resolve against the note's directory, not
+the temp dir; canonical `./assets/', absolute, id and web links are kept."
+  (a3madkour-library-items-test--with-copy c
+      (concat "#+title: Example 1\n* Notes :site:\n"
+              "[[file:other.org][o]] [[../up/x.png]] [[pic.png][p]]\n"
+              "[[./assets/page/s/a.png]] [[/abs/b.png]] [[~/c.png]]\n"
+              "[[id:abc][i]] [[https://example.com/d.png]] [[Some Heading]]\n")
+    (should (string-match-p (regexp-quote (format "[[file:%sother.org][o]]" dir)) c))
+    (should (string-match-p (regexp-quote
+                             (format "[[%s]]" (expand-file-name "../up/x.png" dir)))
+                            c))
+    (should (string-match-p (regexp-quote (format "[[%spic.png][p]]" dir)) c))
+    (dolist (kept '("[[./assets/page/s/a.png]]" "[[/abs/b.png]]" "[[~/c.png]]"
+                    "[[id:abc][i]]" "[[https://example.com/d.png]]"
+                    "[[Some Heading]]"))
+      (should (string-match-p (regexp-quote kept) c)))))
+
+(ert-deftest a3madkour-library-items-test/site-only-copy-errors-without-site ()
+  (a3madkour-library-items-test--with-note f "#+title: x\n* Notes\nSECRET\n"
+    (should-error (a3madkour-library/site-only-copy f))))
+
 (provide 'a3madkour-library-items-test)
 ;;; a3madkour-library-items-test.el ends here

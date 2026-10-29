@@ -13,6 +13,7 @@
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-library)
 (require 'a3madkour-publish-author)
+(require 'a3madkour-publish-rewrite)   ; link-scheme / asset-shape tests
 
 (defcustom a3madkour-library/structural-tags '("Ref" "Book")
   "Org tags that structure the note rather than describe the item."
@@ -183,6 +184,69 @@ safe to treat as publishable."
         (let ((s (string-trim (a3madkour-library--publishable
                                (buffer-substring-no-properties (car r) (cdr r))))))
           (and (not (string-empty-p s)) s))))))
+
+(defconst a3madkour-library--link-re
+  "\\[\\[\\([^][]+\\)\\(\\]\\[[^][]+\\)?\\]\\]"
+  "An org bracket link: group 1 the path, group 2 the `][desc' part.")
+
+(defun a3madkour-library--absolute-link-path (path dir)
+  "PATH made absolute against DIR when it is a relative file path, else PATH.
+A `file:' path and a scheme-less path that is `./'/`../'-relative or
+asset-shaped are relative file paths.  `./assets/' is left as is: it is
+an alias for the canonical asset root, not a path under DIR."
+  (let ((file-p (string-prefix-p "file:" path)))
+    (let ((p (if file-p (substring path 5) path)))
+      (if (and (not (string-prefix-p "./assets/" p))
+               (not (file-name-absolute-p p))
+               (or file-p
+                   (and (not (a3madkour-pub--link-scheme p))
+                        (or (string-match-p "\\`\\.\\.?/" p)
+                            (a3madkour-pub--asset-shaped-link-p p)))))
+          (concat (if file-p "file:" "") (expand-file-name p dir))
+        path))))
+
+(defun a3madkour-library/site-only-copy (file)
+  "Write a temp `.org' holding only what FILE may publish; return its path.
+The copy is FILE's file-level drawer, its preamble `#+' keywords (minus
+`#+INCLUDE:', which would pull other text in) and its `:site:' body, with
+relative link paths made absolute against FILE's directory so links and
+assets resolve as they would from FILE.  It lives in
+`temporary-file-directory', never beside FILE.  The caller deletes it.
+Signals an error when FILE has no usable `:site:' section."
+  (let ((body (or (a3madkour-library/site-body file)
+                  (error "%s: library item has no :site: section" file)))
+        (dir (file-name-directory (expand-file-name file)))
+        head)
+    (a3madkour-library--with-file file
+      (goto-char (point-min))
+      (let ((end (save-excursion
+                   (if (re-search-forward "^\\*+ " nil t)
+                       (match-beginning 0)
+                     (point-max))))
+            (case-fold-search t))
+        (when (looking-at a3madkour-library--drawer-re)
+          (push (match-string-no-properties 0) head)
+          (goto-char (match-end 0)))
+        (while (re-search-forward "^[ \t]*#\\+\\([A-Za-z0-9_-]+\\):.*$" end t)
+          (unless (string-equal-ignore-case (match-string 1) "include")
+            (push (concat (match-string-no-properties 0) "\n") head)))))
+    (let ((tmp (make-temp-file
+                (expand-file-name "a3-pub-site-only-" temporary-file-directory)
+                nil ".org")))
+      (with-temp-file tmp
+        (insert (apply #'concat (nreverse head)) "\n" body "\n")
+        (goto-char (point-min))
+        (while (re-search-forward a3madkour-library--link-re nil t)
+          ;; The path test runs `string-match', so take the bounds first.
+          (let ((beg (match-beginning 0))
+                (end (match-end 0))
+                (path (match-string 1))
+                (desc (or (match-string 2) "")))
+            (delete-region beg end)
+            (goto-char beg)
+            (insert "[[" (a3madkour-library--absolute-link-path path dir)
+                    desc "]]"))))
+      tmp)))
 
 (defun a3madkour-library--strip-emphasis (s)
   "S without org emphasis markers around words."

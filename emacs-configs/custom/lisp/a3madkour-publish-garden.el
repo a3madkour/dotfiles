@@ -20,6 +20,7 @@
 (require 'a3madkour-publish-rewrite)
 (require 'a3madkour-publish-assets)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-library-items)
 
 (defcustom a3madkour-pub-garden/section-dir-name "garden"
   "Hugo content section directory name for garden notes (relative to site root)."
@@ -60,6 +61,10 @@ targets) before ox-hugo sees them.  Without this step ox-hugo emits
 `{{< relref \"<underscore_filename>.md\" >}}' shortcodes that fail
 Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths.
 
+A library item note (`a3madkour-library/item-p') is exported, and its
+assets walked, from `a3madkour-library/site-only-copy': only its `:site:'
+section and metadata reach the site.
+
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
   (condition-case _err
@@ -75,29 +80,41 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                                     a3madkour-pub-garden/section-dir-name slug)
                             site-root))
                (out-path   (expand-file-name "index.md" bundle-dir))
-               (tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
-                            file id "a3-pub-garden"))
-               ;; unwind-protect deletes tmp-src whether export-file succeeds or signals.
-               (exported   (unwind-protect
-                               (a3madkour-pub-export/export-file tmp-src)
-                             (when (file-exists-p tmp-src)
-                               (delete-file tmp-src))))
-               ;; P2.14: reuse the note's previously-recorded last_modified as
-               ;; the cascade's prior value so an uncommitted republish keeps a
-               ;; stable date instead of churning to the filesystem mtime.
-               (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
-                                  (a3madkour-pub-history/recorded-last-modified id new-url)))
-                             (a3madkour-pub-frontmatter/normalize
-                              'garden (plist-get exported :frontmatter) file)))
-               (body       (plist-get exported :body)))
-          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
-          (a3madkour-pub-garden--write-if-different
-           out-path
-           (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
-          (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
-                                                :last-modified
-                                                (or (alist-get 'lastmod normalized)
-                                                    (alist-get 'last_modified normalized))))
+               ;; A library item note publishes only its `:site:' section:
+               ;; the export and the asset walk both read a copy holding
+               ;; nothing else, so private text, links and assets never
+               ;; reach the site.  Everything keyed by the note (id, slug,
+               ;; url, history, frontmatter) still reads FILE.
+               (site-src   (and (a3madkour-library/item-p file)
+                                (a3madkour-library/site-only-copy file)))
+               (input      (or site-src file)))
+          (unwind-protect
+              (let* ((tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                                  input id "a3-pub-garden"))
+                     ;; unwind-protect deletes tmp-src whether export-file
+                     ;; succeeds or signals.
+                     (exported   (unwind-protect
+                                     (a3madkour-pub-export/export-file tmp-src)
+                                   (when (file-exists-p tmp-src)
+                                     (delete-file tmp-src))))
+                     ;; P2.14: reuse the note's previously-recorded last_modified as
+                     ;; the cascade's prior value so an uncommitted republish keeps a
+                     ;; stable date instead of churning to the filesystem mtime.
+                     (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                        (a3madkour-pub-history/recorded-last-modified id new-url)))
+                                   (a3madkour-pub-frontmatter/normalize
+                                    'garden (plist-get exported :frontmatter) file)))
+                     (body       (plist-get exported :body)))
+                (a3madkour-pub/asset-validate-and-copy input bundle-dir id)
+                (a3madkour-pub-garden--write-if-different
+                 out-path
+                 (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
+                (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                      :last-modified
+                                                      (or (alist-get 'lastmod normalized)
+                                                          (alist-get 'last_modified normalized))))
+            (when (and site-src (file-exists-p site-src))
+              (delete-file site-src))))
         (when on-done (funcall on-done 'ok)))
     (error
      (when on-done (funcall on-done 'err)))))

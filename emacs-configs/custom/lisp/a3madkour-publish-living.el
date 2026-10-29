@@ -22,6 +22,7 @@
 (require 'a3madkour-publish-async)
 (require 'a3madkour-publish-unpublish)
 (require 'a3madkour-publish-author)    ; the contract gate
+(require 'a3madkour-library-items)     ; the item-note `:site:' gate
 
 (defun a3madkour-pub-living--collect-triples ()
   "Return (section file handler) triples for every living-section file
@@ -41,14 +42,20 @@ is not checked here (see `a3madkour-pub-living--dispatch')."
 
 (defun a3madkour-pub-living--contract-gap (file section)
   "Why FILE cannot publish under SECTION's contract, or nil when it can.
-A missing file is left to its handler to report."
+A library item note with no usable `:site:' section is refused first:
+there is nothing in it that may publish.  A missing file is left to its
+handler to report."
   (when (file-readable-p file)
-    (condition-case err
-        (let ((missing (a3madkour-pub-author/missing-required file section)))
-          (when missing
-            (format "%s: missing required %s for %s; run M-x a3-publish-mark"
-                    file (string-join missing ", ") section)))
-      (user-error (format "%s: %s" file (error-message-string err))))))
+    (if (and (a3madkour-library/item-p file)
+             (not (a3madkour-library/site-body file)))
+        (format "%s: library item has no :site: section; write one, then publish"
+                file)
+      (condition-case err
+          (let ((missing (a3madkour-pub-author/missing-required file section)))
+            (when missing
+              (format "%s: missing required %s for %s; run M-x a3-publish-mark"
+                      file (string-join missing ", ") section)))
+        (user-error (format "%s: %s" file (error-message-string err)))))))
 
 (defun a3madkour-pub-living--dispatch (triple run report)
   "Run TRIPLE's handler on its file, reporting the outcome via REPORT.

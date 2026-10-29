@@ -436,6 +436,37 @@ Hygiene rules (check_garden_fixtures.py compliance):
     (when-let ((tags (alist-get 'tags out)))
       (setf (alist-get 'tags out)
             (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+    (when (and source-file (file-readable-p source-file)
+               (progn (require 'a3madkour-library-items)
+                      (a3madkour-library/item-p source-file)))
+      (setq out (a3madkour-pub-frontmatter--garden-item-fields out source-file)))
+    out))
+
+(declare-function a3madkour-library/item-p "a3madkour-library-items" (file))
+(declare-function a3madkour-library/properties "a3madkour-library-items" (file))
+(declare-function a3madkour-library/clean-tags "a3madkour-library-items" (tags))
+
+(defun a3madkour-pub-frontmatter--garden-item-fields (out source-file)
+  "OUT with a library item's media fields and tags taken from SOURCE-FILE.
+The `LIBRARY_*' drawer is the single source of truth: each media field is
+replaced by the drawer's value, or removed when the drawer's is blank.
+`year' is an int.  `tags' become the cleaned `#+filetags:'.
+
+`a3madkour-library-items' is required lazily: it requires this module."
+  (let ((props (a3madkour-library/properties source-file)))
+    (dolist (f '("media_type" "status" "creator" "year" "started" "finished"))
+      (let ((key (intern f))
+            (v (alist-get f props nil nil #'equal)))
+        (setq out (assq-delete-all key out))
+        (when v
+          (push (cons key (if (eq key 'year) (string-to-number v) v)) out))))
+    (let ((tags (a3madkour-library/clean-tags
+                 (split-string (or (a3madkour-pub-frontmatter--read-org-keyword
+                                    source-file "FILETAGS")
+                                   "")
+                               ":" t "[ \t]+"))))
+      (setq out (assq-delete-all 'tags out))
+      (when tags (setf (alist-get 'tags out) tags)))
     out))
 
 (defun a3madkour-pub-frontmatter--coerce-weight (raw file)

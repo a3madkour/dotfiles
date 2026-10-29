@@ -383,6 +383,169 @@ raw (which would be invalid YAML that breaks the Hugo build)."
   (should (equal (a3madkour-pub-garden--render-yaml-value '("a\"b"))
                  "[\"a\\\"b\"]")))
 
+;;; -- Library item notes: only the `:site:' section reaches the site --
+
+(defmacro a3madkour-pub-garden-test--publishing (src-var name text setup &rest body)
+  "Write TEXT to NAME under a temp notes dir, publish it to a temp site.
+SETUP is a form run after the note is written and before it publishes.
+SRC-VAR is bound to the source path for TEXT (which may refer to it via
+`%NOTES%' for the notes dir and `%SITE%' for the site dir).  BODY runs
+with `notes-dir', `site-dir' and `bundle' (the garden bundle dir of the
+note's slug) bound.  Dates are pinned so the output is reproducible."
+  (declare (indent 4))
+  `(let* ((notes-dir (file-name-as-directory (make-temp-file "a3-pub-notes-item-" t)))
+          (site-dir  (file-name-as-directory (make-temp-file "a3-pub-site-item-" t)))
+          (,src-var  (expand-file-name ,name notes-dir))
+          (a3madkour-pub-canonical-asset-root (expand-file-name "assets" notes-dir)))
+     (unwind-protect
+         (progn
+           (make-directory (expand-file-name "data" site-dir))
+           (make-directory (expand-file-name "content/garden" site-dir) t)
+           ;; ox-hugo refuses to export an image link without static/.
+           (make-directory (expand-file-name "static" site-dir) t)
+           (make-directory (file-name-directory ,src-var) t)
+           (with-temp-file ,src-var
+             (insert (replace-regexp-in-string
+                      "%SITE%" site-dir
+                      (replace-regexp-in-string "%NOTES%" notes-dir ,text t t)
+                      t t)))
+           ,setup
+           (let ((a3madkour-pub/site-data-dir
+                  (file-name-as-directory (expand-file-name "data" site-dir)))
+                 (a3madkour-pub/org-notes-dir notes-dir))
+             (cl-letf (((symbol-function 'org-roam-db-sync) #'ignore)
+                       ((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                        (lambda (_) nil))
+                       ((symbol-function 'a3madkour-pub-history/filesystem-mtime-of-file)
+                        (lambda (_) "2026-03-03")))
+               (a3madkour-pub/begin-publish)
+               (let (status)
+                 (a3madkour-pub-garden/publish-garden-file
+                  ,src-var (make-a3-pub-async-run)
+                  :on-done (lambda (s) (setq status s)))
+                 (should (eq status 'ok)))
+               (a3madkour-pub/finish-publish)
+               (let ((bundle (file-name-as-directory
+                              (expand-file-name
+                               (format "content/garden/%s/"
+                                       (a3madkour-pub/note-slug ,src-var))
+                               site-dir))))
+                 ,@body))))
+       (delete-directory notes-dir t)
+       (delete-directory site-dir t))))
+
+(defun a3madkour-pub-garden-test--index (bundle)
+  "Text of BUNDLE's index.md."
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "index.md" bundle))
+    (buffer-string)))
+
+(defconst a3madkour-pub-garden-test--concept
+  (concat ":PROPERTIES:\n:ID: aaaaaaaa-1111-cccc-dddd-eeeeeeeeeeee\n:END:\n"
+          "#+title: Example Concept\n#+filetags: :alpha:beta:\n"
+          "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+HUGO_BASE_DIR: %SITE%\n"
+          "Lede text.\n\n* First Heading\n:PROPERTIES:\n:PROGRESS: ref-notes\n:END:\n"
+          "Body one.\n\n** Sub\nBody two.\n")
+  "A concept note (no `LIBRARY_MEDIA_TYPE'): it publishes whole.")
+
+(defconst a3madkour-pub-garden-test--concept-golden
+  "---
+draft: false
+growth_stage: \"budding\"
+last_modified: 2026-03-03
+tags: [\"alpha\", \"beta\"]
+title: \"Example Concept\"
+---
+Lede text.
+
+
+## First Heading {#first-heading}
+
+Body one.
+
+
+### Sub {#sub}
+
+Body two.
+"
+  "index.md for `--concept', recorded before item-note handling landed.")
+
+(ert-deftest a3madkour-pub-garden-test/garden-concept-unchanged ()
+  "A concept note's published index.md is byte-identical to the golden
+recorded before item notes were handled: the item path never touches it."
+  (a3madkour-pub-garden-test--publishing src "example-concept.org"
+      a3madkour-pub-garden-test--concept nil
+    (should (equal (a3madkour-pub-garden-test--index bundle)
+                   a3madkour-pub-garden-test--concept-golden))))
+
+(defconst a3madkour-pub-garden-test--item
+  (concat ":PROPERTIES:\n:ID: bbbbbbbb-2222-cccc-dddd-eeeeeeeeeeee\n"
+          ":LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: reading\n"
+          ":LIBRARY_CREATOR: Example Author\n:LIBRARY_YEAR: 1999\n"
+          ":LIBRARY_STARTED: 2026-01-02\n:LIBRARY_FINISHED:\n:END:\n"
+          "#+title: Example Book\n#+filetags: :Ref:Book:FavoriteThings:\n"
+          "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+HUGO_BASE_DIR: %SITE%\n"
+          "#+HUGO_CUSTOM_FRONT_MATTER: :status \"queued\"\n"
+          "Lorem PREAMBLE-PRIVATE.\n\n"
+          "* Highlights\nLorem HIGHLIGHT-PRIVATE [[./assets/page/example-book/a.png]]\n\n"
+          "* Thoughts :site:\nLorem SITE-PUBLIC [[./assets/page/example-book/b.png]]\n\n"
+          "* Later\nLorem LATER-PRIVATE.\n")
+  "A library item note: only its `:site:' section may publish.")
+
+(defun a3madkour-pub-garden-test--item-assets (notes-dir)
+  "Create the item fixture's two page assets under NOTES-DIR."
+  (let ((dir (expand-file-name "assets/page/example-book/" notes-dir)))
+    (make-directory dir t)
+    (dolist (f '("a.png" "b.png"))
+      (with-temp-file (expand-file-name f dir) (insert f)))))
+
+(ert-deftest a3madkour-pub-garden-test/garden-item-body-is-site-subtree-only ()
+  "An item note's published body is its `:site:' section: the preamble and
+every other heading stay in the org file."
+  (a3madkour-pub-garden-test--publishing src "example-book.org"
+      a3madkour-pub-garden-test--item
+      (a3madkour-pub-garden-test--item-assets notes-dir)
+    (let ((out (a3madkour-pub-garden-test--index bundle)))
+      (should (string-match-p "SITE-PUBLIC" out))
+      (should-not (string-match-p "PRIVATE" out))
+      (should-not (string-match-p "Highlights\\|Later\\|Thoughts" out)))))
+
+(ert-deftest a3madkour-pub-garden-test/garden-item-private-image-not-copied ()
+  "An asset linked only outside the `:site:' section is never copied into
+the bundle; the one linked inside it is."
+  (a3madkour-pub-garden-test--publishing src "example-book.org"
+      a3madkour-pub-garden-test--item
+      (a3madkour-pub-garden-test--item-assets notes-dir)
+    (should (file-exists-p (expand-file-name "b.png" bundle)))
+    (should-not (file-exists-p (expand-file-name "a.png" bundle)))
+    (should (equal (directory-files bundle nil "^[^.]") '("b.png" "index.md")))))
+
+(ert-deftest a3madkour-pub-garden-test/garden-item-media-frontmatter-from-drawer ()
+  "An item note's media fields come from its `LIBRARY_*' drawer (overriding
+front matter written another way); its tags are cleaned of structure."
+  (a3madkour-pub-garden-test--publishing src "example-book.org"
+      a3madkour-pub-garden-test--item
+      (a3madkour-pub-garden-test--item-assets notes-dir)
+    (let ((out (a3madkour-pub-garden-test--index bundle)))
+      (should (string-match-p "^media_type: \"book\"$" out))
+      (should (string-match-p "^status: \"reading\"$" out))
+      (should (string-match-p "^creator: \"Example Author\"$" out))
+      (should (string-match-p "^started: \"?2026-01-02\"?$" out))
+      (should (string-match-p "^year: 1999$" out))
+      (should (string-match-p "^tags: \\[\"favorite-things\"\\]$" out))
+      (should-not (string-match-p "queued\\|^finished:\\|^flavor:" out)))))
+
+(ert-deftest a3madkour-pub-garden-test/garden-item-relative-asset-resolves-from-note ()
+  "A `../'-relative asset link under `:site:' resolves against the note's
+own directory, as it would without the site-only copy, not the temp dir."
+  (a3madkour-pub-garden-test--publishing src "sub/example-book.org"
+      (replace-regexp-in-string
+       (regexp-quote "[[./assets/page/example-book/b.png]]")
+       "[[../assets/page/example-book/b.png]]"
+       a3madkour-pub-garden-test--item t t)
+      (a3madkour-pub-garden-test--item-assets notes-dir)
+    (should (equal (directory-files bundle nil "^[^.]") '("b.png" "index.md")))))
+
 (provide 'a3madkour-publish-garden-test)
 
 ;;; a3madkour-publish-garden-test.el ends here

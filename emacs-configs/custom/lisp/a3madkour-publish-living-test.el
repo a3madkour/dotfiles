@@ -396,5 +396,61 @@ run finishes `ok'."
     (should (eq captured 'ok))
     (should-not (assoc "contract" logged))))
 
+(defmacro a3-pub-living-test--gate-item (site &rest body)
+  "Run `a3-publish-living' over one garden library item note.
+SITE is the text of the note after its preamble (its headings).  Binds
+`ran', `logged', `captured' and `file' as `--gate' does, for BODY."
+  (declare (indent 1))
+  `(let ((dir (make-temp-file "living-gate-item-" t))
+         (captured 'unset) (logged nil) (ran nil))
+     (unwind-protect
+         (let ((file (expand-file-name "item.org" dir)))
+           (with-temp-file file
+             (insert ":PROPERTIES:\n:ID: 3e650e6f-1111-0000-0000-000000000000\n"
+                     ":LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: reading\n"
+                     ":LIBRARY_CREATOR: Example Author\n:END:\n"
+                     "#+title: Example Book\n#+HUGO_SECTION: garden\n"
+                     "#+HUGO_PUBLISH: t\n#+filetags: :Ref:\n"
+                     ,site))
+           (a3-pub-living-test--capture-finish-status captured
+             (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
+                        (lambda () (list (list "garden" file 'ok-h))))
+                       ((symbol-function 'ok-h)
+                        (lambda (_f _r &rest rest)
+                          (setq ran t)
+                          (funcall (plist-get rest :on-done) 'ok)))
+                       ((symbol-function 'a3-pub-async/log-step)
+                        (lambda (_run label status &rest kw)
+                          (push (list label status (plist-get kw :err-snippet))
+                                logged))))
+               (a3-publish-living)))
+           ,@body)
+       (delete-directory dir t))))
+
+(defun a3-pub-living-test--no-site-logged-p (file logged)
+  "Non-nil when LOGGED holds the no-`:site:' contract step for FILE."
+  (cl-some (lambda (l)
+             (and (equal (nth 0 l) "contract")
+                  (eq (nth 1 l) :err)
+                  (equal (nth 2 l)
+                         (format "%s: library item has no :site: section; write one, then publish"
+                                 file))))
+           logged))
+
+(ert-deftest a3madkour-pub-living-test/item-without-site-section-is-not-published ()
+  "A library item note with no `:site:' heading never reaches its handler:
+the gate refuses it before the section contract, naming the fix."
+  (a3-pub-living-test--gate-item "* Highlights\nLorem ipsum.\n"
+    (should-not ran)
+    (should (eq captured 'err))
+    (should (a3-pub-living-test--no-site-logged-p file logged))))
+
+(ert-deftest a3madkour-pub-living-test/item-with-whitespace-site-section-is-not-published ()
+  "A `:site:' heading with only whitespace under it is no site section."
+  (a3-pub-living-test--gate-item "* Highlights\nLorem ipsum.\n* Notes :site:\n  \n\t\n"
+    (should-not ran)
+    (should (eq captured 'err))
+    (should (a3-pub-living-test--no-site-logged-p file logged))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

@@ -275,6 +275,35 @@ the original key. ox-hugo's ISO-datetime form is truncated to YYYY-MM-DD."
          (out (a3madkour-pub-frontmatter/normalize 'garden raw "/tmp/x.org")))
     (should (equal (alist-get 'tags out) '("Bayesian" "stats")))))
 
+(ert-deftest a3madkour-pub-frontmatter--garden-item-media-fields-from-drawer ()
+  "A library item note's media fields come from its `LIBRARY_*' drawer and
+override whatever ox-hugo emitted; a blank drawer value is omitted; tags
+are the cleaned `#+filetags:'.  A concept note's fields pass through."
+  (let ((src (make-temp-file "garden-item-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: game\n"
+                    ":LIBRARY_STATUS: playing\n:LIBRARY_CREATOR: Example Studio\n"
+                    ":LIBRARY_YEAR: 2004\n:LIBRARY_STARTED:\n"
+                    ":LIBRARY_FINISHED: 2026-02-02\n:END:\n"
+                    "#+title: Example 1\n#+filetags: :Ref:TODO:OpenWorld:\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'garden
+                      '((title . "Example 1") (status . "queued")
+                        (creator . "Wrong") (started . "2020-01-01")
+                        (tags . ("Ref" "TODO" "OpenWorld")))
+                      src)))
+            (should (equal (alist-get 'media_type out) "game"))
+            (should (equal (alist-get 'status out) "playing"))
+            (should (equal (alist-get 'creator out) "Example Studio"))
+            (should (equal (alist-get 'year out) 2004))
+            (should (equal (alist-get 'finished out) "2026-02-02"))
+            (should-not (assq 'started out))
+            (should (equal (alist-get 'tags out) '("open-world")))
+            (should-not (assq 'flavor out))))
+      (delete-file src))))
+
 (ert-deftest a3madkour-pub-frontmatter--garden-strips-slug ()
   "Bug 1.6: garden normalizer drops `slug' before emitting frontmatter.
 ox-hugo emits `slug:' from `:CUSTOM_ID:' / `#+HUGO_SLUG:' / title-derivation,
