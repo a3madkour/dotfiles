@@ -14,6 +14,8 @@
 (require 'a3madkour-publish-library)
 (require 'a3madkour-publish-author)
 (require 'a3madkour-publish-rewrite)   ; link-scheme / asset-shape tests
+(require 'a3madkour-publish-slug)
+(require 'org-id)
 
 (defcustom a3madkour-library/structural-tags '("Ref" "Book")
   "Org tags that structure the note rather than describe the item."
@@ -315,6 +317,109 @@ Signals an error when FILE has no usable `:site:' section."
             (if (string-match "\\`.*?[.!?]\\(?:[ \t\n]\\|\\'\\)" s)
                 (string-trim (match-string 0 s))
               s))))))
+
+;; -- interactive commands --
+
+(defvar a3madkour-library/notes-dir
+  (if (boundp 'org-roam-directory) org-roam-directory "~/org/notes/")
+  "Directory `a3-library-add' creates item notes in.")
+
+(defvar a3madkour-library/status-changed-functions nil
+  "Abnormal hook run with (FILE STATUS) after `a3-library-status' saves.")
+
+(defun a3madkour-library--require-org (command)
+  "Signal a `user-error' unless the current buffer is an org buffer for COMMAND."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "%s: current buffer is not org-mode" command)))
+
+(defun a3madkour-library--require-item (command)
+  "Signal a `user-error' unless the current buffer is a library item note."
+  (a3madkour-library--require-org command)
+  (unless (a3madkour-pub-author--drawer-get "media_type")
+    (user-error "%s: this note is not a library item (no LIBRARY_MEDIA_TYPE)"
+                command)))
+
+(defun a3madkour-library--read-required (prompt &optional digits)
+  "Read a non-empty string with PROMPT, re-prompting; DIGITS demands digits."
+  (let (v)
+    (while (let ((raw (string-trim (read-string prompt))))
+             (setq v raw)
+             (or (string-empty-p raw)
+                 (and digits (not (string-match-p "\\`[0-9]+\\'" raw)))))
+      (message "%s" (if digits "Enter digits only" "A value is required"))
+      (sit-for 0))
+    v))
+
+;;;###autoload
+(defun a3-library-add ()
+  "Create a library item note and visit it.
+Prompts for media type, title, creator, year and status, writes
+`<notes-dir>/<slug>.org' (file-level drawer first, then the title and an
+empty `* Notes :site:' heading) and stamps the dates via `set-status'.
+Refuses when the file already exists."
+  (interactive)
+  (let* ((media (completing-read "Media type: "
+                                 (mapcar #'car a3madkour-library--shelf-by-media)
+                                 nil t))
+         (title (a3madkour-library--read-required "Title: "))
+         (creator (a3madkour-library--read-required "Creator: "))
+         (year (a3madkour-library--read-required "Year: " t))
+         (slug (a3madkour-pub-slug/slugify title))
+         (file (expand-file-name (concat slug ".org") a3madkour-library/notes-dir)))
+    (when (string-empty-p slug)
+      (user-error "a3-library-add: title %S yields an empty slug" title))
+    (when (file-exists-p file)
+      (user-error "a3-library-add: %s already exists" file))
+    (let ((status (completing-read
+                   "Status: " (a3madkour-library/statuses media) nil t nil nil
+                   (if (equal media "film") "finished"
+                     (a3madkour-library/in-progress-status media)))))
+      (make-directory (file-name-directory file) t)
+      (with-temp-file file
+        (insert (format ":PROPERTIES:\n:ID: %s\n:LIBRARY_MEDIA_TYPE: %s\n:LIBRARY_CREATOR: %s\n:LIBRARY_YEAR: %s\n:END:\n#+title: %s\n\n* Notes :site:\n"
+                        (org-id-new) media creator year title)))
+      (find-file file)
+      (a3madkour-library/set-status status)
+      (save-buffer)
+      file)))
+
+;;;###autoload
+(defun a3-library-status ()
+  "Set the current item note's status, then run `status-changed-functions'."
+  (interactive)
+  (a3madkour-library--require-item "a3-library-status")
+  (let* ((mt (a3madkour-pub-author--drawer-get "media_type"))
+         (status (completing-read
+                  "Status: " (a3madkour-library/statuses mt) nil t nil nil
+                  (a3madkour-pub-author--drawer-get "status"))))
+    (a3madkour-library/set-status status)
+    (save-buffer)
+    (run-hook-with-args 'a3madkour-library/status-changed-functions
+                        buffer-file-name status)
+    status))
+
+;;;###autoload
+(defun a3-library-share ()
+  "Share the current item note by marking it for the garden.
+An item with no `:site:' section only offers to insert one; write it,
+then share again."
+  (interactive)
+  (a3madkour-library--require-item "a3-library-share")
+  (when (and buffer-file-name (buffer-modified-p)) (save-buffer))
+  (unless (and buffer-file-name (a3madkour-library/site-body buffer-file-name))
+    (when (y-or-n-p "No :site: section; insert `* Notes :site:'? ")
+      (goto-char (point-max))
+      (unless (bolp) (insert "\n"))
+      (insert "* Notes :site:\n"))
+    (user-error "write the :site: section, then share again"))
+  (a3-publish-mark "garden"))
+
+;;;###autoload
+(defun a3-library-unshare ()
+  "Stop publishing the current item note (`#+HUGO_PUBLISH: nil')."
+  (interactive)
+  (a3madkour-library--require-item "a3-library-unshare")
+  (a3-publish-unmark))
 
 (provide 'a3madkour-library-items)
 ;;; a3madkour-library-items.el ends here

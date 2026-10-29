@@ -252,5 +252,121 @@ preamble may carry private text into the export."
         (should (string-match-p "^Public\\.\nMore\\.$" c))))
     (should (cl-some (lambda (w) (string-match-p "INCLUDE" w)) warned))))
 
+;; -- commands --
+
+(defmacro a3madkour-library-items-test--with-dir (var &rest body)
+  "Run BODY with VAR and `notes-dir' bound to a fresh temp dir."
+  (declare (indent 1))
+  `(let* ((,var (make-temp-file "lib-notes-" t))
+          (a3madkour-library/notes-dir ,var))
+     (unwind-protect (progn ,@body)
+       (dolist (b (buffer-list))
+         (when (and (buffer-file-name b)
+                    (string-prefix-p ,var (buffer-file-name b)))
+           (with-current-buffer b (set-buffer-modified-p nil))
+           (kill-buffer b)))
+       (delete-directory ,var t))))
+
+(defmacro a3madkour-library-items-test--stub-prompts (answers &rest body)
+  "Run BODY with `completing-read' answered from ANSWERS (alist prompt-regexp
+-> value, or `default' for the DEF arg) and `read-string' from `:read'."
+  (declare (indent 1))
+  `(cl-letf (((symbol-function 'completing-read)
+              (lambda (prompt _coll &optional _p _r _i _h def)
+                (let ((a (cl-find-if (lambda (c) (string-match-p (car c) prompt))
+                                     ,answers)))
+                  (if (and a (not (eq (cdr a) 'default))) (cdr a) def))))
+             ((symbol-function 'read-string)
+              (lambda (prompt &rest _)
+                (cond ((string-match-p "Title" prompt) "Example Film")
+                      ((string-match-p "Creator" prompt) "Example Director")
+                      ((string-match-p "Year" prompt) "2001")))))
+     ,@body))
+
+(ert-deftest a3madkour-library-items-test/commands/add-film-defaults-finished-and-stamps ()
+  (a3madkour-library-items-test--with-dir d
+    (a3madkour-library-items-test--stub-prompts '(("Media" . "film") ("Status" . default))
+      (let ((file (a3-library-add)))
+        (should (equal file (expand-file-name "example-film.org" d)))
+        (let ((txt (with-temp-buffer (insert-file-contents file) (buffer-string))))
+          (should (string-match-p "\\`:PROPERTIES:\n:ID: [^\n]+\n:LIBRARY_MEDIA_TYPE: film" txt))
+          (should (string-match-p ":LIBRARY_STATUS: finished" txt))
+          (should (string-match-p ":LIBRARY_FINISHED: [0-9-]+" txt))
+          (should-not (string-match-p "LIBRARY_STARTED" txt))
+          (should (string-match-p "#\\+title: Example Film\n\n\\* Notes :site:\n" txt)))
+        (should (equal (buffer-file-name) file))))))
+
+(ert-deftest a3madkour-library-items-test/commands/add-book-defaults-in-progress ()
+  (a3madkour-library-items-test--with-dir d
+    (a3madkour-library-items-test--stub-prompts '(("Media" . "book") ("Status" . default))
+      (let ((txt (with-temp-buffer (insert-file-contents (a3-library-add)) (buffer-string))))
+        (should (string-match-p ":LIBRARY_STATUS: reading" txt))
+        (should (string-match-p ":LIBRARY_STARTED: " txt))))))
+
+(ert-deftest a3madkour-library-items-test/commands/add-refuses-existing ()
+  (a3madkour-library-items-test--with-dir d
+    (let ((f (expand-file-name "example-film.org" d)))
+      (with-temp-file f (insert "KEEP"))
+      (a3madkour-library-items-test--stub-prompts '(("Media" . "film"))
+        (should-error (a3-library-add) :type 'user-error))
+      (should (equal (with-temp-buffer (insert-file-contents f) (buffer-string)) "KEEP")))))
+
+(ert-deftest a3madkour-library-items-test/commands/outside-org-refuses ()
+  (with-temp-buffer
+    (dolist (c '(a3-library-status a3-library-share a3-library-unshare))
+      (should-error (funcall c) :type 'user-error))))
+
+(defmacro a3madkour-library-items-test--with-visited (var text &rest body)
+  "Visit a temp item note holding TEXT in a buffer, bind VAR to the file."
+  (declare (indent 2))
+  `(a3madkour-library-items-test--with-note ,var ,text
+     (let ((buf (find-file-noselect ,var)))
+       (unwind-protect (with-current-buffer buf ,@body)
+         (with-current-buffer buf (set-buffer-modified-p nil))
+         (kill-buffer buf)))))
+
+(ert-deftest a3madkour-library-items-test/commands/share-refuses-without-site-section ()
+  (let ((no-site ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: queued\n:LIBRARY_CREATOR: A\n:LIBRARY_YEAR: 1999\n:END:\n#+title: Example 1\n\n* Private\nx\n"))
+    (dolist (yes '(nil t))
+      (a3madkour-library-items-test--with-visited f no-site
+        (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) yes)))
+          (should-error (a3-library-share) :type 'user-error))
+        (should (eq yes (and (string-match-p "^\\* Notes :site:$" (buffer-string)) t)))
+        (should-not (string-match-p "HUGO_PUBLISH" (buffer-string)))))))
+
+(ert-deftest a3madkour-library-items-test/commands/share-marks-garden ()
+  (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book
+    (let (prompts)
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (p _c &optional _a _b _i _h d) (push p prompts) d))
+                ((symbol-function 'read-string)
+                 (lambda (p &rest _) (push p prompts) ""))
+                ((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (a3-library-share))
+      (should (string-match-p "^#\\+HUGO_PUBLISH: t$" (buffer-string)))
+      (should (string-match-p "^#\\+HUGO_SECTION: garden$" (buffer-string)))
+      (should-not (cl-some (lambda (p) (string-match-p "tatus" p)) prompts)))))
+
+(ert-deftest a3madkour-library-items-test/commands/status-runs-hook ()
+  (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book
+    (let (got)
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _) "reading")))
+        (let ((a3madkour-library/status-changed-functions
+               (list (lambda (file status) (push (list file status) got)))))
+          (a3-library-status)))
+      (should (equal got (list (list f "reading"))))
+      (should-not (buffer-modified-p))
+      (should (string-match-p ":LIBRARY_STATUS: reading"
+                              (with-temp-buffer (insert-file-contents f) (buffer-string))))
+      (should (string-match-p ":LIBRARY_STARTED: " (buffer-string))))))
+
+(ert-deftest a3madkour-library-items-test/commands/unshare-flips-publish ()
+  (a3madkour-library-items-test--with-visited f
+      (replace-regexp-in-string "#\\+title" "#+HUGO_PUBLISH: t\n#+title"
+                                a3madkour-library-items-test--book)
+    (a3-library-unshare)
+    (should (string-match-p "^#\\+HUGO_PUBLISH: nil$" (buffer-string)))))
+
 (provide 'a3madkour-library-items-test)
 ;;; a3madkour-library-items-test.el ends here
