@@ -260,12 +260,66 @@ A line left with no keys is deleted with its newline."
                   (format "^#\\+%s:.*\n?" (regexp-quote kw)) nil t)
             (replace-match "" t t)))))))
 
+;; -- internal: file-level drawer properties (source `drawer') --
+;;
+;; A `drawer' field is a `LIBRARY_<NAME>' property of the file-level
+;; `:PROPERTIES:' drawer.  Org reads that drawer as the file's properties
+;; only while it is the buffer's first element, so reads honour that and
+;; writes hoist or create it there.  Regex-only, no `org-element'.
+
+(defun a3madkour-pub-author--drawer-property (name)
+  "File-level property key for field NAME: `media_type' -> `LIBRARY_MEDIA_TYPE'."
+  (concat "LIBRARY_" (upcase name)))
+
+(defconst a3madkour-pub-author--file-drawer-re
+  (concat "\\`[ \t]*:PROPERTIES:[ \t]*\n"
+          "\\(\\(?:.*\n\\)*?\\)"
+          "[ \t]*:END:[ \t]*\\(?:\n\\|\\'\\)")
+  "The buffer-leading property drawer; group 1 is its property lines.")
+
+(defun a3madkour-pub-author--drawer-get (name)
+  "Value of field NAME's file-level property, or nil when absent or blank.
+Only a drawer that is the first thing in the buffer counts."
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (when (looking-at a3madkour-pub-author--file-drawer-re)
+        (let ((props (match-string-no-properties 1))
+              (case-fold-search t))
+          (when (string-match
+                 (format "^[ \t]*:%s:[ \t]*\\(.*?\\)[ \t]*$"
+                         (regexp-quote (a3madkour-pub-author--drawer-property name)))
+                 props)
+            (let ((v (match-string 1 props)))
+              (and (not (string-empty-p v)) v))))))))
+
+(defun a3madkour-pub-author--drawer-put (name value)
+  "Set field NAME's file-level property to VALUE, first-element drawer.
+Replaces an existing line in place, else appends before `:END:'; with no
+leading drawer, creates one at the top (hoisting a mis-placed one first)."
+  (a3madkour-pub-author--hoist-file-property-drawer)
+  (let ((key (a3madkour-pub-author--drawer-property name))
+        (case-fold-search t))
+    (save-excursion
+      (goto-char (point-min))
+      (if (not (looking-at a3madkour-pub-author--file-drawer-re))
+          (insert (format ":PROPERTIES:\n:%s: %s\n:END:\n" key value))
+        (let ((beg (match-beginning 1)) (end (match-end 1)))
+          (goto-char beg)
+          (if (re-search-forward
+               (format "^[ \t]*:%s:.*$" (regexp-quote key)) end t)
+              (replace-match (format ":%s: %s" key value) t t)
+            (goto-char end)
+            (insert (format ":%s: %s\n" key value))))))))
+
 (defun a3madkour-pub-author--write-field (name type value &optional source)
   "Write field NAME (of TYPE) with VALUE into the buffer preamble.
-A field whose SOURCE is `filetags' is written as tags on `#+filetags:'."
+A field whose SOURCE is `filetags' is written as tags on `#+filetags:';
+one whose SOURCE is `drawer' as a `LIBRARY_*' file-level property."
   (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
     (cond
      ((equal source "filetags") (a3madkour-pub-author--add-filetags value))
+     ((equal source "drawer") (a3madkour-pub-author--drawer-put name value))
      (kw (a3madkour-pub-author--upsert-keyword kw value))
      (t (a3madkour-pub-author--upsert-cfm-key
          name (a3madkour-pub-author--cfm-value type value))))))
@@ -690,8 +744,10 @@ published, so two themes marked before one publish get distinct weights."
 (defun a3madkour-pub-author--selector-value (on)
   "Buffer value of variant selector ON, or nil when absent or blank.
 A blank value selects the same case as an absent field (matches the
-site's check_fields)."
-  (let ((v (and on (a3madkour-pub-author--cfm-get on))))
+site's check_fields).  A file-level `LIBRARY_<ON>' property wins over
+the custom front matter key."
+  (let ((v (and on (or (a3madkour-pub-author--drawer-get on)
+                       (a3madkour-pub-author--cfm-get on)))))
     (and v (string-match-p "[^ \t]" v) v)))
 
 (defun a3madkour-pub-author--filetags ()
@@ -701,7 +757,8 @@ site's check_fields)."
 
 (defun a3madkour-pub-author--source-satisfied-p (name source)
   "Non-nil when the buffer gives pipeline field NAME a value via SOURCE.
-`title' is the `#+title:' keyword.  `filetags' needs a tag that survives
+`title' is the `#+title:' keyword.  `drawer' is a non-blank file-level
+`LIBRARY_*' property.  `filetags' needs a tag that survives
 the pipeline's editorial filter: a note tagged only `:TODO:' exports no
 tags key at all."
   (pcase source
@@ -709,6 +766,7 @@ tags key at all."
     ("filetags" (and (a3madkour-pub-frontmatter/filter-editorial-tags
                       (a3madkour-pub-author--filetags))
                      t))
+    ("drawer" (and (a3madkour-pub-author--drawer-get name) t))
     (_ (error "a3-publish-mark: field %s has unknown source %S" name source))))
 
 (defun a3madkour-pub-author--add-filetags (tags)

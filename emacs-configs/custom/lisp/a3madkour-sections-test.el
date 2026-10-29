@@ -122,7 +122,7 @@ across runs, so an edited contract must be re-read."
 
 (ert-deftest a3madkour-sections--fields-base-and-variant ()
   (let ((base (mapcar #'car (a3madkour-sections/fields "garden")))
-        (media (mapcar #'car (a3madkour-sections/fields "garden" "media"))))
+        (media (mapcar #'car (a3madkour-sections/fields "garden" "media-book"))))
     ;; `media_type' is declared only inside the media/reference cases.
     (should-not (member "media_type" base))
     (should-not (member "status" base))
@@ -144,7 +144,7 @@ decode to `:null' / `:false', both truthy."
     (should (equal (a3madkour-sections/required-authored "about") '("title")))))
 
 (ert-deftest a3madkour-sections--variant-case-selection ()
-  (should (equal (a3madkour-sections/variant-case "garden" "book") "media"))
+  (should (equal (a3madkour-sections/variant-case "garden" "book") "media-book"))
   (should (equal (a3madkour-sections/variant-case "garden" "paper") "reference"))
   (should-not (a3madkour-sections/variant-case "research/themes" nil))
   (should-error (a3madkour-sections/variant-case "garden" "hologram")))
@@ -243,11 +243,11 @@ bare `emacs -Q' — the leaf property `a3madkour-works-vocab' had."
 (ert-deftest a3madkour-sections--real-garden-selects-variants-on-a-case-only-field ()
   (a3madkour-sections-test--with-real-site
     (should (equal (a3madkour-sections/variant-case "garden" nil) "concept"))
-    (should (equal (a3madkour-sections/variant-case "garden" "book") "media"))
+    (should (equal (a3madkour-sections/variant-case "garden" "book") "media-book"))
     (should (equal (a3madkour-sections/variant-case "garden" "paper") "reference"))
     (should (member "book" (a3madkour-sections/enum "garden" "media_type")))
     (should-not (assoc "media_type" (a3madkour-sections/fields "garden")))
-    (should (assoc "media_type" (a3madkour-sections/fields "garden" "media")))))
+    (should (assoc "media_type" (a3madkour-sections/fields "garden" "media-book")))))
 
 (ert-deftest a3madkour-sections--real-library-extras-variant-fields-resolve ()
   "`extras' carries object-level variants; its case-only sub-fields resolve."
@@ -266,3 +266,11 @@ bare `emacs -Q' — the leaf property `a3madkour-works-vocab' had."
 (provide 'a3madkour-sections-test)
 
 ;;; a3madkour-sections-test.el ends here
+
+(ert-deftest a3madkour-sections--drawer-source-accepted ()
+  "A pipeline field may name source `drawer'; the reader keeps it verbatim."
+  (a3madkour-sections-test--with-root a3madkour-sections-test--json
+    (let ((spec (cdr (assoc "status" (a3madkour-sections/fields "garden" "media-playing")))))
+      (should (equal (alist-get 'source spec) "drawer"))
+      (should (equal (alist-get 'from spec) "pipeline"))
+      (should (member "playing" (alist-get 'values spec))))))

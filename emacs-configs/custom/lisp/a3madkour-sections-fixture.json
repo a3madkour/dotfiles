@@ -42,14 +42,50 @@
         "on": "media_type",
         "cases": {
           "concept": {"values": [null], "fields": {"weight": {"type": "int"}}},
-          "media": {
-            "values": ["book", "album", "track", "game", "film", "series"],
+          "media-book": {
+            "values": ["book"],
             "fields": {
-              "media_type": {"type": "enum", "required": true, "values": ["book", "album", "track", "game", "film", "series"]},
-              "status": {"type": "enum", "required": true, "values": ["reading", "finished", "abandoned", "queued"]},
-              "creator": {"type": "text", "required": true},
-              "started": {"type": "date"},
-              "finished": {"type": "date"},
+              "media_type": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["book"]},
+              "status": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["reading", "finished", "abandoned", "queued"]},
+              "creator": {"type": "text", "required": true, "from": "pipeline", "source": "drawer"},
+              "started": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "finished": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "spoiler_level": {"type": "enum", "values": ["none", "light", "heavy"]},
+              "original_url": {"type": "text"}
+            }
+          },
+          "media-listening": {
+            "values": ["album", "track"],
+            "fields": {
+              "media_type": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["album", "track"]},
+              "status": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["listening", "finished", "dropped", "queued"]},
+              "creator": {"type": "text", "required": true, "from": "pipeline", "source": "drawer"},
+              "started": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "finished": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "spoiler_level": {"type": "enum", "values": ["none", "light", "heavy"]},
+              "original_url": {"type": "text"}
+            }
+          },
+          "media-playing": {
+            "values": ["game"],
+            "fields": {
+              "media_type": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["game"]},
+              "status": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["playing", "finished", "100pct", "dropped", "queued"]},
+              "creator": {"type": "text", "required": true, "from": "pipeline", "source": "drawer"},
+              "started": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "finished": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "spoiler_level": {"type": "enum", "values": ["none", "light", "heavy"]},
+              "original_url": {"type": "text"}
+            }
+          },
+          "media-watching": {
+            "values": ["film", "series"],
+            "fields": {
+              "media_type": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["film", "series"]},
+              "status": {"type": "enum", "required": true, "from": "pipeline", "source": "drawer", "values": ["watching", "finished", "dropped", "queued"]},
+              "creator": {"type": "text", "required": true, "from": "pipeline", "source": "drawer"},
+              "started": {"type": "date", "from": "pipeline", "source": "drawer"},
+              "finished": {"type": "date", "from": "pipeline", "source": "drawer"},
               "spoiler_level": {"type": "enum", "values": ["none", "light", "heavy"]},
               "original_url": {"type": "text"}
             }

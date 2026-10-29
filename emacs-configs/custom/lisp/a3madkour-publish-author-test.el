@@ -646,8 +646,10 @@ bundle exists is listed once."
     (insert "#+HUGO_CUSTOM_FRONT_MATTER: :status dormant :media_type book\n")
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "research/themes"))
                    '("tags" "description" "weight")))
+    ;; A garden media_type/status/creator is a drawer field: the custom
+    ;; front matter value selects the case but does not satisfy the field.
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
-                   '("creator")))))
+                   '("media_type" "status" "creator")))))
 
 (ert-deftest a3madkour-pub-author-test/fields-to-fill-bad-variant-is-user-error ()
   (a3madkour-pub-author-test--with-site
@@ -907,12 +909,12 @@ not even #+HUGO_PUBLISH."
 
 (ert-deftest a3madkour-pub-author-test/mark-garden-media-variant-asks-its-fields ()
   (a3madkour-pub-author-test--with-site
-    (insert "#+title: A book\n#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
+    (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:END:\n#+title: A book\n")
     (a3madkour-pub-author-test--answering
         '((" status: " . "finished") (" creator: " . "Example Author"))
       (a3-publish-mark "garden"))
-    (should (string-match-p ":status \"finished\"" (buffer-string)))
-    (should (string-match-p ":creator \"Example Author\"" (buffer-string)))))
+    (should (equal (org-entry-get (point-min) "LIBRARY_STATUS") "finished"))
+    (should (equal (org-entry-get (point-min) "LIBRARY_CREATOR") "Example Author"))))
 
 (ert-deftest a3madkour-pub-author-test/mark-library-and-structured ()
   (a3madkour-pub-author-test--with-site
@@ -1007,7 +1009,7 @@ not even #+HUGO_PUBLISH."
                          (list (car e) (cdr e))))))
       (with-temp-buffer
         (org-mode)
-        (insert "#+title: T\n#+HUGO_CUSTOM_FRONT_MATTER: :media_type book\n")
+        (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:END:\n#+title: T\n")
         (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
                        '("status" "creator")))))))
 
@@ -1061,3 +1063,72 @@ not even #+HUGO_PUBLISH."
 
 (provide 'a3madkour-publish-author-test)
 ;;; a3madkour-publish-author-test.el ends here
+
+;; -- drawer-sourced fields (LIBRARY_* file properties) --
+
+(ert-deftest a3madkour-pub-author-test/drawer-property-names ()
+  (should (equal (a3madkour-pub-author--drawer-property "media_type") "LIBRARY_MEDIA_TYPE"))
+  (should (equal (a3madkour-pub-author--drawer-property "creator") "LIBRARY_CREATOR")))
+
+(ert-deftest a3madkour-pub-author-test/drawer-get-reads-only-a-first-element-drawer ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:ID: x\n:LIBRARY_STATUS: reading\n:LIBRARY_CREATOR:   \n:END:\n#+title: T\n")
+    (should (equal (a3madkour-pub-author--drawer-get "status") "reading"))
+    (should-not (a3madkour-pub-author--drawer-get "creator"))
+    (should-not (a3madkour-pub-author--drawer-get "started")))
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n:PROPERTIES:\n:LIBRARY_STATUS: reading\n:END:\n")
+    (should-not (a3madkour-pub-author--drawer-get "status"))))
+
+(ert-deftest a3madkour-pub-author-test/drawer-source-satisfied-by-file-property ()
+  (a3madkour-pub-author-test--with-site
+    (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: reading\n:END:\n#+title: T\n")
+    (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "garden"))
+                   '("creator")))))
+
+(ert-deftest a3madkour-pub-author-test/drawer-selector-picks-media-case ()
+  (a3madkour-pub-author-test--with-site
+    (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: game\n:END:\n#+title: T\n"
+            "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n")
+    (let ((file (make-temp-file "drawer-sel" nil ".org" (buffer-string))))
+      (unwind-protect
+          (should (equal (a3madkour-pub-author/missing-required file "garden")
+                         '("status" "creator")))
+        (delete-file file)))
+    (let ((status (assoc "status" (a3madkour-pub-author--fields-to-fill "garden"))))
+      (should (member "playing" (alist-get 'values (cdr status))))
+      (should-not (member "reading" (alist-get 'values (cdr status)))))))
+
+(ert-deftest a3madkour-pub-author-test/drawer-field-written-to-file-drawer ()
+  (a3madkour-pub-author-test--with-site
+    (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:END:\n#+title: T\n")
+    (a3madkour-pub-author-test--answering
+        '(("garden status" . "reading") ("garden creator" . "Ann Author"))
+      (a3-publish-mark "garden"))
+    (should (equal (org-entry-get (point-min) "LIBRARY_STATUS") "reading"))
+    (should (equal (org-entry-get (point-min) "LIBRARY_CREATOR") "Ann Author"))
+    (should-not (string-match-p "HUGO_CUSTOM_FRONT_MATTER:.*\\(status\\|creator\\)"
+                                (buffer-string)))))
+
+(ert-deftest a3madkour-pub-author-test/drawer-written-into-existing-ref-drawer ()
+  (a3madkour-pub-author-test--with-site
+    (insert ":PROPERTIES:\n:ID: r-1\n:ROAM_REFS: https://example.org\n:END:\n#+title: T\n")
+    (a3madkour-pub-author--write-field "status" "enum" "reading" "drawer")
+    (should (string-prefix-p ":PROPERTIES:\n:ID: r-1\n:ROAM_REFS: https://example.org\n"
+                             (buffer-string)))
+    (should (equal (org-entry-get (point-min) "ID") "r-1"))
+    (should (equal (org-entry-get (point-min) "LIBRARY_STATUS") "reading"))
+    ;; A second write replaces in place rather than duplicating.
+    (a3madkour-pub-author--write-field "status" "enum" "finished" "drawer")
+    (should (equal (org-entry-get (point-min) "LIBRARY_STATUS") "finished"))
+    (should (= 1 (how-many "LIBRARY_STATUS" (point-min) (point-max))))))
+
+(ert-deftest a3madkour-pub-author-test/drawer-created-first-when-buffer-starts-with-keywords ()
+  (a3madkour-pub-author-test--with-site
+    (insert "#+title: T\n#+HUGO_PUBLISH: t\n")
+    (a3madkour-pub-author--write-field "creator" "text" "Ann" "drawer")
+    (should (string-prefix-p ":PROPERTIES:\n:LIBRARY_CREATOR: Ann\n:END:\n#+title: T\n"
+                             (buffer-string)))
+    (should (equal (org-entry-get (point-min) "LIBRARY_CREATOR") "Ann"))))
