@@ -23,6 +23,7 @@
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-registry)
+(require 'a3madkour-sections)
 (require 'a3madkour-publish-library)
 (require 'a3madkour-publish-citations)  ; `--parse-existing-yaml'
 (require 'a3madkour-publish-garden)     ; `section-dir-name'
@@ -56,11 +57,41 @@ An `@' inside a URL (`https://host/@user') is not a key."
              (string-match "\\(?:\\`\\|[ \t[:]\\)@\\([^][ \t\n;,]+\\)" refs))
     (match-string 1 refs)))
 
-(defun a3madkour-pub-library-notes/row (file &optional known-cite-keys)
-  "The shelf row plist for shared item note FILE, or nil.
-Nil (with a warning) when FILE's garden bundle does not exist: a row
-must link to a published page.  KNOWN-CITE-KEYS defaults to the keys of
-`data/citations.yaml'; `:cite_key' is emitted only for one of them."
+(defun a3madkour-pub-library-notes--problems (row props section)
+  "Why ROW (built from drawer PROPS) would fail library SECTION's contract.
+A list of messages, nil when ROW is valid.  Required fields are the
+contract's authored ones (`a3madkour-sections/required-authored'); the
+status must be one of the shelf's; dates must be YYYY-MM-DD; a finished
+item needs its finished date.  These mirror the site's
+`tools/check_library_fixtures.py', which fails CI on any of them."
+  (let ((problems nil)
+        (raw-year (alist-get "year" props nil nil #'equal)))
+    (dolist (f (a3madkour-sections/required-authored section))
+      (unless (plist-get row (intern (concat ":" f)))
+        (push (if (and (equal f "year") raw-year)
+                  (format "LIBRARY_YEAR %S is not a number" raw-year)
+                (format "missing required LIBRARY_%s" (upcase f)))
+              problems)))
+    (let ((status (plist-get row :status))
+          (allowed (a3madkour-library/statuses (plist-get row :media_type))))
+      (when (and status (not (member status allowed)))
+        (push (format "LIBRARY_STATUS %S is not one of %S" status allowed)
+              problems))
+      (when (and (equal status "finished") (not (plist-get row :finished)))
+        (push "status finished needs LIBRARY_FINISHED" problems)))
+    (dolist (f '(:started :finished))
+      (let ((v (plist-get row f)))
+        (when (and v (not (string-match-p
+                           "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\'" v)))
+          (push (format "LIBRARY_%s %S is not YYYY-MM-DD"
+                        (upcase (substring (symbol-name f) 1)) v)
+                problems))))
+    (nreverse problems)))
+
+(defun a3madkour-pub-library-notes--row-result (file known-cite-keys)
+  "FILE's shelf row plist; nil when it has no garden bundle; or
+\(invalid . PROBLEMS) when the row would fail its shelf's contract.
+Every nil or invalid result is warned about, naming FILE."
   (let* ((md (a3madkour-pub/note-metadata file))
          (slug (plist-get md :slug)))
     (cond
@@ -84,8 +115,8 @@ must link to a published page.  KNOWN-CITE-KEYS defaults to the keys of
                         :title (plist-get md :title))))
         (cl-flet ((prop (f) (alist-get f props nil nil #'equal)))
           (when (prop "creator") (setq row (plist-put row :creator (prop "creator"))))
-          (let ((year (a3madkour-pub-library--coerce-year (prop "year") file slug)))
-            (when year (setq row (plist-put row :year year))))
+          (when (and (prop "year") (string-match-p "\\`[0-9]+\\'" (prop "year")))
+            (setq row (plist-put row :year (string-to-number (prop "year")))))
           (dolist (f '("media_type" "status" "started" "finished"))
             (when (prop f)
               (setq row (plist-put row (intern (concat ":" f)) (prop f))))))
@@ -99,7 +130,27 @@ must link to a published page.  KNOWN-CITE-KEYS defaults to the keys of
         (when (and cite (member cite known))
           (setq row (plist-put row :cite_key cite)))
         (when extras (setq row (plist-put row :extras extras)))
-        row)))))
+        (let* ((shelf (a3madkour-library/shelf-for (plist-get row :media_type)))
+               (problems
+                (if shelf
+                    (a3madkour-pub-library-notes--problems row props shelf)
+                  (list (format "LIBRARY_MEDIA_TYPE %S has no shelf"
+                                (plist-get row :media_type))))))
+          (if (not problems)
+              row
+            (a3madkour-pub/warn "library-notes" file "no shelf row: %s"
+                                (string-join problems "; "))
+            (cons 'invalid problems))))))))
+
+(defun a3madkour-pub-library-notes/row (file &optional known-cite-keys)
+  "The shelf row plist for shared item note FILE, or nil.
+Nil (with a warning) when FILE's garden bundle does not exist, since a row
+must link to a published page, or when the row would fail its shelf's
+contract (see `a3madkour-pub-library-notes--problems').  KNOWN-CITE-KEYS
+defaults to the keys of `data/citations.yaml'; `:cite_key' is emitted
+only for one of them."
+  (let ((r (a3madkour-pub-library-notes--row-result file known-cite-keys)))
+    (and (not (eq (car-safe r) 'invalid)) r)))
 
 (defun a3madkour-pub-library-notes--render-shelf (rows section)
   "The whole yaml document for library SECTION holding ROWS."
@@ -119,11 +170,16 @@ must link to a published page.  KNOWN-CITE-KEYS defaults to the keys of
 FILES are the run's live garden item notes.  Each note's row goes to the
 shelf of its media type, rows ordered by slug.  Every shelf is written on
 every run (unchanged content is not rewritten), so a shelf whose last
-item stopped being shared becomes `items: []'."
+item stopped being shared becomes `items: []'.
+
+A note whose row would fail its shelf's contract gets no row; the shelves
+are still written from the valid rows, and then an error naming every
+such note is signalled, so the run reports `err'."
   (unless a3madkour-pub/site-data-dir
     (error "a3madkour-pub-library-notes: a3madkour-pub/site-data-dir is nil"))
   (let ((known (a3madkour-pub-library-notes--known-cite-keys))
-        (by-shelf nil))
+        (by-shelf nil)
+        (invalid nil))
     (dolist (file files)
       (let* ((media (alist-get "media_type" (a3madkour-library/properties file)
                                nil nil #'equal))
@@ -131,19 +187,26 @@ item stopped being shared becomes `items: []'."
         (if (not shelf)
             (a3madkour-pub/warn "library-notes" file
                                 "media type %S has no shelf; no shelf row" media)
-          (let ((row (a3madkour-pub-library-notes/row file known)))
-            (when row (push row (alist-get shelf by-shelf nil nil #'equal)))))))
-    (mapcar
-     (lambda (section)
-       (let ((path (expand-file-name (a3madkour-pub-registry/get section :data-file)
-                                     a3madkour-pub/site-data-dir))
-             (rows (sort (copy-sequence (alist-get section by-shelf nil nil #'equal))
-                         (lambda (a b) (string< (plist-get a :slug)
-                                                (plist-get b :slug))))))
-         (a3madkour-pub-yaml/write-if-different
-          path (a3madkour-pub-library-notes--render-shelf rows section))
-         path))
-     (a3madkour-pub-library/sections))))
+          (let ((r (a3madkour-pub-library-notes--row-result file known)))
+            (cond
+             ((eq (car-safe r) 'invalid)
+              (push (format "%s: %s" file (string-join (cdr r) "; ")) invalid))
+             (r (push r (alist-get shelf by-shelf nil nil #'equal))))))))
+    (prog1
+        (mapcar
+         (lambda (section)
+           (let ((path (expand-file-name (a3madkour-pub-registry/get section :data-file)
+                                         a3madkour-pub/site-data-dir))
+                 (rows (sort (copy-sequence (alist-get section by-shelf nil nil #'equal))
+                             (lambda (a b) (string< (plist-get a :slug)
+                                                    (plist-get b :slug))))))
+             (a3madkour-pub-yaml/write-if-different
+              path (a3madkour-pub-library-notes--render-shelf rows section))
+             path))
+         (a3madkour-pub-library/sections))
+      (when invalid
+        (error "item notes left off their shelf: %s"
+               (string-join (nreverse invalid) " | "))))))
 
 (provide 'a3madkour-publish-library-notes)
 

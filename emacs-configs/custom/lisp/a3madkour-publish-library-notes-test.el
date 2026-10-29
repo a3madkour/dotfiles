@@ -39,17 +39,19 @@ resets the metadata cache, and stubs git/fs mtimes to a fixed date."
 
 (cl-defun a3madkour-pub-library-notes-test--note
     (name &key (media "book") (status "reading") (title name) refs
-          (bundle t) (publish t) extra-drawer)
+          (bundle t) (publish t) extra-drawer
+          (creator "Example Author") (year "2001") (started "2026-01-01") finished)
   "Write an item note NAME.org; return its path.
 With BUNDLE, also write its garden bundle `content/garden/<slug>/index.md'."
   (let ((file (expand-file-name (concat name ".org") a3madkour-pub/org-notes-dir)))
     (with-temp-file file
       (insert ":PROPERTIES:\n:ID: " (md5 name) "\n"
               ":LIBRARY_MEDIA_TYPE: " media "\n"
-              ":LIBRARY_STATUS: " status "\n"
-              ":LIBRARY_CREATOR: Example Author\n"
-              ":LIBRARY_YEAR: 2001\n"
-              ":LIBRARY_STARTED: 2026-01-01\n"
+              (if status (concat ":LIBRARY_STATUS: " status "\n") "")
+              (if creator (concat ":LIBRARY_CREATOR: " creator "\n") "")
+              (if year (concat ":LIBRARY_YEAR: " year "\n") "")
+              (if started (concat ":LIBRARY_STARTED: " started "\n") "")
+              (if finished (concat ":LIBRARY_FINISHED: " finished "\n") "")
               (or extra-drawer "")
               (if refs (concat ":ROAM_REFS: " refs "\n") "")
               ":END:\n"
@@ -187,6 +189,85 @@ fixture contract's playing shelf carries no `started'."
     (let ((f (a3madkour-pub-library-notes-test--note "example-book-one")))
       (cl-letf (((symbol-function 'a3madkour-library/preview) (lambda (_) nil)))
         (should-not (plist-member (a3madkour-pub-library-notes/row f) :preview))))))
+
+;; -- The shelf contract: a row the site would reject is never written --
+
+(defmacro a3madkour-pub-library-notes-test--rejects (problem &rest note-args)
+  "Assert the note made from NOTE-ARGS gets no row, warning PROBLEM (a regexp)."
+  `(a3madkour-pub-library-notes-test--with-site
+     (let* ((f (a3madkour-pub-library-notes-test--note "example-book-one" ,@note-args))
+            (warned nil))
+       (cl-letf* ((orig (symbol-function 'a3madkour-pub/warn))
+                  ((symbol-function 'a3madkour-pub/warn)
+                   (lambda (module file fmt &rest args)
+                     (push (apply #'format fmt args) warned)
+                     (apply orig module file fmt args))))
+         (should-not (a3madkour-pub-library-notes/row f)))
+       (should (cl-some (lambda (w) (string-match-p ,problem w)) warned)))))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/missing-status ()
+  (a3madkour-pub-library-notes-test--rejects
+   "missing required LIBRARY_STATUS" :status nil))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/status-not-on-shelf ()
+  (a3madkour-pub-library-notes-test--rejects
+   "LIBRARY_STATUS \"playing\" is not one of" :status "playing")
+  (a3madkour-pub-library-notes-test--rejects
+   "LIBRARY_STATUS \"redaing\" is not one of" :status "redaing"))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/missing-creator ()
+  (a3madkour-pub-library-notes-test--rejects
+   "missing required LIBRARY_CREATOR" :creator nil))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/missing-year ()
+  (a3madkour-pub-library-notes-test--rejects
+   "missing required LIBRARY_YEAR" :year nil))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/non-numeric-year ()
+  (a3madkour-pub-library-notes-test--rejects
+   "LIBRARY_YEAR \"c. 2001\" is not a number" :year "c. 2001"))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/finished-needs-date ()
+  (a3madkour-pub-library-notes-test--rejects
+   "status finished needs LIBRARY_FINISHED" :status "finished"))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/finished-with-date-is-valid ()
+  (a3madkour-pub-library-notes-test--with-site
+    (let ((f (a3madkour-pub-library-notes-test--note
+              "example-book-one" :status "finished" :finished "2026-02-03")))
+      (should (equal (plist-get (a3madkour-pub-library-notes/row f) :finished)
+                     "2026-02-03")))))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/date-shape ()
+  (a3madkour-pub-library-notes-test--rejects
+   "LIBRARY_STARTED \"2026-1-1\" is not YYYY-MM-DD" :started "2026-1-1")
+  (a3madkour-pub-library-notes-test--rejects
+   "LIBRARY_FINISHED \"2026-02-03T10:00\" is not YYYY-MM-DD"
+   :status "finished" :finished "2026-02-03T10:00"))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/every-problem-named ()
+  "One warning names every problem of the note."
+  (a3madkour-pub-library-notes-test--rejects
+   "missing required LIBRARY_CREATOR.*missing required LIBRARY_YEAR"
+   :creator nil :year nil))
+
+(ert-deftest a3madkour-pub-library-notes-test/contract/valid-row-written-beside-invalid ()
+  "An invalid note is left off its shelf and the collector signals, but
+only after writing the shelves from the valid rows."
+  (a3madkour-pub-library-notes-test--with-site
+    (let ((good (a3madkour-pub-library-notes-test--note "example-book-one"))
+          (bad (a3madkour-pub-library-notes-test--note
+                "example-book-two" :status nil)))
+      (let ((err (should-error
+                  (a3madkour-pub-library-notes/build-shelves (list good bad)))))
+        (should (string-match-p (regexp-quote bad) (error-message-string err)))
+        (should (string-match-p "missing required LIBRARY_STATUS"
+                                (error-message-string err))))
+      (let ((yaml (a3madkour-pub-library-notes-test--shelf "reading.yaml")))
+        (should (string-match-p "slug: example-book-one" yaml))
+        (should-not (string-match-p "example-book-two" yaml)))
+      (should (file-exists-p (expand-file-name "watching.yaml"
+                                               a3madkour-pub/site-data-dir))))))
 
 (provide 'a3madkour-publish-library-notes-test)
 ;;; a3madkour-publish-library-notes-test.el ends here

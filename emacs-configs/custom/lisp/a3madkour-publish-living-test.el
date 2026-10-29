@@ -535,6 +535,56 @@ still runs."
                             (string-match-p "shelf blew up" (nth 2 l))))
                      logged))))
 
+(ert-deftest a3madkour-pub-living-test/invalid-item-row-makes-run-err ()
+  "A shared item note that would fail its shelf's contract makes the real
+collector report `err' through the run, which still finishes once."
+  (let* ((notes (make-temp-file "living-invalid-notes-" t))
+         (site (make-temp-file "living-invalid-site-" t))
+         (data (file-name-as-directory (expand-file-name "data" site)))
+         (src (expand-file-name "item.org" notes))
+         (finishes nil) (logged nil))
+    (unwind-protect
+        (progn
+          (make-directory data t)
+          (make-directory (expand-file-name "content/garden/example-book-one" site) t)
+          (with-temp-file (expand-file-name
+                           "content/garden/example-book-one/index.md" site)
+            (insert "---\n---\n"))
+          (with-temp-file (expand-file-name "url-history.yaml" data)
+            (insert "notes: []\n"))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n"
+                    ":LIBRARY_CREATOR: Example Author\n:LIBRARY_YEAR: 2001\n:END:\n"
+                    "#+title: Example Book One\n#+HUGO_SECTION: garden\n"
+                    "#+HUGO_PUBLISH: t\n"))
+          (let ((a3madkour-pub/site-data-dir data)
+                (a3-pub-async--in-flight-run nil))
+            (a3madkour-pub--reset-metadata-cache)
+            (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) #'ignore)
+                      ((symbol-function 'a3madkour-pub-living--collect-triples)
+                       (lambda () (list (list "garden" src 'ok-h))))
+                      ;; Only the collector may fail this run.
+                      ((symbol-function 'a3madkour-pub-living--contract-gap) #'ignore)
+                      ((symbol-function 'ok-h)
+                       (lambda (_f _r &rest rest)
+                         (funcall (plist-get rest :on-done) 'ok)))
+                      ((symbol-function 'a3-pub-async/finish-publish)
+                       (lambda (_run &rest kw)
+                         (push (plist-get kw :status) finishes)))
+                      ((symbol-function 'a3-pub-async/log-step)
+                       (lambda (_run label status &rest kw)
+                         (push (list label status (plist-get kw :err-snippet))
+                               logged))))
+              (with-a3-pub-async-sync (a3-publish-living))))
+          (should (equal finishes '(err)))
+          (should (cl-some (lambda (l)
+                             (and (equal (nth 0 l) "library-shelves")
+                                  (string-match-p "LIBRARY_STATUS" (nth 2 l))))
+                           logged))
+          (should (file-exists-p (expand-file-name "reading.yaml" data))))
+      (delete-directory notes t)
+      (delete-directory site t))))
+
 (ert-deftest a3madkour-pub-living-test/shelf-file-is-refused ()
   "An old-style `library/reading' shelf file reports `err' through living,
 naming the fix, and its items never reach reading.yaml."
