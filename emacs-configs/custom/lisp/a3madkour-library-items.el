@@ -1,0 +1,167 @@
+;;; a3madkour-library-items.el --- library item notes  -*- lexical-binding: t; -*-
+;;; Commentary:
+;;; A library item is an org note whose file-level property drawer carries
+;;; `:LIBRARY_MEDIA_TYPE:'.  This module reads its `LIBRARY_*' fields, stamps
+;;; status and dates, cleans its tags, and extracts the `:site:' subtree --
+;;; the only part of the note that may ever be published.
+;;; Code:
+
+(require 'cl-lib)
+(require 'subr-x)
+(require 'org)
+(require 'a3madkour-sections)
+(require 'a3madkour-publish-frontmatter)
+(require 'a3madkour-publish-library)
+(require 'a3madkour-publish-author)
+
+(defcustom a3madkour-library/structural-tags '("Ref" "Book")
+  "Org tags that structure the note rather than describe the item."
+  :type '(repeat string) :group 'a3madkour-pub)
+
+(defconst a3madkour-library--shelf-by-media
+  '(("book" . "library/reading")
+    ("album" . "library/listening") ("track" . "library/listening")
+    ("game" . "library/playing")
+    ("film" . "library/watching") ("series" . "library/watching"))
+  "Media type -> library shelf section.")
+
+(defconst a3madkour-library--core-fields
+  '("media_type" "status" "creator" "year" "started" "finished" "preview")
+  "Item fields read from `LIBRARY_<UPCASE>' file-level properties.")
+
+(defmacro a3madkour-library--with-file (file &rest body)
+  "Run BODY in a temp org buffer holding FILE's text."
+  (declare (indent 1))
+  `(with-temp-buffer
+     (insert-file-contents ,file)
+     (let ((delay-mode-hooks t)) (org-mode))
+     ,@body))
+
+(defun a3madkour-library/shelf-for (media-type)
+  "Library shelf section for MEDIA-TYPE, or nil when unknown."
+  (cdr (assoc media-type a3madkour-library--shelf-by-media)))
+
+(defun a3madkour-library/statuses (media-type)
+  "Allowed status words for MEDIA-TYPE's shelf."
+  (a3madkour-sections/enum (a3madkour-library/shelf-for media-type) "status"))
+
+(defun a3madkour-library/in-progress-status (media-type)
+  "The in-progress status word for MEDIA-TYPE (reading, listening, ...)."
+  (file-name-nondirectory (a3madkour-library/shelf-for media-type)))
+
+(defun a3madkour-library/item-p (file)
+  "Non-nil when FILE's drawer has a non-blank `LIBRARY_MEDIA_TYPE'."
+  (a3madkour-library--with-file file
+    (and (a3madkour-pub-author--drawer-get "media_type") t)))
+
+(defun a3madkour-library/properties (file)
+  "Alist of FILE's non-blank `LIBRARY_*' core fields, plus `(extras . PLIST)'.
+Only the `LIBRARY_'-prefixed drawer keys are read; extras are the
+per-medium keys of `a3madkour-pub-library/extras-for' (int-coerced)."
+  (a3madkour-library--with-file file
+    (let (alist extras
+          (media (a3madkour-pub-author--drawer-get "media_type")))
+      (dolist (f a3madkour-library--core-fields)
+        (let ((v (a3madkour-pub-author--drawer-get f)))
+          (when v (push (cons f v) alist))))
+      (dolist (entry (a3madkour-pub-library/extras-for media))
+        (let ((raw (a3madkour-pub-author--drawer-get (nth 0 entry))))
+          (when raw
+            (setq extras (plist-put extras (nth 1 entry)
+                                    (if (eq (nth 2 entry) 'int)
+                                        (string-to-number raw)
+                                      raw))))))
+      (nreverse (if extras (cons (cons 'extras extras) alist) alist)))))
+
+(defun a3madkour-library/set-status (status &optional today)
+  "Set the current buffer's item STATUS, stamping started/finished once.
+Signals `user-error' unless STATUS is valid for the note's shelf.  TODAY
+is a YYYY-MM-DD string, default today.  Returns STATUS."
+  (let* ((mt (a3madkour-pub-author--drawer-get "media_type"))
+         (valid (and mt (a3madkour-library/shelf-for mt)
+                     (a3madkour-library/statuses mt)))
+         (today (or today (format-time-string "%Y-%m-%d"))))
+    (unless (member status valid)
+      (user-error "Status %S is not valid for %S (use one of %S)" status mt valid))
+    (a3madkour-pub-author--drawer-put "status" status)
+    (when (and (equal status (a3madkour-library/in-progress-status mt))
+               (not (a3madkour-pub-author--drawer-get "started")))
+      (a3madkour-pub-author--drawer-put "started" today))
+    (when (and (member status '("finished" "100pct"))
+               (not (a3madkour-pub-author--drawer-get "finished")))
+      (a3madkour-pub-author--drawer-put "finished" today))
+    status))
+
+(defun a3madkour-library--kebab (tag)
+  "TAG as lowercase kebab-case, or nil when it cannot be made a clean slug."
+  (let* ((case-fold-search nil)
+         (s (replace-regexp-in-string
+             "\\([a-z0-9]\\)\\([A-Z]\\)" "\\1-\\2" tag t))
+         (s (replace-regexp-in-string
+             "\\([A-Z]+\\)\\([A-Z][a-z]\\)" "\\1-\\2" s t))
+         (s (replace-regexp-in-string "[_ ]" "-" s t))
+         (s (replace-regexp-in-string "-+" "-" (downcase s) t)))
+    (and (string-match-p "\\`[a-z0-9][a-z0-9-]*\\'" s) s)))
+
+(defun a3madkour-library/clean-tags (tags)
+  "TAGS minus editorial and structural tags, kebab-cased, de-duplicated.
+A tag that is not a clean slug after kebab-casing is dropped."
+  (let ((kept (cl-remove-if
+               (lambda (tag) (member tag a3madkour-library/structural-tags))
+               (a3madkour-pub-frontmatter/filter-editorial-tags tags))))
+    (delete-dups (delq nil (mapcar #'a3madkour-library--kebab kept)))))
+
+(defun a3madkour-library/site-heading-region ()
+  "Body region (BEG . END) of the first level-1 `:site:' heading, or nil.
+The body follows the heading line, its planning line and property drawer,
+and ends at the next level-1 heading or the end of the buffer."
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (let ((case-fold-search nil) found)
+        (while (and (not found)
+                    (re-search-forward "^\\* .*$" nil t))
+          (when (member "site" (org-get-tags nil t))
+            (setq found t)))
+        (when found
+          (forward-line 1)
+          (when (looking-at "[ \t]*\\(?:SCHEDULED\\|DEADLINE\\|CLOSED\\):.*\n")
+            (goto-char (match-end 0)))
+          (when (looking-at "[ \t]*:PROPERTIES:[ \t]*\n\\(?:.*\n\\)*?[ \t]*:END:[ \t]*\\(?:\n\\|\\'\\)")
+            (goto-char (match-end 0)))
+          (let ((beg (point)))
+            (cons beg (if (re-search-forward "^\\* " nil t)
+                          (match-beginning 0)
+                        (point-max)))))))))
+
+(defun a3madkour-library/site-body (file)
+  "Text of FILE's `:site:' section, or nil when absent or blank."
+  (a3madkour-library--with-file file
+    (let ((r (a3madkour-library/site-heading-region)))
+      (when r
+        (let ((s (string-trim (buffer-substring-no-properties (car r) (cdr r)))))
+          (and (not (string-empty-p s)) s))))))
+
+(defun a3madkour-library--strip-emphasis (s)
+  "S without org emphasis markers around words."
+  (replace-regexp-in-string
+   "\\([ \t\n(]\\|\\`\\)[*/_=~+]\\([^ \t\n][^\n]*?[^ \t\n]\\|[^ \t\n]\\)[*/_=~+]\\([ \t\n.,;:!?)]\\|\\'\\)"
+   "\\1\\2\\3" s))
+
+(defun a3madkour-library/preview (file)
+  "FILE's `LIBRARY_PREVIEW', else the first sentence of its site body."
+  (or (a3madkour-library--with-file file
+        (a3madkour-pub-author--drawer-get "preview"))
+      (let ((body (a3madkour-library/site-body file)))
+        (when body
+          (let* ((s (replace-regexp-in-string
+                     "\\[\\[[^]]*\\]\\[\\([^]]*\\)\\]\\]" "\\1" body))
+                 (s (replace-regexp-in-string "\\[\\[\\([^]]*\\)\\]\\]" "\\1" s))
+                 (s (a3madkour-library--strip-emphasis s))
+                 (s (string-trim (replace-regexp-in-string "[ \t\n]+" " " s))))
+            (if (string-match "\\`.*?[.!?]\\(?:[ \t\n]\\|\\'\\)" s)
+                (string-trim (match-string 0 s))
+              s))))))
+
+(provide 'a3madkour-library-items)
+;;; a3madkour-library-items.el ends here
