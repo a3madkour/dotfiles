@@ -439,11 +439,48 @@ Refuses when the file already exists."
                         buffer-file-name status)
     status))
 
+(defun a3madkour-library--shelf-field-ok-p (shelf name spec)
+  "Non-nil when the buffer's drawer value for field NAME meets SHELF's SPEC."
+  (let ((v (a3madkour-pub-author--drawer-get name)))
+    (and v
+         (pcase (alist-get 'type spec)
+           ("int" (string-match-p "\\`[0-9]+\\'" v))
+           ("enum" (member v (a3madkour-sections/enum shelf name)))
+           (_ t)))))
+
+(defun a3madkour-library--gather-shelf-fields ()
+  "Ask for every shelf-required authored field the drawer lacks or fails.
+The shelf is the item's (`shelf-for' its media type); its fields are the
+contract's required authored ones (`a3madkour-sections/required-authored',
+which the shelf collector checks rows against) that the note stores in
+its drawer (`--core-fields'); the rest (slug, title, tags, ...) the
+collector derives.  Writes nothing; returns (NAME . VALUE) pairs in
+contract order."
+  (let ((shelf (a3madkour-library/shelf-for
+                (a3madkour-pub-author--drawer-get "media_type"))))
+    (when shelf
+      (cl-loop
+       for name in (a3madkour-sections/required-authored shelf)
+       for spec = (a3madkour-sections/field shelf name)
+       when (and (member name a3madkour-library--core-fields)
+                 (not (a3madkour-library--shelf-field-ok-p shelf name spec)))
+       collect
+       (cons name
+             (let ((prompt (format "%s %s: " shelf name)))
+               (pcase (alist-get 'type spec)
+                 ("enum" (completing-read prompt (a3madkour-sections/enum shelf name)
+                                          nil t))
+                 ("int" (a3madkour-library--read-required prompt t))
+                 (_ (a3madkour-library--read-required prompt)))))))))
+
 ;;;###autoload
 (defun a3-library-share ()
   "Share the current item note by marking it for the garden.
 An item with no `:site:' section only offers to insert one; write it,
-then share again."
+then share again.  After the garden mark, asks for any field the item's
+shelf requires that is still missing or invalid (year, a shelf status
+word, ...) and writes it to the `LIBRARY_*' drawer.  The whole command
+is one change group: `C-g' at any prompt leaves the buffer as it was."
   (interactive)
   (a3madkour-library--require-item "a3-library-share")
   (when (and buffer-file-name (buffer-modified-p)) (save-buffer))
@@ -455,7 +492,11 @@ then share again."
       (unless (bolp) (insert "\n"))
       (insert "* Notes :site:\n"))
     (user-error "write the :site: section, then share again"))
-  (a3-publish-mark "garden"))
+  (atomic-change-group
+    (when (a3-publish-mark "garden")
+      (pcase-dolist (`(,name . ,value) (a3madkour-library--gather-shelf-fields))
+        (a3madkour-pub-author--drawer-put name value))
+      "garden")))
 
 ;;;###autoload
 (defun a3-library-unshare ()

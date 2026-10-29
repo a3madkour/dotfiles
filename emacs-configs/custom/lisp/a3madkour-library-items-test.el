@@ -420,7 +420,68 @@ preamble may carry private text into the export."
         (a3-library-share))
       (should (string-match-p "^#\\+HUGO_PUBLISH: t$" (buffer-string)))
       (should (string-match-p "^#\\+HUGO_SECTION: garden$" (buffer-string)))
-      (should-not (cl-some (lambda (p) (string-match-p "tatus" p)) prompts)))))
+      (should-not (cl-some (lambda (p) (string-match-p "tatus\\|year\\|creator" p))
+                           prompts)))))
+
+(defconst a3madkour-library-items-test--book-no-year
+  (replace-regexp-in-string ":LIBRARY_YEAR: 1999\n" "" a3madkour-library-items-test--book))
+
+(ert-deftest a3madkour-library-items-test/commands/share-asks-missing-shelf-field ()
+  "Share asks for a shelf-required field the garden contract does not
+\(year), re-prompting until digits, and writes it to the drawer."
+  (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book-no-year
+    (let (prompts (years '("nineteen" "1999")))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (p _c &optional _a _b _i _h d) (push p prompts) d))
+                ((symbol-function 'read-string)
+                 (lambda (p &rest _) (push p prompts)
+                   (if (string-match-p "year" p) (pop years) "")))
+                ((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (a3-library-share))
+      (should (= 2 (cl-count-if (lambda (p) (string-match-p "year" p)) prompts)))
+      (should (equal (a3madkour-pub-author--drawer-get "year") "1999"))
+      (should (string-match-p "^#\\+HUGO_PUBLISH: t$" (buffer-string))))))
+
+(ert-deftest a3madkour-library-items-test/commands/share-asks-invalid-shelf-status ()
+  "A status that is not one of the shelf's words is asked for again."
+  (a3madkour-library-items-test--with-visited f
+      (replace-regexp-in-string "LIBRARY_STATUS: queued" "LIBRARY_STATUS: listening"
+                                a3madkour-library-items-test--book)
+    (let (asked)
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (p c &optional _a _b _i _h d)
+                   (if (string-match-p "status" p)
+                       (progn (setq asked (all-completions "" c)) "finished")
+                     d)))
+                ((symbol-function 'read-string) (lambda (&rest _) ""))
+                ((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (a3-library-share))
+      (should (equal (sort asked #'string<) '("abandoned" "finished" "queued" "reading")))
+      (should (equal (a3madkour-pub-author--drawer-get "status") "finished")))))
+
+(ert-deftest a3madkour-library-items-test/commands/share-asks-non-numeric-year ()
+  (a3madkour-library-items-test--with-visited f
+      (replace-regexp-in-string "LIBRARY_YEAR: 1999" "LIBRARY_YEAR: MCMXCIX"
+                                a3madkour-library-items-test--book)
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (_p _c &optional _a _b _i _h d) d))
+              ((symbol-function 'read-string)
+               (lambda (p &rest _) (if (string-match-p "year" p) "1999" "")))
+              ((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+      (a3-library-share))
+    (should (equal (a3madkour-pub-author--drawer-get "year") "1999"))))
+
+(ert-deftest a3madkour-library-items-test/commands/share-quit-leaves-buffer-untouched ()
+  "C-g at the shelf prompt undoes the mark too: the buffer is as it was."
+  (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book-no-year
+    (let ((before (buffer-string)))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_p _c &optional _a _b _i _h d) d))
+                ((symbol-function 'read-string)
+                 (lambda (p &rest _) (if (string-match-p "year" p) (signal 'quit nil) "")))
+                ((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (should (condition-case nil (progn (a3-library-share) nil) (quit t))))
+      (should (equal (buffer-string) before)))))
 
 (ert-deftest a3madkour-library-items-test/commands/status-runs-hook ()
   (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book
