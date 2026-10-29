@@ -118,5 +118,49 @@
       ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_PREVIEW: Hand written.\n:END:\n* Notes :site:\nOther text.\n"
     (should (equal (a3madkour-library/preview f) "Hand written."))))
 
+(defun a3madkour-library-items-test--body (text)
+  "Site body of a note whose text is TEXT."
+  (a3madkour-library-items-test--with-note f text
+    (a3madkour-library/site-body f)))
+
+(ert-deftest a3madkour-library-items-test/site-body-strips-every-drawer ()
+  (let ((b (a3madkour-library-items-test--body
+            "* Notes :site:\n:PROPERTIES:\n:ID: abc\n:END:\n:LOGBOOK:\n- Note taken on [2026-01-01] \\\\\n  private thought.\n:END:\nPublic.\n:MYDRAWER:\nhidden mid\n:END:\nMore.\n")))
+    (should (string-match-p "Public\\." b))
+    (should (string-match-p "More\\." b))
+    (should-not (string-match-p "private\\|hidden\\|abc" b))))
+
+(ert-deftest a3madkour-library-items-test/preview-ignores-logbook ()
+  (a3madkour-library-items-test--with-note f
+      "* Notes :site:\n:PROPERTIES:\n:ID: a\n:END:\n:LOGBOOK:\nprivate thought.\n:END:\nPublic.\n"
+    (should (equal (a3madkour-library/preview f) "Public."))))
+
+(ert-deftest a3madkour-library-items-test/site-body-drops-noexport-and-comment-subtrees ()
+  (let ((b (a3madkour-library-items-test--body
+            "* Notes :site:\nPublic.\n** Private sub :noexport:\nSECRET\n*** Deeper\nSECRET2\n** COMMENT Draft\nSECRET3\n** Kept\nAlso public.\n")))
+    (should (string-match-p "Public\\." b))
+    (should (string-match-p "Also public\\." b))
+    (should-not (string-match-p "SECRET\\|Private sub\\|Draft" b))))
+
+(ert-deftest a3madkour-library-items-test/preview-links ()
+  (dolist (c '(("[[id:abc-123]] is good. Next." . "is good.")
+               ("See [[file:x.org]] here. Next." . "See here.")
+               ("Go [[https://x.org/a]] now. Next." . "Go https://x.org/a now.")
+               ("Go [[https://x.org][site]] now. Next." . "Go site now.")))
+    (a3madkour-library-items-test--with-note f (concat "* Notes :site:\n" (car c) "\n")
+      (should (equal (a3madkour-library/preview f) (cdr c))))))
+
+(ert-deftest a3madkour-library-items-test/site-heading-selection ()
+  (should-not (a3madkour-library-items-test--body "* COMMENT Notes :site:\nSECRET\n"))
+  (should-not (a3madkour-library-items-test--body "* Notes :website:\nSECRET\n"))
+  (should-not (a3madkour-library-items-test--body "#+FILETAGS: :site:\n\n* Notes\nSECRET\n"))
+  (should-not (a3madkour-library-items-test--body "* Top\n** X :site:\nSECRET\n"))
+  (should (equal (a3madkour-library-items-test--body "* Notes :book:site:fun:\nPublic.\n")
+                 "Public."))
+  (let ((b (a3madkour-library-items-test--body
+            "* Types\nSECRET\n* Notes :site:\nPublic.\n** Sub\nPublic sub.\n* Private\nSECRET\n** Private sub\nSECRET\n")))
+    (should (string-match-p "Public sub\\." b))
+    (should-not (string-match-p "SECRET\\|Private" b))))
+
 (provide 'a3madkour-library-items-test)
 ;;; a3madkour-library-items-test.el ends here

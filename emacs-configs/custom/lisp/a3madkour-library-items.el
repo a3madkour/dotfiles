@@ -34,7 +34,7 @@
   (declare (indent 1))
   `(with-temp-buffer
      (insert-file-contents ,file)
-     (let ((delay-mode-hooks t)) (org-mode))
+     (delay-mode-hooks (org-mode))
      ,@body))
 
 (defun a3madkour-library/shelf-for (media-type)
@@ -111,35 +111,77 @@ A tag that is not a clean slug after kebab-casing is dropped."
                (a3madkour-pub-frontmatter/filter-editorial-tags tags))))
     (delete-dups (delq nil (mapcar #'a3madkour-library--kebab kept)))))
 
+(defconst a3madkour-library--drawer-re
+  "^[ \t]*:[A-Za-z0-9_-]+:[ \t]*\n\\(?:.*\n\\)*?[ \t]*:END:[ \t]*\\(?:\n\\|\\'\\)"
+  "A whole org drawer, from its `:NAME:' line through `:END:'.")
+
+(defconst a3madkour-library--planning-re
+  "[ \t]*\\(?:SCHEDULED\\|DEADLINE\\|CLOSED\\):.*\n"
+  "A planning line.")
+
 (defun a3madkour-library/site-heading-region ()
   "Body region (BEG . END) of the first level-1 `:site:' heading, or nil.
-The body follows the heading line, its planning line and property drawer,
-and ends at the next level-1 heading or the end of the buffer."
+A COMMENT heading never counts.  The body follows the heading line, its
+planning line and any drawers, and ends at the next level-1 heading or the
+end of the buffer."
   (save-excursion
     (save-match-data
       (goto-char (point-min))
       (let ((case-fold-search nil) found)
         (while (and (not found)
                     (re-search-forward "^\\* .*$" nil t))
-          (when (member "site" (org-get-tags nil t))
+          (when (and (not (save-excursion
+                            (beginning-of-line)
+                            (looking-at "\\* COMMENT\\(?: \\|$\\)")))
+                     (member "site" (org-get-tags nil t)))
             (setq found t)))
         (when found
           (forward-line 1)
-          (when (looking-at "[ \t]*\\(?:SCHEDULED\\|DEADLINE\\|CLOSED\\):.*\n")
+          (when (looking-at a3madkour-library--planning-re)
             (goto-char (match-end 0)))
-          (when (looking-at "[ \t]*:PROPERTIES:[ \t]*\n\\(?:.*\n\\)*?[ \t]*:END:[ \t]*\\(?:\n\\|\\'\\)")
+          (while (looking-at a3madkour-library--drawer-re)
             (goto-char (match-end 0)))
           (let ((beg (point)))
             (cons beg (if (re-search-forward "^\\* " nil t)
                           (match-beginning 0)
                         (point-max)))))))))
 
+(defun a3madkour-library--publishable (text)
+  "TEXT minus every drawer and every noexport or COMMENT subtree."
+  (with-temp-buffer
+    (insert text)
+    (delay-mode-hooks (org-mode))
+    (let ((case-fold-search nil))
+      (goto-char (point-min))
+      (while (re-search-forward a3madkour-library--drawer-re nil t)
+        (replace-match ""))
+      (goto-char (point-min))
+      (while (re-search-forward "^\\(\\*+\\) .*$" nil t)
+        (let ((level (length (match-string 1))))
+          (if (or (save-excursion
+                    (beginning-of-line)
+                    (looking-at "\\*+ COMMENT\\(?: \\|$\\)"))
+                  (member "noexport" (org-get-tags nil t)))
+              (let ((beg (match-beginning 0)))
+                (goto-char beg)
+                (forward-line 1)
+                (if (re-search-forward
+                     (format "^\\*\\{1,%d\\} " level) nil t)
+                    (delete-region beg (match-beginning 0))
+                  (delete-region beg (point-max)))
+                (goto-char beg))
+            (forward-line 1)))))
+    (buffer-string)))
+
 (defun a3madkour-library/site-body (file)
-  "Text of FILE's `:site:' section, or nil when absent or blank."
+  "Text of FILE's `:site:' section, or nil when absent or blank.
+Drawers and noexport or COMMENT sub-trees are removed, so the result is
+safe to treat as publishable."
   (a3madkour-library--with-file file
     (let ((r (a3madkour-library/site-heading-region)))
       (when r
-        (let ((s (string-trim (buffer-substring-no-properties (car r) (cdr r)))))
+        (let ((s (string-trim (a3madkour-library--publishable
+                               (buffer-substring-no-properties (car r) (cdr r))))))
           (and (not (string-empty-p s)) s))))))
 
 (defun a3madkour-library--strip-emphasis (s)
@@ -156,7 +198,9 @@ and ends at the next level-1 heading or the end of the buffer."
         (when body
           (let* ((s (replace-regexp-in-string
                      "\\[\\[[^]]*\\]\\[\\([^]]*\\)\\]\\]" "\\1" body))
-                 (s (replace-regexp-in-string "\\[\\[\\([^]]*\\)\\]\\]" "\\1" s))
+                 (s (replace-regexp-in-string
+                      "\\[\\[\\(https?://[^]]*\\)\\]\\]" "\\1" s))
+                 (s (replace-regexp-in-string "\\[\\[[^]]*\\]\\]" "" s))
                  (s (a3madkour-library--strip-emphasis s))
                  (s (string-trim (replace-regexp-in-string "[ \t\n]+" " " s))))
             (if (string-match "\\`.*?[.!?]\\(?:[ \t\n]\\|\\'\\)" s)
