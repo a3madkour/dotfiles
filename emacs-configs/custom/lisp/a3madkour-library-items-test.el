@@ -162,6 +162,51 @@
     (should (string-match-p "Public sub\\." b))
     (should-not (string-match-p "SECRET\\|Private" b))))
 
+;; -- final-review fixes: comments, excluded headings, preview noise --
+
+(ert-deftest a3madkour-library-items-test/site-body-strips-comment-lines-and-blocks ()
+  "Org comment lines and comment blocks never reach the site body."
+  (let ((b (a3madkour-library-items-test--body
+            (concat "* Notes :site:\n# private aside SECRET1.\nPublic.\n"
+                    "  # indented SECRET2\n#not-a-comment stays\n"
+                    "#+begin_comment\nSECRET3\n#+end_comment\n"
+                    "#+BEGIN_COMMENT\nSECRET4\n#+END_COMMENT\nMore.\n#\n"))))
+    (should (string-match-p "Public\\." b))
+    (should (string-match-p "More\\." b))
+    (should (string-match-p "#not-a-comment stays" b))
+    (should-not (string-match-p "SECRET\\|_comment\\|_COMMENT" b)))
+  (let ((b (a3madkour-library-items-test--body
+            "* Notes :site:\nPublic.\n#+begin_src python\n# code comment\nx = 1\n#+end_src\n")))
+    (should (string-match-p "^# code comment$" b))))
+
+(ert-deftest a3madkour-library-items-test/preview-skips-comment-line ()
+  (a3madkour-library-items-test--with-note f
+      "* Notes :site:\n# private aside.\nPublic first. Second.\n"
+    (should (equal (a3madkour-library/preview f) "Public first."))))
+
+(ert-deftest a3madkour-library-items-test/site-body-comment-only-is-nil ()
+  "A section holding only comments is blank: share and the gate refuse it."
+  (should-not (a3madkour-library-items-test--body
+               "* Notes :site:\n# aside\n#+begin_comment\nx\n#+end_comment\n")))
+
+(ert-deftest a3madkour-library-items-test/site-heading-never-excluded ()
+  "A `:site:' heading tagged noexport, an export-exclude tag or ARCHIVE is
+never the site heading; a later clean one still is."
+  (dolist (tags '(":site:noexport:" ":noexport:site:" ":site:ARCHIVE:" ":site:private:"))
+    (let ((org-export-exclude-tags '("noexport" "private")))
+      (should-not (a3madkour-library-items-test--body
+                   (format "* Notes %s\nSECRET\n" tags)))
+      (should (equal (a3madkour-library-items-test--body
+                      (format "* Notes %s\nSECRET\n* Later :site:\nPublic.\n" tags))
+                     "Public.")))))
+
+(ert-deftest a3madkour-library-items-test/site-body-drops-archive-and-exclude-tag-subtrees ()
+  (let ((org-export-exclude-tags '("noexport" "private")))
+    (let ((b (a3madkour-library-items-test--body
+              "* Notes :site:\nPublic.\n** Old :ARCHIVE:\nSECRET\n** Mine :private:\nSECRET2\n** Kept\nOK.\n")))
+      (should (string-match-p "OK\\." b))
+      (should-not (string-match-p "SECRET\\|Old\\|Mine" b)))))
+
 (defmacro a3madkour-library-items-test--with-copy (var text &rest body)
   "Write TEXT to a note in a temp dir, bind VAR to its site-only copy's
 text and `dir' to the note's directory, run BODY."

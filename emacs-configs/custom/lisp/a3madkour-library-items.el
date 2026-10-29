@@ -9,6 +9,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'org)
+(require 'ox)                          ; `org-export-exclude-tags'
 (require 'a3madkour-sections)
 (require 'a3madkour-publish-frontmatter)
 (require 'a3madkour-publish-library)
@@ -122,20 +123,32 @@ A tag that is not a clean slug after kebab-casing is dropped."
   "[ \t]*\\(?:SCHEDULED\\|DEADLINE\\|CLOSED\\):.*\n"
   "A planning line.")
 
+(defun a3madkour-library--excluded-heading-p ()
+  "Non-nil when the heading at point never exports.
+That is a COMMENT heading, or one whose own tags include `ARCHIVE'
+\(`org-archive-tag') or any of `org-export-exclude-tags'."
+  (save-excursion
+    (save-match-data
+      (beginning-of-line)
+      (or (let ((case-fold-search nil))
+            (looking-at "\\*+ COMMENT\\(?: \\|$\\)"))
+          (cl-intersection (org-get-tags nil t)
+                           (cons org-archive-tag org-export-exclude-tags)
+                           :test #'equal)))))
+
 (defun a3madkour-library/site-heading-region ()
   "Body region (BEG . END) of the first level-1 `:site:' heading, or nil.
-A COMMENT heading never counts.  The body follows the heading line, its
-planning line and any drawers, and ends at the next level-1 heading or the
-end of the buffer."
+An excluded heading (`--excluded-heading-p': COMMENT, ARCHIVE or an
+export-exclude tag such as `noexport') never counts.  The body follows the
+heading line, its planning line and any drawers, and ends at the next
+level-1 heading or the end of the buffer."
   (save-excursion
     (save-match-data
       (goto-char (point-min))
       (let ((case-fold-search nil) found)
         (while (and (not found)
                     (re-search-forward "^\\* .*$" nil t))
-          (when (and (not (save-excursion
-                            (beginning-of-line)
-                            (looking-at "\\* COMMENT\\(?: \\|$\\)")))
+          (when (and (not (a3madkour-library--excluded-heading-p))
                      (member "site" (org-get-tags nil t)))
             (setq found t)))
         (when found
@@ -149,8 +162,18 @@ end of the buffer."
                           (match-beginning 0)
                         (point-max)))))))))
 
+(defconst a3madkour-library--comment-block-re
+  "^[ \t]*#\\+begin_comment\\b.*\n\\(?:.*\n\\)*?[ \t]*#\\+end_comment\\b.*\\(?:\n\\|\\'\\)"
+  "A whole `#+begin_comment' ... `#+end_comment' block (match ignoring case).")
+
+(defconst a3madkour-library--comment-line-re
+  "^[ \t]*#\\(?:[ \t].*\\)?\\(?:\n\\|\\'\\)"
+  "An org comment line: `#' alone or followed by whitespace.")
+
 (defun a3madkour-library--publishable (text)
-  "TEXT minus every drawer and every noexport or COMMENT subtree."
+  "TEXT minus every drawer, comment and excluded subtree.
+Comments are `# ...' lines and `#+begin_comment' blocks; excluded
+subtrees are those `--excluded-heading-p' names."
   (with-temp-buffer
     (insert text)
     (delay-mode-hooks (org-mode))
@@ -158,14 +181,24 @@ end of the buffer."
       (goto-char (point-min))
       (while (re-search-forward a3madkour-library--drawer-re nil t)
         (replace-match ""))
+      (let ((case-fold-search t))
+        (goto-char (point-min))
+        (while (re-search-forward a3madkour-library--comment-block-re nil t)
+          (replace-match "")))
+      (goto-char (point-min))
+      (while (re-search-forward a3madkour-library--comment-line-re nil t)
+        ;; In a src/example/export block a `# ' line is content, not a comment.
+        (unless (save-match-data
+                  (save-excursion
+                    (goto-char (match-beginning 0))
+                    (org-in-block-p '("src" "example" "export"))))
+          (replace-match "")))
       (goto-char (point-min))
       (while (re-search-forward "^\\(\\*+\\) .*$" nil t)
-        (let ((level (length (match-string 1))))
-          (if (or (save-excursion
-                    (beginning-of-line)
-                    (looking-at "\\*+ COMMENT\\(?: \\|$\\)"))
-                  (member "noexport" (org-get-tags nil t)))
-              (let ((beg (match-beginning 0)))
+        (let ((level (length (match-string 1)))
+              (beg (match-beginning 0)))
+          (if (a3madkour-library--excluded-heading-p)
+              (progn
                 (goto-char beg)
                 (forward-line 1)
                 (if (re-search-forward
