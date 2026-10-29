@@ -334,6 +334,28 @@ preamble may carry private text into the export."
         (should (eq yes (and (string-match-p "^\\* Notes :site:$" (buffer-string)) t)))
         (should-not (string-match-p "HUGO_PUBLISH" (buffer-string)))))))
 
+(ert-deftest a3madkour-library-items-test/commands/share-after-add-does-not-duplicate-heading ()
+  (a3madkour-library-items-test--with-dir d
+    (a3madkour-library-items-test--stub-prompts '(("Media" . "film") ("Status" . default))
+      (a3-library-add)
+      (dolist (yes '(nil t))
+        (let (asked)
+          (cl-letf (((symbol-function 'y-or-n-p)
+                     (lambda (&rest _) (setq asked t) yes)))
+            (should-error (a3-library-share) :type 'user-error))
+          (should-not asked)
+          (should (= 1 (with-temp-buffer
+                         (insert (with-current-buffer (current-buffer) ""))
+                         (let ((n 0))
+                           (with-current-buffer (find-buffer-visiting
+                                                 (expand-file-name "example-film.org" d))
+                             (save-excursion
+                               (goto-char (point-min))
+                               (while (re-search-forward "^\\* Notes :site:$" nil t)
+                                 (cl-incf n))))
+                           n))))
+          (should-not (string-match-p "HUGO_PUBLISH" (buffer-string))))))))
+
 (ert-deftest a3madkour-library-items-test/commands/share-marks-garden ()
   (a3madkour-library-items-test--with-visited f a3madkour-library-items-test--book
     (let (prompts)

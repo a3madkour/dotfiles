@@ -407,6 +407,8 @@ then share again."
   (a3madkour-library--require-item "a3-library-share")
   (when (and buffer-file-name (buffer-modified-p)) (save-buffer))
   (unless (and buffer-file-name (a3madkour-library/site-body buffer-file-name))
+    (when (a3madkour-library/site-heading-region)
+      (user-error "the :site: section is empty; write it, then share again"))
     (when (y-or-n-p "No :site: section; insert `* Notes :site:'? ")
       (goto-char (point-max))
       (unless (bolp) (insert "\n"))
