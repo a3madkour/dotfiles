@@ -385,6 +385,9 @@ raw (which would be invalid YAML that breaks the Hugo build)."
 
 ;;; -- Library item notes: only the `:site:' section reaches the site --
 
+(defvar a3madkour-pub-garden-test--expect-status 'ok
+  "The status `--publishing' expects the handler to report.")
+
 (defmacro a3madkour-pub-garden-test--publishing (src-var name text setup &rest body)
   "Write TEXT to NAME under a temp notes dir, publish it to a temp site.
 SETUP is a form run after the note is written and before it publishes.
@@ -423,7 +426,7 @@ note's slug) bound.  Dates are pinned so the output is reproducible."
                  (a3madkour-pub-garden/publish-garden-file
                   ,src-var (make-a3-pub-async-run)
                   :on-done (lambda (s) (setq status s)))
-                 (should (eq status 'ok)))
+                 (should (eq status a3madkour-pub-garden-test--expect-status)))
                (a3madkour-pub/finish-publish)
                (let ((bundle (file-name-as-directory
                               (expand-file-name
@@ -569,33 +572,47 @@ index.md, including what a `#+setupfile:' would pull in."
               (should-not (string-match-p "PRIVATE" out)))))
       (delete-file setup))))
 
-(ert-deftest a3madkour-pub-garden-test/garden-item-out-of-root-asset-not-moved ()
-  "An item note never auto-moves an asset from outside the canonical root:
-~/org is not mutated, the asset is skipped and a warning is logged."
-  (let (warned)
-    (cl-letf (((symbol-function 'a3madkour-pub/warn)
-               (lambda (_m _f fmt &rest args)
-                 (push (apply #'format fmt args) warned))))
-      (a3madkour-pub-garden-test--publishing src "example-book.org"
-          (replace-regexp-in-string
-           (regexp-quote "[[./assets/page/example-book/b.png]]")
-           "[[%NOTES%elsewhere/x.png]] [[file:%NOTES%elsewhere/y.png]]"
-           a3madkour-pub-garden-test--item t t)
-          (let ((d (expand-file-name "elsewhere/" notes-dir)))
-            (make-directory d t)
-            (dolist (f '("x.png" "y.png"))
-              (with-temp-file (expand-file-name f d) (insert f))))
-        (dolist (f '("x.png" "y.png"))
-          (should (file-exists-p (expand-file-name (concat "elsewhere/" f) notes-dir)))
-          (should-not (file-exists-p (expand-file-name f bundle)))
+(ert-deftest a3madkour-pub-garden-test/garden-item-out-of-root-asset-refused ()
+  "An item note whose `:site:' section links an asset outside the canonical
+root is refused: ox-hugo would copy a bare absolute link into
+static/ox-hugo/ and leave a `file:' one as inert text, so neither may run.
+Nothing is written (a bundle already there is left as it was), ~/org is
+not mutated, and a logged `err' step names the asset and the fix."
+  (dolist (link '("[[%NOTES%elsewhere/x.png]]" "[[file:%NOTES%elsewhere/x.png]]"
+                  "[[../elsewhere/x.png]]"))
+    (let ((logged nil)
+          (a3madkour-pub-garden-test--expect-status 'err))
+      (cl-letf (((symbol-function 'a3-pub-async/log-step)
+                 (lambda (_run label status &rest kw)
+                   (push (list label status (plist-get kw :err-snippet)) logged))))
+        (a3madkour-pub-garden-test--publishing src "notes/example-book.org"
+            (replace-regexp-in-string
+             (regexp-quote "[[./assets/page/example-book/b.png]]")
+             (replace-regexp-in-string "%NOTES%" "%NOTES%notes/../" link t t)
+             a3madkour-pub-garden-test--item t t)
+            (let ((d (expand-file-name "elsewhere/" notes-dir))
+                  (old (expand-file-name "content/garden/example-book/" site-dir)))
+              (make-directory d t)
+              (with-temp-file (expand-file-name "x.png" d) (insert "x"))
+              (make-directory old t)
+              (with-temp-file (expand-file-name "index.md" old) (insert "OLD\n")))
+          (should (equal (a3madkour-pub-garden-test--index bundle) "OLD\n"))
+          (should (equal (directory-files bundle nil "^[^.]") '("index.md")))
+          (should-not (directory-files-recursively
+                       (expand-file-name "static" site-dir) "" t))
+          (should (file-exists-p (expand-file-name "elsewhere/x.png" notes-dir)))
           (should-not (file-exists-p
-                       (expand-file-name (concat "assets/page/example-book/" f)
-                                         notes-dir))))
-        (should (string-match-p (regexp-quote "elsewhere/x.png]]")
-                                (with-temp-buffer (insert-file-contents src)
-                                                  (buffer-string))))))
-    (should (cl-some (lambda (w) (string-match-p "out-of-canonical-root" w))
-                     warned))))
+                       (expand-file-name "assets/page/example-book/x.png" notes-dir)))
+          (should (string-match-p (regexp-quote "elsewhere/x.png]]")
+                                  (with-temp-buffer (insert-file-contents src)
+                                                    (buffer-string))))
+          (should (cl-some
+                   (lambda (l)
+                     (and (eq (nth 1 l) :err)
+                          (string-match-p (regexp-quote (expand-file-name "elsewhere/x.png" notes-dir))
+                                          (nth 2 l))
+                          (string-match-p "move it under" (nth 2 l))))
+                   logged)))))))
 
 (provide 'a3madkour-publish-garden-test)
 

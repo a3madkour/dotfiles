@@ -13,6 +13,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'subr-x)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
@@ -21,6 +22,7 @@
 (require 'a3madkour-publish-assets)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-library-items)
+(require 'a3madkour-publish-async)     ; `log-step' for a refused item
 
 (defcustom a3madkour-pub-garden/section-dir-name "garden"
   "Hugo content section directory name for garden notes (relative to site root)."
@@ -46,6 +48,28 @@
   "Thin wrapper over `a3madkour-pub-yaml/render-frontmatter' (P3.1)."
   (a3madkour-pub-yaml/render-frontmatter alist))
 
+(defun a3madkour-pub-garden--out-of-root-assets (org-file)
+  "Absolute paths of ORG-FILE's asset links outside the canonical asset root.
+Resolved as `asset-validate-and-copy' resolves them; missing files are
+not counted (they are a separate concern)."
+  (delete-dups
+   (cl-loop for (path . _text) in (a3madkour-pub--extract-asset-refs org-file)
+            for abs = (a3madkour-pub--asset-normalize-link-path path org-file)
+            for r = (a3madkour-pub--asset-resolve-path abs org-file)
+            when (eq (plist-get r :kind) 'out-of-root)
+            collect (plist-get r :abs-path))))
+
+(defun a3madkour-pub-garden--refuse-stray-assets (file stray run)
+  "Log FILE's refusal over out-of-root asset paths STRAY to RUN; return \='err."
+  (let ((msg (format "%s: the :site: section links %s outside the asset root %s; move it under %s (page/<slug>/ or shared/) and link it as ./assets/..., then publish"
+                     file (string-join stray ", ")
+                     (expand-file-name a3madkour-pub-canonical-asset-root)
+                     (expand-file-name a3madkour-pub-canonical-asset-root))))
+    (message "a3madkour-pub-garden: %s" msg)
+    (when run
+      (a3-pub-async/log-step run "site-asset" :err :err-snippet msg))
+    'err))
+
 (cl-defun a3madkour-pub-garden/publish-garden-file (file run &key on-done)
   "Publish a single garden-section FILE to content/garden/<slug>/index.md.
 
@@ -63,13 +87,16 @@ Hugo's REF_NOT_FOUND check against B's hyphen-slug bundle paths.
 
 A library item note (`a3madkour-library/item-p') is exported, and its
 assets walked, from `a3madkour-library/site-only-copy': only its `:site:'
-section and metadata reach the site.
+section and metadata reach the site.  One whose `:site:' section links an
+asset outside the canonical asset root is refused (\='err, a logged
+`site-asset' step naming the asset, nothing written): ox-hugo would copy
+a bare absolute link into static/ox-hugo/, and the asset is never
+auto-moved on behalf of the copy.
 
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
   (condition-case _err
-      (progn
-        (ignore run)
+      (let ((result 'ok))
         (let* ((md        (a3madkour-pub/note-metadata file))
                (id        (plist-get md :id))
                (slug      (a3madkour-pub/note-slug file))
@@ -90,41 +117,46 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                (input      (or site-src file))
                ;; Never auto-move an item note's out-of-root asset: that
                ;; mutates ~/org on behalf of a copy whose link fix-up would
-               ;; land in the temp file.  The asset is skipped with a warning.
+               ;; land in the temp file.  Such a note is refused below.
                (a3madkour-pub-asset-auto-remediate
                 (and (not site-src) a3madkour-pub-asset-auto-remediate)))
           (unwind-protect
-              (let* ((tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
-                                  input id "a3-pub-garden"))
-                     ;; unwind-protect deletes tmp-src whether export-file
-                     ;; succeeds or signals.
-                     (exported   (unwind-protect
-                                     (a3madkour-pub-export/export-file tmp-src)
-                                   (when (file-exists-p tmp-src)
-                                     (delete-file tmp-src))))
-                     ;; P2.14: reuse the note's previously-recorded last_modified as
-                     ;; the cascade's prior value so an uncommitted republish keeps a
-                     ;; stable date instead of churning to the filesystem mtime.
-                     (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
-                                        (a3madkour-pub-history/recorded-last-modified id new-url)))
-                                   (a3madkour-pub-frontmatter/normalize
-                                    'garden (plist-get exported :frontmatter) file)))
-                     (body       (plist-get exported :body)))
-                (let ((assets (a3madkour-pub/asset-validate-and-copy
-                               input bundle-dir id)))
-                  (when site-src
-                    (dolist (w (plist-get assets :warnings))
-                      (a3madkour-pub/warn "garden" file "%s" w))))
-                (a3madkour-pub-garden--write-if-different
-                 out-path
-                 (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
-                (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
-                                                      :last-modified
-                                                      (or (alist-get 'lastmod normalized)
-                                                          (alist-get 'last_modified normalized))))
+              (if-let* ((stray (and site-src
+                                    (a3madkour-pub-garden--out-of-root-assets
+                                     site-src))))
+                  (setq result (a3madkour-pub-garden--refuse-stray-assets
+                                file stray run))
+                (let* ((tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
+                                    input id "a3-pub-garden"))
+                       ;; unwind-protect deletes tmp-src whether export-file
+                       ;; succeeds or signals.
+                       (exported   (unwind-protect
+                                       (a3madkour-pub-export/export-file tmp-src)
+                                     (when (file-exists-p tmp-src)
+                                       (delete-file tmp-src))))
+                       ;; P2.14: reuse the note's previously-recorded last_modified as
+                       ;; the cascade's prior value so an uncommitted republish keeps a
+                       ;; stable date instead of churning to the filesystem mtime.
+                       (normalized (let ((a3madkour-pub-frontmatter--prior-last-modified
+                                          (a3madkour-pub-history/recorded-last-modified id new-url)))
+                                     (a3madkour-pub-frontmatter/normalize
+                                      'garden (plist-get exported :frontmatter) file)))
+                       (body       (plist-get exported :body)))
+                  (let ((assets (a3madkour-pub/asset-validate-and-copy
+                                 input bundle-dir id)))
+                    (when site-src
+                      (dolist (w (plist-get assets :warnings))
+                        (a3madkour-pub/warn "garden" file "%s" w))))
+                  (a3madkour-pub-garden--write-if-different
+                   out-path
+                   (concat (a3madkour-pub-garden--render-frontmatter normalized) body))
+                  (a3madkour-pub-history/record-publish id new-url (or (plist-get md :state) 'live)
+                                                        :last-modified
+                                                        (or (alist-get 'lastmod normalized)
+                                                            (alist-get 'last_modified normalized)))))
             (when (and site-src (file-exists-p site-src))
               (delete-file site-src))))
-        (when on-done (funcall on-done 'ok)))
+        (when on-done (funcall on-done result)))
     (error
      (when on-done (funcall on-done 'err)))))
 
