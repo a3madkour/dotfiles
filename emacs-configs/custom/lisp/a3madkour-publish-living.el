@@ -43,20 +43,27 @@ is not checked here (see `a3madkour-pub-living--dispatch')."
 
 (defun a3madkour-pub-living--contract-gap (file section)
   "Why FILE cannot publish under SECTION's contract, or nil when it can.
-A library item note with no usable `:site:' section is refused first:
-there is nothing in it that may publish.  A missing file is left to its
-handler to report."
+A library item note is refused first when SECTION is not garden (only
+the garden handler narrows a note to its `:site:' section; any other
+would publish the whole note), then when it has no usable `:site:'
+section: there is nothing in it that may publish.  A missing file is
+left to its handler to report."
   (when (file-readable-p file)
-    (if (and (a3madkour-library/item-p file)
-             (not (a3madkour-library/site-body file)))
-        (format "%s: library item has no :site: section; write one, then publish"
-                file)
+    (cond
+     ((and (a3madkour-library/item-p file) (not (equal section "garden")))
+      (format "%s: library item notes publish only to garden (section %s)"
+              file section))
+     ((and (a3madkour-library/item-p file)
+           (not (a3madkour-library/site-body file)))
+      (format "%s: library item has no :site: section; write one, then publish"
+              file))
+     (t
       (condition-case err
           (let ((missing (a3madkour-pub-author/missing-required file section)))
             (when missing
               (format "%s: missing required %s for %s; run M-x a3-publish-mark"
                       file (string-join missing ", ") section)))
-        (user-error (format "%s: %s" file (error-message-string err)))))))
+        (user-error (format "%s: %s" file (error-message-string err))))))))
 
 (defun a3madkour-pub-living--library-item-files (triples)
   "The live garden library item notes among TRIPLES' files.

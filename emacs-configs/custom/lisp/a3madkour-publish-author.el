@@ -385,8 +385,10 @@ and SECTION differs, prompts `y-or-n-p' before changing; declining
 aborts and returns nil.  On a change, offers (one `y-or-n-p') to remove
 the fields the new section's contract does not list.
 
-Refuses outside `org-mode', in a read-only buffer, or when the contract
-is missing or malformed.  Returns SECTION, or nil if declined."
+Refuses outside `org-mode', in a read-only buffer, when the contract
+is missing or malformed, or when the buffer is a library item note
+\(`LIBRARY_MEDIA_TYPE') and SECTION is not garden.  Returns SECTION, or
+nil if declined."
   (interactive
    (let ((current (a3madkour-pub-keywords/extract "HUGO_SECTION")))
      (list (completing-read "Section: " a3madkour-pub/sections
@@ -396,6 +398,12 @@ is missing or malformed.  Returns SECTION, or nil if declined."
   (when buffer-read-only
     (user-error "a3-publish-mark: buffer is read-only"))
   (a3madkour-pub-author--with-contract (a3madkour-sections/spec section))
+  ;; Only the garden handler narrows an item note to its `:site:' section;
+  ;; any other section would publish the whole note.
+  (when (and (a3madkour-pub-author--drawer-get "media_type")
+             (not (equal section "garden")))
+    (user-error "a3-publish-mark: library item notes publish only to garden (section %s)"
+                section))
   (let ((current (a3madkour-pub-keywords/extract "HUGO_SECTION")))
     (when (and current
                (not (string= current section))

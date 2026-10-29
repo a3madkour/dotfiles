@@ -401,6 +401,9 @@ run finishes `ok'."
     (should (eq captured 'ok))
     (should-not (assoc "contract" logged))))
 
+(defvar a3-pub-living-test--item-section "garden"
+  "The `#+HUGO_SECTION:' (and triple section) `--gate-item' writes.")
+
 (defmacro a3-pub-living-test--gate-item (site &rest body)
   "Run `a3-publish-living' over one garden library item note.
 SITE is the text of the note after its preamble (its headings).  Binds
@@ -414,12 +417,13 @@ SITE is the text of the note after its preamble (its headings).  Binds
              (insert ":PROPERTIES:\n:ID: 3e650e6f-1111-0000-0000-000000000000\n"
                      ":LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: reading\n"
                      ":LIBRARY_CREATOR: Example Author\n:END:\n"
-                     "#+title: Example Book\n#+HUGO_SECTION: garden\n"
+                     "#+title: Example Book\n#+HUGO_SECTION: "
+                     a3-pub-living-test--item-section "\n"
                      "#+HUGO_PUBLISH: t\n#+filetags: :Ref:\n"
                      ,site))
            (a3-pub-living-test--capture-finish-status captured
              (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
-                        (lambda () (list (list "garden" file 'ok-h))))
+                        (lambda () (list (list a3-pub-living-test--item-section file 'ok-h))))
                        ((symbol-function 'ok-h)
                         (lambda (_f _r &rest rest)
                           (setq ran t)
@@ -456,6 +460,29 @@ the gate refuses it before the section contract, naming the fix."
     (should-not ran)
     (should (eq captured 'err))
     (should (a3-pub-living-test--no-site-logged-p file logged))))
+
+(ert-deftest a3madkour-pub-living-test/item-in-non-garden-section-is-not-published ()
+  "An item note marked into any section but garden is refused before its
+handler, which would otherwise publish the whole note."
+  (dolist (sec '("essays" "research/themes" "library/reading"))
+    (let ((a3-pub-living-test--item-section sec))
+      (a3-pub-living-test--gate-item "* Highlights\nSECRET.\n* Notes :site:\nPublic.\n"
+        (should-not ran)
+        (should (eq captured 'err))
+        (should (cl-some
+                 (lambda (l)
+                   (and (equal (nth 0 l) "contract")
+                        (eq (nth 1 l) :err)
+                        (equal (nth 2 l)
+                               (format "%s: library item notes publish only to garden (section %s)"
+                                       file sec))))
+                 logged))))))
+
+(ert-deftest a3madkour-pub-living-test/item-in-garden-with-site-is-published ()
+  "Contrast: the same item in garden, with a site section, reaches its handler."
+  (a3-pub-living-test--gate-item "* Highlights\nSECRET.\n* Notes :site:\nPublic.\n"
+    (should ran)
+    (should-not (assoc "contract" logged))))
 
 ;; -- Library collector: shelves from shared item notes --
 

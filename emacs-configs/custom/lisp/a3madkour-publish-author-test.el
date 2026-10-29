@@ -854,6 +854,20 @@ not even #+HUGO_PUBLISH."
     (should (equal (org-entry-get (point-min) "LIBRARY_STATUS") "finished"))
     (should (equal (org-entry-get (point-min) "LIBRARY_CREATOR") "Example Author"))))
 
+(ert-deftest a3madkour-pub-author-test/mark-refuses-item-note-outside-garden ()
+  "A library item note marks only into garden: any other section would
+publish the whole note.  The refusal comes before any prompt or write."
+  (dolist (sec '("essays" "library/reading" "research/themes"))
+    (a3madkour-pub-author-test--with-site
+      (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:END:\n#+title: A book\n"
+              "#+HUGO_SECTION: garden\n")
+      (let ((before (buffer-string)))
+        (a3madkour-pub-author-test--answering nil
+          (let ((err (should-error (a3-publish-mark sec) :type 'user-error)))
+            (should (string-match-p "library item notes publish only to garden"
+                                    (error-message-string err)))))
+        (should (equal (buffer-string) before))))))
+
 (ert-deftest a3madkour-pub-author-test/mark-library-and-structured ()
   (a3madkour-pub-author-test--with-site
     (insert "#+title: Shelf\n")
