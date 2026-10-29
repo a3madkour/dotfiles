@@ -87,7 +87,12 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                ;; url, history, frontmatter) still reads FILE.
                (site-src   (and (a3madkour-library/item-p file)
                                 (a3madkour-library/site-only-copy file)))
-               (input      (or site-src file)))
+               (input      (or site-src file))
+               ;; Never auto-move an item note's out-of-root asset: that
+               ;; mutates ~/org on behalf of a copy whose link fix-up would
+               ;; land in the temp file.  The asset is skipped with a warning.
+               (a3madkour-pub-asset-auto-remediate
+                (and (not site-src) a3madkour-pub-asset-auto-remediate)))
           (unwind-protect
               (let* ((tmp-src    (a3madkour-pub-rewrite/rewrite-to-tmp-file
                                   input id "a3-pub-garden"))
@@ -105,7 +110,11 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                                    (a3madkour-pub-frontmatter/normalize
                                     'garden (plist-get exported :frontmatter) file)))
                      (body       (plist-get exported :body)))
-                (a3madkour-pub/asset-validate-and-copy input bundle-dir id)
+                (let ((assets (a3madkour-pub/asset-validate-and-copy
+                               input bundle-dir id)))
+                  (when site-src
+                    (dolist (w (plist-get assets :warnings))
+                      (a3madkour-pub/warn "garden" file "%s" w))))
                 (a3madkour-pub-garden--write-if-different
                  out-path
                  (concat (a3madkour-pub-garden--render-frontmatter normalized) body))

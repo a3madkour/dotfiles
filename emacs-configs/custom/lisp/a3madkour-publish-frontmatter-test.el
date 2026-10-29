@@ -304,6 +304,22 @@ are the cleaned `#+filetags:'.  A concept note's fields pass through."
             (should-not (assq 'flavor out))))
       (delete-file src))))
 
+(ert-deftest a3madkour-pub-frontmatter--garden-item-non-numeric-year-omitted ()
+  "A non-numeric `LIBRARY_YEAR' warns and omits `year' -- never `year: 0'."
+  (let ((src (make-temp-file "garden-item-" nil ".org")) warned)
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub/warn)
+                   (lambda (_m _f fmt &rest args)
+                     (push (apply #'format fmt args) warned))))
+          (with-temp-file src
+            (insert ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n"
+                    ":LIBRARY_YEAR: c. 1999\n:END:\n#+title: Example 1\n"))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'garden '((title . "Example 1") (year . "1999")) src)))
+            (should-not (assq 'year out))
+            (should (cl-some (lambda (w) (string-match-p "c\\. 1999" w)) warned))))
+      (delete-file src))))
+
 (ert-deftest a3madkour-pub-frontmatter--garden-strips-slug ()
   "Bug 1.6: garden normalizer drops `slug' before emitting frontmatter.
 ox-hugo emits `slug:' from `:CUSTOM_ID:' / `#+HUGO_SLUG:' / title-derivation,

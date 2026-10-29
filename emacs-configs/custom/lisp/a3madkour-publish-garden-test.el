@@ -546,6 +546,57 @@ own directory, as it would without the site-only copy, not the temp dir."
       (a3madkour-pub-garden-test--item-assets notes-dir)
     (should (equal (directory-files bundle nil "^[^.]") '("b.png" "index.md")))))
 
+(ert-deftest a3madkour-pub-garden-test/garden-item-private-preamble-not-exported ()
+  "Preamble keywords and drawer properties outside the allowlist never reach
+index.md, including what a `#+setupfile:' would pull in."
+  (let ((setup (make-temp-file "a3-pub-setup-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file setup (insert "#+hugo: PRIVATE-D\n"))
+          (a3madkour-pub-garden-test--publishing src "example-book.org"
+              (replace-regexp-in-string
+               "^#\\+HUGO_CUSTOM_FRONT_MATTER: .*\n"
+               (concat "#+hugo: PRIVATE-A\n#+caption: PRIVATE-B\n#+html: PRIVATE-C\n"
+                       "#+setupfile: " setup "\n")
+               (replace-regexp-in-string
+                ":LIBRARY_FINISHED:\n"
+                ":LIBRARY_FINISHED:\n:EXPORT_DESCRIPTION: PRIVATE-E\n"
+                a3madkour-pub-garden-test--item t t)
+               t t)
+              (a3madkour-pub-garden-test--item-assets notes-dir)
+            (let ((out (a3madkour-pub-garden-test--index bundle)))
+              (should (string-match-p "SITE-PUBLIC" out))
+              (should-not (string-match-p "PRIVATE" out)))))
+      (delete-file setup))))
+
+(ert-deftest a3madkour-pub-garden-test/garden-item-out-of-root-asset-not-moved ()
+  "An item note never auto-moves an asset from outside the canonical root:
+~/org is not mutated, the asset is skipped and a warning is logged."
+  (let (warned)
+    (cl-letf (((symbol-function 'a3madkour-pub/warn)
+               (lambda (_m _f fmt &rest args)
+                 (push (apply #'format fmt args) warned))))
+      (a3madkour-pub-garden-test--publishing src "example-book.org"
+          (replace-regexp-in-string
+           (regexp-quote "[[./assets/page/example-book/b.png]]")
+           "[[%NOTES%elsewhere/x.png]] [[file:%NOTES%elsewhere/y.png]]"
+           a3madkour-pub-garden-test--item t t)
+          (let ((d (expand-file-name "elsewhere/" notes-dir)))
+            (make-directory d t)
+            (dolist (f '("x.png" "y.png"))
+              (with-temp-file (expand-file-name f d) (insert f))))
+        (dolist (f '("x.png" "y.png"))
+          (should (file-exists-p (expand-file-name (concat "elsewhere/" f) notes-dir)))
+          (should-not (file-exists-p (expand-file-name f bundle)))
+          (should-not (file-exists-p
+                       (expand-file-name (concat "assets/page/example-book/" f)
+                                         notes-dir))))
+        (should (string-match-p (regexp-quote "elsewhere/x.png]]")
+                                (with-temp-buffer (insert-file-contents src)
+                                                  (buffer-string))))))
+    (should (cl-some (lambda (w) (string-match-p "out-of-canonical-root" w))
+                     warned))))
+
 (provide 'a3madkour-publish-garden-test)
 
 ;;; a3madkour-publish-garden-test.el ends here

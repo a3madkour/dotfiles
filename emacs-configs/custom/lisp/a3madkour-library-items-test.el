@@ -218,5 +218,39 @@ the temp dir; canonical `./assets/', absolute, id and web links are kept."
   (a3madkour-library-items-test--with-note f "#+title: x\n* Notes\nSECRET\n"
     (should-error (a3madkour-library/site-only-copy f))))
 
+(ert-deftest a3madkour-library-items-test/site-only-copy-allowlists-preamble ()
+  "Only TITLE, FILETAGS, DATE and HUGO_* keywords and the ID, ROAM_REFS and
+LIBRARY_* drawer properties reach the copy; everything else in the
+preamble may carry private text into the export."
+  (a3madkour-library-items-test--with-copy c
+      (concat ":PROPERTIES:\n:ID: x-1\n:ROAM_REFS: @key\n"
+              ":EXPORT_DESCRIPTION: PRIVATE-E\n:PROGRESS: PRIVATE-F\n"
+              ":LIBRARY_MEDIA_TYPE: book\n:END:\n"
+              "#+title: Example 1\n#+date: 2026-01-01\n#+filetags: :Ref:\n"
+              "#+HUGO_SECTION: garden\n#+hugo_custom_front_matter: :weight 3\n"
+              "#+hugo: PRIVATE-A\n#+caption: PRIVATE-B\n#+html: PRIVATE-C\n"
+              "#+setupfile: /tmp/PRIVATE-D.org\n#+name: PRIVATE-G\n"
+              "#+attr_html: :alt PRIVATE-H\n#+md: PRIVATE-I\n"
+              "* Notes :site:\nPublic.\n")
+    (should (string-match-p
+             "\\`:PROPERTIES:\n:ID: x-1\n:ROAM_REFS: @key\n:LIBRARY_MEDIA_TYPE: book\n:END:\n"
+             c))
+    (dolist (kept '("#+title: Example 1" "#+date: 2026-01-01" "#+filetags: :Ref:"
+                    "#+HUGO_SECTION: garden" "#+hugo_custom_front_matter: :weight 3"))
+      (should (string-match-p (concat "^" (regexp-quote kept) "$") c)))
+    (should-not (string-match-p "PRIVATE" c))))
+
+(ert-deftest a3madkour-library-items-test/site-only-copy-drops-include-in-site-body ()
+  "An `#+INCLUDE:' inside the `:site:' body is dropped, with a warning."
+  (let (warned)
+    (cl-letf (((symbol-function 'a3madkour-pub/warn)
+               (lambda (_m _f fmt &rest args)
+                 (push (apply #'format fmt args) warned))))
+      (a3madkour-library-items-test--with-copy c
+          "#+title: Example 1\n* Notes :site:\nPublic.\n  #+INCLUDE: \"/tmp/x.org\"\nMore.\n"
+        (should-not (string-match-p "INCLUDE" c))
+        (should (string-match-p "^Public\\.\nMore\\.$" c))))
+    (should (cl-some (lambda (w) (string-match-p "INCLUDE" w)) warned))))
+
 (provide 'a3madkour-library-items-test)
 ;;; a3madkour-library-items-test.el ends here

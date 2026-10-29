@@ -205,16 +205,60 @@ an alias for the canonical asset root, not a path under DIR."
           (concat (if file-p "file:" "") (expand-file-name p dir))
         path))))
 
+(defconst a3madkour-library--copy-keyword-re
+  "\\`\\(?:TITLE\\|FILETAGS\\|DATE\\|HUGO_.+\\)\\'"
+  "Preamble keywords the site-only copy keeps (matched ignoring case).
+Anything else may carry private text into the export: `#+hugo:', `#+html:'
+and `#+md:' emit their value verbatim, `#+caption:', `#+name:' and
+`#+attr_*:' attach to the first site element, `#+setupfile:' and
+`#+include:' pull other files in.")
+
+(defconst a3madkour-library--copy-property-re
+  "\\`\\(?:ID\\|ROAM_REFS\\|LIBRARY_.+\\)\\'"
+  "File-drawer properties the site-only copy keeps (matched ignoring case).")
+
+(defun a3madkour-library--copy-drawer (drawer)
+  "DRAWER (a `:PROPERTIES:' block's text) keeping only allowlisted properties."
+  (let ((case-fold-search t))
+    (mapconcat
+     (lambda (line)
+       (if (and (string-match "\\`[ \t]*:\\([^: \t\n]+\\):" line)
+                (or (member (upcase (match-string 1 line)) '("PROPERTIES" "END"))
+                    (string-match-p a3madkour-library--copy-property-re
+                                    (match-string 1 line))))
+           (concat line "\n")
+         ""))
+     (split-string drawer "\n" t)
+     "")))
+
+(defun a3madkour-library--drop-includes (body file)
+  "BODY without its `#+INCLUDE:' lines, warning (against FILE) for each."
+  (let ((case-fold-search t))
+    (replace-regexp-in-string
+     "^[ \t]*#\\+include:.*\\(?:\n\\|\\'\\)"
+     (lambda (line)
+       (save-match-data
+         (a3madkour-pub/warn "library" file
+                             "dropped #+INCLUDE from the :site: section: %s"
+                             (string-trim line)))
+       "")
+     body t t)))
+
 (defun a3madkour-library/site-only-copy (file)
   "Write a temp `.org' holding only what FILE may publish; return its path.
-The copy is FILE's file-level drawer, its preamble `#+' keywords (minus
-`#+INCLUDE:', which would pull other text in) and its `:site:' body, with
+The copy is FILE's file-level drawer (only `ID', `ROAM_REFS' and
+`LIBRARY_*'), its preamble `TITLE', `FILETAGS', `DATE' and `HUGO_*'
+keywords, and its `:site:' body minus any `#+INCLUDE:' (warned), with
 relative link paths made absolute against FILE's directory so links and
-assets resolve as they would from FILE.  It lives in
-`temporary-file-directory', never beside FILE.  The caller deletes it.
+assets resolve as they would from FILE.  Fuzzy and `#custom-id' links
+from the site body to private headings do not resolve in the copy and
+fail at export (fail closed).  It lives in `temporary-file-directory',
+never beside FILE.  The caller deletes it.
 Signals an error when FILE has no usable `:site:' section."
-  (let ((body (or (a3madkour-library/site-body file)
-                  (error "%s: library item has no :site: section" file)))
+  (let ((body (a3madkour-library--drop-includes
+               (or (a3madkour-library/site-body file)
+                   (error "%s: library item has no :site: section" file))
+               file))
         (dir (file-name-directory (expand-file-name file)))
         head)
     (a3madkour-library--with-file file
@@ -225,10 +269,11 @@ Signals an error when FILE has no usable `:site:' section."
                      (point-max))))
             (case-fold-search t))
         (when (looking-at a3madkour-library--drawer-re)
-          (push (match-string-no-properties 0) head)
+          (push (a3madkour-library--copy-drawer (match-string-no-properties 0))
+                head)
           (goto-char (match-end 0)))
         (while (re-search-forward "^[ \t]*#\\+\\([A-Za-z0-9_-]+\\):.*$" end t)
-          (unless (string-equal-ignore-case (match-string 1) "include")
+          (when (string-match-p a3madkour-library--copy-keyword-re (match-string 1))
             (push (concat (match-string-no-properties 0) "\n") head)))))
     (let ((tmp (make-temp-file
                 (expand-file-name "a3-pub-site-only-" temporary-file-directory)

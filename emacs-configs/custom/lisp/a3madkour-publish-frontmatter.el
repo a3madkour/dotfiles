@@ -450,7 +450,7 @@ Hygiene rules (check_garden_fixtures.py compliance):
   "OUT with a library item's media fields and tags taken from SOURCE-FILE.
 The `LIBRARY_*' drawer is the single source of truth: each media field is
 replaced by the drawer's value, or removed when the drawer's is blank.
-`year' is an int.  `tags' become the cleaned `#+filetags:'.
+`year' is an int; a non-numeric one is warned about and omitted.  `tags' become the cleaned `#+filetags:'.
 
 `a3madkour-library-items' is required lazily: it requires this module."
   (let ((props (a3madkour-library/properties source-file)))
@@ -458,8 +458,13 @@ replaced by the drawer's value, or removed when the drawer's is blank.
       (let ((key (intern f))
             (v (alist-get f props nil nil #'equal)))
         (setq out (assq-delete-all key out))
-        (when v
-          (push (cons key (if (eq key 'year) (string-to-number v) v)) out))))
+        (cond
+         ((null v))
+         ((not (eq key 'year)) (push (cons key v) out))
+         ((string-match-p "\\`[0-9]+\\'" v)
+          (push (cons key (string-to-number v)) out))
+         (t (a3madkour-pub/warn "frontmatter" source-file
+                                "LIBRARY_YEAR %S is not a number; year omitted" v)))))
     (let ((tags (a3madkour-library/clean-tags
                  (split-string (or (a3madkour-pub-frontmatter--read-org-keyword
                                     source-file "FILETAGS")
