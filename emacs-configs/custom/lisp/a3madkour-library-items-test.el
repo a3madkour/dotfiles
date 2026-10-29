@@ -207,6 +207,14 @@ never the site heading; a later clean one still is."
       (should (string-match-p "OK\\." b))
       (should-not (string-match-p "SECRET\\|Old\\|Mine" b)))))
 
+(ert-deftest a3madkour-library-items-test/preview-skips-headings-keywords-tables ()
+  (dolist (c '("** Sub heading\nReal sentence. Next."
+               "#+caption: A caption.\n#+name: fig\nReal sentence. Next."
+               "| a. | b |\n|----+---|\n| c. | d |\nReal sentence. Next."
+               "#+begin_quote\nReal sentence. Next.\n#+end_quote"))
+    (a3madkour-library-items-test--with-note f (concat "* Notes :site:\n" c "\n")
+      (should (equal (a3madkour-library/preview f) "Real sentence.")))))
+
 (defmacro a3madkour-library-items-test--with-copy (var text &rest body)
   "Write TEXT to a note in a temp dir, bind VAR to its site-only copy's
 text and `dir' to the note's directory, run BODY."

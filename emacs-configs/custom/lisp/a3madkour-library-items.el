@@ -334,14 +334,22 @@ Signals an error when FILE has no usable `:site:' section."
    "\\([ \t\n(]\\|\\`\\)[*/_=~+]\\([^ \t\n][^\n]*?[^ \t\n]\\|[^ \t\n]\\)[*/_=~+]\\([ \t\n.,;:!?)]\\|\\'\\)"
    "\\1\\2\\3" s))
 
+(defconst a3madkour-library--preview-noise-re
+  "^[ \t]*\\(?:\\*+ \\|#\\+\\||\\).*\\(?:\n\\|\\'\\)"
+  "A line that is not prose: a heading, any `#+' keyword line, a table row.")
+
 (defun a3madkour-library/preview (file)
-  "FILE's `LIBRARY_PREVIEW', else the first sentence of its site body."
+  "FILE's `LIBRARY_PREVIEW', else the first sentence of its site body.
+Headings, `#+' keyword lines (captions, block delimiters) and table rows
+are dropped before the sentence is taken."
   (or (a3madkour-library--with-file file
         (a3madkour-pub-author--drawer-get "preview"))
       (let ((body (a3madkour-library/site-body file)))
         (when body
           (let* ((s (replace-regexp-in-string
-                     "\\[\\[[^]]*\\]\\[\\([^]]*\\)\\]\\]" "\\1" body))
+                     a3madkour-library--preview-noise-re "" body))
+                 (s (replace-regexp-in-string
+                     "\\[\\[[^]]*\\]\\[\\([^]]*\\)\\]\\]" "\\1" s))
                  (s (replace-regexp-in-string
                       "\\[\\[\\(https?://[^]]*\\)\\]\\]" "\\1" s))
                  (s (replace-regexp-in-string "\\[\\[[^]]*\\]\\]" "" s))
