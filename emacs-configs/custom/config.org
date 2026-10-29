@@ -1983,6 +1983,10 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
                                display key (or author "") key)))
             (insert text)))
         (save-buffer))
+      ;; A book's item note is marked `reading'; a paper is left alone.
+      (when (fboundp 'a3madkour/library-citar-add-book)
+        (dolist (key keys)
+          (a3madkour/library-citar-add-book key (citar-get-entry key))))
       (message "Added %d ref(s) to reading queue (%d/%d active)"
                n (+ count n) limit))))
 
@@ -3543,7 +3547,10 @@ Automatically detects the heading type and enforces the appropriate WIP limit."
 	  (org-toggle-tag "active" 'on)
 	  (if wip-limit
 		  (message "Set to active (%d/%d)" (funcall count-fn) wip-limit)
-        (message "Set to active"))))))
+        (message "Set to active"))))
+    ;; A :toread: book's item note follows: queued when inactive, reading when active.
+    (when (fboundp 'a3madkour/library-sync-on-toggle)
+      (a3madkour/library-sync-on-toggle))))
 
 (defun a3madkour/deactivate-on-done ()
   "Remove :active: tag and add :inactive: when a task is marked done."
@@ -4033,6 +4040,8 @@ because `org-todo' runs `org-blocker-hook' directly, not through
   (add-hook 'org-after-todo-state-change-hook
 			#'a3madkour/reset-checkboxes-on-repeat)
   (add-hook 'org-after-todo-state-change-hook #'a3madkour/deactivate-on-done)
+  ;; `a3madkour/library-sync-on-todo-change' joins this hook under * Website
+  ;; publish, beside its module's require, so it is never added unloaded.
   ;;figure out how to get to the category and see if it is a habit beeing added or a task
   ;;agenda dir
   (setq org-use-property-inheritance '("TRIGGER" "BLOCKER"))
@@ -5262,6 +5271,15 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 (require 'a3madkour-publish-multi-pdf)
 (require 'a3madkour-publish-multi-word)
 (require 'a3madkour-publish-multi)
+;; Library item notes, and the reading queue writing a book's status to its
+;; note (and the note's finished/abandoned closing the queue entry).
+(require 'a3madkour-library-items)
+(require 'a3madkour-library-queue)
+(setq a3madkour-library/queue-file (a3madkour/org-file "queue.org"))
+(add-hook 'a3madkour-library/status-changed-functions
+          #'a3madkour/library-close-queue-entry)
+;; DONE/DROP on a :toread: book marks its item note finished/abandoned.
+(add-hook 'org-after-todo-state-change-hook #'a3madkour/library-sync-on-todo-change)
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
