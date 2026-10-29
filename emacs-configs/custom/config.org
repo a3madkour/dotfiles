@@ -5265,7 +5265,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 (require 'a3madkour-publish-recipes)
 (require 'a3madkour-works-lint)
 (require 'a3madkour-publish-works)
-;; Author commands: a3-publish-mark / -unmark / -status, a3-library-insert-item.
+;; Author commands: a3-publish-mark / -unmark / -status, a3-publish-jump-to-source.
 (require 'a3madkour-publish-author)
 (require 'a3madkour-publish-multi-filter)
 (require 'a3madkour-publish-multi-pdf)

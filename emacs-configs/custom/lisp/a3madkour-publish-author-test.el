@@ -241,68 +241,6 @@ when caller passes the same answer to y-or-n-p)."
     (search-backward "Heading")
     (should-error (a3-library-insert-extras) :type 'user-error)))
 
-;; -- a3-library-insert-item --
-
-(ert-deftest a3madkour-pub-author-test/insert-item-happy-reading ()
-  "insert-item: library/reading defaults to book; status prompt; full drawer inserted."
-  (a3-pub-author-test--with-library-buffer "library/reading"
-    (cl-letf (((symbol-function 'completing-read)
-               (lambda (_p coll &rest _) (car coll))))
-      (a3-library-insert-item))
-    (let ((buf (buffer-string)))
-      (should (string-match-p "^\\* TITLE" buf))
-      (should (string-match-p ":CREATOR:" buf))
-      (should (string-match-p ":STATUS: finished" buf))
-      (should (string-match-p ":LAST_MODIFIED:" buf))
-      ;; Book extras keys
-      (should (string-match-p ":ISBN:" buf))
-      (should (string-match-p ":COVER_FILE:" buf)))))
-
-(ert-deftest a3madkour-pub-author-test/insert-item-listening-prompts-medium ()
-  "insert-item: library/listening allows album+track → prompts for medium."
-  (a3-pub-author-test--with-library-buffer "library/listening"
-    (let ((calls nil))
-      (cl-letf (((symbol-function 'completing-read)
-                 (lambda (prompt coll &rest _)
-                   (push prompt calls)
-                   (car coll))))
-        (a3-library-insert-item))
-      ;; Two completing-read calls: medium first, then status.
-      (should (= (length calls) 2)))))
-
-(ert-deftest a3madkour-pub-author-test/insert-item-playing-skips-medium-prompt ()
-  "insert-item: library/playing has single medium (game) → only status prompt."
-  (a3-pub-author-test--with-library-buffer "library/playing"
-    (let ((calls nil))
-      (cl-letf (((symbol-function 'completing-read)
-                 (lambda (prompt coll &rest _)
-                   (push prompt calls)
-                   (car coll))))
-        (a3-library-insert-item))
-      ;; One call (status); medium prompt skipped.
-      (should (= (length calls) 1)))))
-
-(ert-deftest a3madkour-pub-author-test/insert-item-refuses-non-library-section ()
-  "insert-item: non-library section → user-error."
-  (with-temp-buffer
-    (org-mode)
-    (insert "#+HUGO_SECTION: garden\n")
-    (should-error (a3-library-insert-item) :type 'user-error)))
-
-(ert-deftest a3madkour-pub-author-test/insert-item-appends-after-existing ()
-  "insert-item: existing heading is preserved; new heading appended."
-  (a3-pub-author-test--with-library-buffer "library/reading"
-    (insert "* Existing Book\n:PROPERTIES:\n:CREATOR: Old Author\n:END:\n")
-    (cl-letf (((symbol-function 'completing-read)
-               (lambda (_p coll &rest _) (car coll))))
-      (a3-library-insert-item))
-    (let ((buf (buffer-string)))
-      (should (string-match-p "Existing Book" buf))
-      (should (string-match-p "^\\* TITLE" buf))
-      ;; Existing entry comes before the new one.
-      (should (< (string-match "Existing Book" buf)
-                 (string-match "^\\* TITLE" buf))))))
-
 ;; -- a3-publish-jump-to-source --
 
 (defun a3-pub-author-test--stub-manifest (entries)

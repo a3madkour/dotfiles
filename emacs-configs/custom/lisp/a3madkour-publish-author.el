@@ -2,12 +2,12 @@
 
 ;;; Commentary:
 
-;; Six interactive commands for author-side publish-state management:
+;; Five interactive commands for author-side publish-state management:
 ;;   a3-publish-mark / unmark / status — toggle and query #+HUGO_PUBLISH:
-;;   a3-library-insert-item / insert-extras — scaffold library-*.org entries
+;;   a3-library-insert-extras — scaffold a library heading's extras drawer
 ;;   a3-publish-jump-to-source — manifest-driven nav from content/ → org
 ;;
-;; All six compose existing primitives (the section registry and the site's
+;; All five compose existing primitives (the section registry and the site's
 ;; data/sections.json contract, keywords API, publish manifest).  No new tables.
 ;;
 ;; See `docs/superpowers/specs/2026-06-08-emacs-publish-author-helpers-design.md'.
@@ -508,59 +508,6 @@ point is not under any heading."
         (org-set-property (car spec) ""))
       (length missing))))
 
-;; -- a3-library-insert-item --
-
-;;;###autoload
-(defun a3-library-insert-item ()
-  "Insert a new library item heading at the end of the current org buffer.
-
-Reads:
-  - medium: `completing-read' over the section's allowed-mt list (skipped
-    if there's only one allowed)
-  - status: `completing-read' over the section's allowed-status list
-    (skipped if there's only one)
-
-Inserts:
-  * TITLE
-  :PROPERTIES:
-  :CREATOR:
-  :YEAR:
-  :STATUS: <picked-status>
-  :LAST_MODIFIED: <today ISO>
-  <per-medium extras keys with empty values>
-  :END:
-
-Refuses outside `org-mode' or when section isn't a library section."
-  (interactive)
-  (unless (derived-mode-p 'org-mode)
-    (user-error "a3-library-insert-item: current buffer is not org-mode"))
-  (let* ((section (a3madkour-pub-author--require-library-section))
-         (cfg (a3madkour-pub-library--config-for section))
-         (default-mt (nth 1 cfg))
-         (allowed-mt (nth 2 cfg))
-         (allowed-status (nth 3 cfg))
-         (medium (if (> (length allowed-mt) 1)
-                     (completing-read "Medium: " allowed-mt nil t nil nil default-mt)
-                   default-mt))
-         (status (if (> (length allowed-status) 1)
-                     (completing-read "Status: " allowed-status nil t)
-                   (car allowed-status)))
-         (today (format-time-string "%Y-%m-%d"))
-         (extras (a3madkour-pub-library/extras-for medium)))
-    (goto-char (point-max))
-    (unless (or (= (point) (point-min))
-                (eq (char-before) ?\n))
-      (insert "\n"))
-    (insert "* TITLE\n")
-    (insert ":PROPERTIES:\n")
-    (insert ":CREATOR: \n")
-    (insert ":YEAR: \n")
-    (insert (format ":STATUS: %s\n" status))
-    (insert (format ":LAST_MODIFIED: %s\n" today))
-    (dolist (spec extras)
-      (insert (format ":%s: \n" (car spec))))
-    (insert ":END:\n")))
-
 ;; -- a3-publish-jump-to-source --
 
 (defun a3madkour-pub-author--buffer-content-url ()
@@ -801,7 +748,7 @@ buffer.  A `from: pipeline' field qualifies only when it is required and
 names a buffer `source' the pipeline would find empty (see
 `--source-satisfied-p'); without a source the pipeline always derives it.  The variant case comes from the
 buffer's value of the section's `variants.on' field.  A `store: data'
-section (library) yields nil: `a3-library-insert-item' writes its items."
+section (library) yields nil: its rows are collected from item notes."
   (let ((spec (a3madkour-sections/spec section)))
     (unless (equal (alist-get 'store spec) "data")
       (let* ((on (alist-get 'on (alist-get 'variants spec)))

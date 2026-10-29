@@ -1,27 +1,21 @@
-;;; a3madkour-publish-library.el --- library per-file publish handler  -*- lexical-binding: t; -*-
+;;; a3madkour-publish-library.el --- library shelf rendering + shelf-file refusal  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
-;; B.2: library per-file publish handler.  Walks top-level org headings
-;; inside one of four source files (library-{reading,listening,playing,
-;; watching}.org), normalizes each heading to a YAML row plist, renders
-;; the corresponding data/<medium>.yaml deterministically.
+;; Shared pieces of the library shelves (`data/{reading,listening,
+;; playing,watching}.yaml').  The shelves are collected from shared item
+;; notes by `a3madkour-publish-library-notes', which renders each row with
+;; `a3madkour-pub-library--render-row'; `a3madkour-library-items' reads
+;; the per-medium extras table through `a3madkour-pub-library/extras-for'.
 ;;
-;; Shelves are now collected from item notes by
-;; `a3madkour-publish-library-notes'; the registry's four `library/*'
-;; entries point at `refuse-shelf-file'.  `publish-library-file' stays
-;; until it is removed, and its row renderer and extras table are shared
-;; with the collector.
+;; A shelf file (`#+HUGO_SECTION: library/...', the old one org file ->
+;; one shelf form) is refused: the registry's four `library/*' entries
+;; point at `a3madkour-pub-library/refuse-shelf-file'.
 
 ;;; Code:
 
 (require 'cl-lib)
-(require 'org-element)
-(require 'ucs-normalize)
 (require 'a3madkour-publish)
-(require 'a3madkour-publish-yaml)
-(require 'a3madkour-publish-frontmatter)
-(require 'a3madkour-publish-history)
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-sections)
 
@@ -29,19 +23,6 @@
   "The library section strings (e.g. \"library/reading\"), from the registry."
   (a3madkour-pub-registry/sections-for-handler
    'a3madkour-pub-library/refuse-shelf-file))
-
-(defun a3madkour-pub-library--config-for (section)
-  "Return (yaml-file default-mt allowed-mt allowed-status) for SECTION.
-SECTION is the slash-form `#+HUGO_SECTION:' string.  The yaml file and
-default medium come from `a3madkour-pub-registry'; the allowed media
-types and statuses from the site's section contract (`a3madkour-sections',
-which fails closed).  Errors when SECTION is not a library section."
-  (unless (member section (a3madkour-pub-library/sections))
-    (error "a3madkour-pub-library: unknown library section %S" section))
-  (list (a3madkour-pub-registry/get section :data-file)
-        (a3madkour-pub-registry/get section :default-medium)
-        (a3madkour-sections/enum section "media_type")
-        (a3madkour-sections/enum section "status")))
 
 (defun a3madkour-pub-library/extras-for (medium)
   "Return the per-medium extras spec for MEDIUM, or nil if unknown.
@@ -74,183 +55,6 @@ over `a3madkour-pub-library--extras-by-media' for sibling modules."
      ("COVER_FILE" :cover_file nil) ("COVER_URL" :cover_url nil)))
   "Per-medium extras drawer prop → yaml key + coercion.
 Matches `tools/check_library_fixtures.py:ALLOWED_EXTRAS' exactly.")
-
-(defun a3madkour-pub-library--site-static-dir-of (source-file)
-  "Derive the site static/ dir given SOURCE-FILE (a library .org).
-Cascade: A3_PUB_SITE_STATIC_DIR env var → sibling of `a3madkour-pub/site-data-dir'.
-Returns absolute path with trailing slash, or nil if unresolvable."
-  (ignore source-file)
-  (or (getenv "A3_PUB_SITE_STATIC_DIR")
-      (when (and (boundp 'a3madkour-pub/site-data-dir)
-                 a3madkour-pub/site-data-dir)
-        (expand-file-name "../static/"
-                          (directory-file-name a3madkour-pub/site-data-dir)))))
-
-(defun a3madkour-pub-library--title-to-slug (title)
-  "Derive a kebab-case slug from TITLE per spec §5.
-
-Pipeline: NFD-decompose → drop combining marks → lowercase →
-collapse non-alphanumeric runs to single `-' → trim leading/trailing
-`-'. Returns empty string when no alphanumeric content survives —
-callers WARN and skip the item in that case.
-
-Combining marks are matched via the U+0300–U+036F Combining
-Diacritical Marks block — same precedent as
-`a3madkour-pub-slug--ascii-fold' in `a3madkour-publish-slug.el'.
-Emacs's `\\cM' category does NOT correspond to Unicode general
-category Mn, so a literal char-range is the portable choice."
-  (let* ((decomposed (ucs-normalize-NFD-string title))
-         ;; Drop combining marks (Unicode block U+0300–U+036F).
-         (stripped (replace-regexp-in-string "[̀-ͯ]" "" decomposed))
-         (lower (downcase stripped))
-         ;; Collapse runs of non-alphanumeric to a single `-'.
-         (dashed (replace-regexp-in-string "[^a-z0-9]+" "-" lower))
-         ;; Trim leading/trailing `-'.
-         (trimmed (replace-regexp-in-string "\\`-+\\|-+\\'" "" dashed)))
-    trimmed))
-
-(defun a3madkour-pub-library--headline-property (headline prop)
-  "Read a single drawer property PROP (a string like \"CREATOR\") off HEADLINE.
-Returns nil if not set or empty."
-  (let ((val (org-element-property
-              (intern (concat ":" prop)) headline)))
-    (and (stringp val) (not (string-empty-p val)) (string-trim val))))
-
-(defun a3madkour-pub-library--warn (file slug fmt &rest args)
-  "Emit a WARN message with FILE + SLUG context."
-  (apply #'message (concat "a3madkour-pub-library WARN [%s slug=%s]: " fmt)
-         (file-name-nondirectory file) (or slug "?") args))
-
-(defun a3madkour-pub-library--resolve-slug (headline title file)
-  "Resolve slug: :SLUG: drawer → fallback `--title-to-slug'.
-Empty result → WARN + return nil (caller skips the item)."
-  (let* ((drawer-slug (a3madkour-pub-library--headline-property headline "SLUG"))
-         (derived (and (not drawer-slug) (a3madkour-pub-library--title-to-slug title)))
-         (slug (or drawer-slug derived)))
-    (cond
-     ((and slug (not (string-empty-p slug))) slug)
-     (t (a3madkour-pub-library--warn file nil
-                                     "empty slug for title %S; skipping" title)
-        nil))))
-
-(defun a3madkour-pub-library--collect-extras (headline media-type file slug)
-  "Collect extras drawer properties from HEADLINE per MEDIA-TYPE.
-WARNs on missing cover-file (emits key anyway).  Returns a plist or nil."
-  (let* ((spec (cdr (assoc media-type a3madkour-pub-library--extras-by-media)))
-         (result '()))
-    (dolist (entry spec)
-      (let* ((prop (nth 0 entry))
-             (key (nth 1 entry))
-             (coerce (nth 2 entry))
-             (raw (a3madkour-pub-library--headline-property headline prop)))
-        (when raw
-          (let ((val (if (eq coerce 'int) (string-to-number raw) raw)))
-            (setq result (plist-put result key val))
-            ;; Cover-file existence check (WARN only; key still emitted above).
-            (when (eq key :cover_file)
-              (let* ((static-dir (a3madkour-pub-library--site-static-dir-of file))
-                     (cover-path (and static-dir
-                                      (expand-file-name (concat "library/covers/" raw)
-                                                        static-dir))))
-                (when (and cover-path (not (file-exists-p cover-path)))
-                  (a3madkour-pub-library--warn file slug
-                                               "cover file missing at %s" cover-path))))))))
-    result))
-
-(defun a3madkour-pub-library--coerce-year (raw file slug)
-  "Coerce RAW year to an integer, or nil when absent/non-numeric.
-Mirrors `a3madkour-pub-frontmatter--coerce-weight': a non-numeric value
-WARNs and returns nil (caller omits the key) rather than letting
-`string-to-number' silently emit `0'."
-  (cond
-   ((null raw) nil)
-   ((integerp raw) raw)
-   ((stringp raw)
-    (let ((cleaned (string-trim raw)))
-      (cond
-       ((string-empty-p cleaned) nil)
-       ((string-match-p "^[+-]?[0-9]+$" cleaned) (string-to-number cleaned))
-       (t (a3madkour-pub-library--warn file slug "year=%S non-numeric; omitting" raw)
-          nil))))
-   (t nil)))
-
-(cl-defun a3madkour-pub-library--normalize-item (headline section cfg file)
-  "Build a YAML-row plist from HEADLINE for SECTION using CFG.
-FILE is the source path (used for WARN context + git-mtime fallback for
-the `last_modified' field).
-
-Returns nil when the item should be skipped (e.g. empty slug)."
-  (ignore section)
-  (let* ((title (org-element-property :raw-value headline))
-         (slug (a3madkour-pub-library--resolve-slug headline title file)))
-    (unless slug
-      (cl-return-from a3madkour-pub-library--normalize-item nil))
-    (let* ((default-mt    (nth 1 cfg))
-           (allowed-mt    (nth 2 cfg))
-           (allowed-stat  (nth 3 cfg))
-           (drawer-mt     (a3madkour-pub-library--headline-property headline "MEDIA_TYPE"))
-           (media-type    (or drawer-mt default-mt))
-           (status        (a3madkour-pub-library--headline-property headline "STATUS"))
-           (creator       (a3madkour-pub-library--headline-property headline "CREATOR"))
-           (year-raw      (a3madkour-pub-library--headline-property headline "YEAR"))
-           (year          (a3madkour-pub-library--coerce-year year-raw file slug)))
-      ;; Missing required status → skip the row (WARN + return nil), the same
-      ;; skip contract as an empty slug.  Emitting `status: null' here would
-      ;; be a hard CI fail downstream in check_library_fixtures.py.
-      (unless status
-        (a3madkour-pub-library--warn file slug
-                                     "missing required status; skipping")
-        (cl-return-from a3madkour-pub-library--normalize-item nil))
-      (let ((row-plist (list :slug slug
-                             :title title
-                             :creator creator
-                             :media_type media-type
-                             :status status)))
-      ;; Non-numeric year is dropped by `--coerce-year' (nil); only emit the
-      ;; key when we have a real integer.
-      (when year
-        (setq row-plist (plist-put row-plist :year year)))
-      (unless (member media-type allowed-mt)
-        (a3madkour-pub-library--warn file slug
-                                     "media_type=%s not in %S" media-type allowed-mt))
-      (unless (member status allowed-stat)
-        (a3madkour-pub-library--warn file slug
-                                     "status=%s not in %S" status allowed-stat))
-      ;; Optional drawer pass-throughs.
-      (dolist (prop '(("STARTED" . :started)
-                      ("FINISHED" . :finished)
-                      ("SPOILER_LEVEL" . :spoiler_level)
-                      ("CITE_KEY" . :cite_key)
-                      ("CANONICAL_URL" . :canonical_url)
-                      ("NOTE_SLUG" . :note_slug)
-                      ("PREVIEW" . :preview)))
-        (let ((val (a3madkour-pub-library--headline-property headline (car prop))))
-          (when val
-            (setq row-plist (plist-put row-plist (cdr prop) val)))))
-      ;; Tags: per-heading org tags through editorial filter.
-      (let* ((raw-tags (org-element-property :tags headline))
-             (filtered (a3madkour-pub-frontmatter/filter-editorial-tags raw-tags)))
-        ;; Always emit :tags (linter requires the field even when empty).
-        (setq row-plist (plist-put row-plist :tags filtered)))
-      ;; last_modified: full 5-step cascade per B.3's shared helper
-      ;; (drawer → keyword → git-mtime → fs-mtime → today).  Library rows
-      ;; have no per-heading keyword equivalent of `#+HUGO_LASTMOD:', so
-      ;; :keyword is left unset.  Bug 1.5 (polish-and-bugfix-roadmap.md):
-      ;; before this change the library handler used a 2-step `or' that
-      ;; could return nil → the per-row :last_modified key was omitted →
-      ;; site linter rejected the row (last_modified is required).  The
-      ;; cascade always returns a YYYY-MM-DD string, so `:last_modified'
-      ;; is now unconditionally emitted.
-      (let ((lm (a3madkour-pub-frontmatter/last-modified-cascade
-                 file
-                 :drawer (a3madkour-pub-library--headline-property
-                          headline "LAST_MODIFIED"))))
-        (setq row-plist (plist-put row-plist :last_modified lm)))
-      ;; Extras: per-medium drawer mapping + cover-file existence check.
-      (let ((extras (a3madkour-pub-library--collect-extras headline media-type file slug)))
-        (when extras
-          (setq row-plist (plist-put row-plist :extras extras))))
-      row-plist))))
 
 (defconst a3madkour-pub-library--yaml-key-order
   '(:slug :title :creator :year :media_type :status
@@ -375,77 +179,6 @@ SECTION, when given, supplies each value's contract type."
           (setq first nil))))
     (mapconcat #'identity (nreverse lines) "\n")))
 
-(defun a3madkour-pub-library--render-library-yaml (rows source-file
-                                                    &optional section)
-  "Render ROWS (a list of plists) into a complete YAML document.
-SOURCE-FILE is recorded in the comment header for provenance.  SECTION
-\(e.g. \"library/reading\") types the values from the site contract."
-  (concat
-   (format
-    "# Generated by a3madkour-publish-library from %s.\n# Manual edits will be overwritten on next publish-living run.\nitems:\n"
-    (file-name-nondirectory source-file))
-   (mapconcat (lambda (row) (a3madkour-pub-library--render-row row section))
-              rows "\n")
-   "\n"))
-
-(defun a3madkour-pub-library--write-if-different (path content)
-  "Thin wrapper over `a3madkour-pub-yaml/write-if-different' (P3.1).
-\(Library keeps its own `--render-scalar' — single-quote YAML semantics
-distinct from the render-value dispatch — but shares the write helper.)"
-  (a3madkour-pub-yaml/write-if-different path content))
-
-(defun a3madkour-pub-library--yaml-path (file cfg)
-  "Compute the absolute output yaml path for FILE given CFG.
-Resolves under `a3madkour-pub/site-data-dir'; errors if unset."
-  (ignore file)
-  (let ((data-dir (and (boundp 'a3madkour-pub/site-data-dir)
-                       a3madkour-pub/site-data-dir)))
-    (unless data-dir
-      (error "a3madkour-pub-library: a3madkour-pub/site-data-dir is nil"))
-    (expand-file-name (nth 0 cfg) data-dir)))
-
-(cl-defun a3madkour-pub-library/publish-library-file (file run &key on-done)
-  "Publish a single library FILE to data/<medium>.yaml.
-
-Walks top-level headings via `org-element-parse-buffer', normalizes each
-via `--normalize-item', deduplicates slugs (WARN on collision; skip
-second), renders the YAML, writes if different.  Library items do NOT
-call `record-publish' (URL-less; per spec §6 step 8).
-
-RUN is the a3-pub-async-run handle (used for log-step in later tasks).
-ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
-  (condition-case _err
-      (progn
-        (ignore run)
-        (let* ((section (a3madkour-pub/note-section file))
-               (cfg (a3madkour-pub-library--config-for section))
-               (out-path (a3madkour-pub-library--yaml-path file cfg))
-               (ast (with-temp-buffer
-                      (insert-file-contents file)
-                      (org-mode)
-                      (org-element-parse-buffer)))
-               (seen-slugs (make-hash-table :test 'equal))
-               (rows '()))
-          (org-element-map ast 'headline
-            (lambda (hl)
-              (when (= 1 (org-element-property :level hl))
-                (let ((row (a3madkour-pub-library--normalize-item hl section cfg file)))
-                  (when row
-                    (let ((slug (plist-get row :slug)))
-                      (cond
-                       ((gethash slug seen-slugs)
-                        (a3madkour-pub-library--warn
-                         file slug "slug collision; skipping second occurrence"))
-                       (t
-                        (puthash slug t seen-slugs)
-                        (push row rows)))))))))
-          (let ((yaml (a3madkour-pub-library--render-library-yaml
-                       (nreverse rows) file section)))
-            (a3madkour-pub-library--write-if-different out-path yaml)))
-        (when on-done (funcall on-done 'ok)))
-    (error
-     (when on-done (funcall on-done 'err)))))
-
 (cl-defun a3madkour-pub-library/refuse-shelf-file (file run &key on-done)
   "Refuse library shelf FILE: shelves are collected from item notes.
 The registry's handler for every `library/*' section.  Logs the fix to
@@ -459,10 +192,6 @@ shelves themselves are built by `a3madkour-pub-library-notes/build-shelves'."
     (when run
       (a3-pub-async/log-step run "library-shelf-file" :err :err-snippet msg))
     (when on-done (funcall on-done 'err))))
-
-(defun a3madkour-pub-library/planned-steps (_file)
-  "Return rough step count for B.2 library handler."
-  4)
 
 (provide 'a3madkour-publish-library)
 
