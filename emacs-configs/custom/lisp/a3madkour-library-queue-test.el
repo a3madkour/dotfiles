@@ -76,7 +76,8 @@
   (push key a3madkour-library-queue-test--created)
   (with-current-buffer (find-file-noselect
                         (expand-file-name (concat key ".org") org-ref-notes))
-    (insert (format ":PROPERTIES:\n:ID: %s\n:ROAM_REFS: @%s\n:END:\n#+title: Example\n#+filetags: :Ref:\n\n" (org-id-new) key))))
+    ;; citar's default title template is "${author editor}, ${title}".
+    (insert (format ":PROPERTIES:\n:ID: %s\n:ROAM_REFS: @%s\n:END:\n#+title: Example Author, Example\n#+filetags: :Ref:\n\n" (org-id-new) key))))
 
 (defmacro a3madkour-library-queue-test--with-env (queue &rest body)
   "Run BODY with a temp queue.org holding QUEUE and an empty ref-notes dir."
@@ -193,10 +194,46 @@
         (a3madkour-pub-author--drawer-put "creator" "Example Editor")
         (save-buffer))
       (a3madkour/library-citar-add-book
-       "ex1" (cdr (assoc "ex1" a3madkour-library-queue-test--bib)))
+       "ex1" (cons '("title" . "Example Bib Title")
+                   (cdr (assoc "ex1" a3madkour-library-queue-test--bib))))
       (should-not a3madkour-library-queue-test--created)
       (should (equal (a3madkour-library-queue-test--drawer f "creator") "Example Editor"))
-      (should (equal (a3madkour-library-queue-test--drawer f "status") "reading")))))
+      (should (equal (a3madkour-library-queue-test--drawer f "status") "reading"))
+      ;; A note that already existed keeps its title.
+      (should (string-match-p "^#\\+title: Example 1$"
+                              (a3madkour-library-queue-test--read f))))))
+
+(ert-deftest a3madkour-library-queue-test/citar-book-created-note-gets-bib-title ()
+  "A note this step creates is titled with the bib title, braces stripped,
+not citar's \"author, title\" template; its creator reads First Last."
+  (a3madkour-library-queue-test--with-env ""
+    (let* ((entry '(("=type=" . "book")
+                    ("title" . "{{Example}} of {Programming} {{Languages}}")
+                    ("author" . "Pierce, Benjamin C. and {Example Org} and {van} Doe, Jane")
+                    ("date" . "2002")))
+           (file (a3madkour/library-citar-add-book "ex3" entry))
+           (txt (a3madkour-library-queue-test--read file)))
+      (should (string-match-p "^#\\+title: Example of Programming Languages$" txt))
+      (should (= 1 (with-temp-buffer (insert txt) (how-many "^#\\+title:" (point-min) (point-max)))))
+      (should (equal (a3madkour-library-queue-test--drawer file "creator")
+                     "Benjamin C. Pierce, Example Org, Jane van Doe")))))
+
+(ert-deftest a3madkour-library-queue-test/bib-names ()
+  (should (equal (a3madkour/library--bib-names "Example Author") "Example Author"))
+  (should (equal (a3madkour/library--bib-names "Doe, Jane and Roe, Rick")
+                 "Jane Doe, Rick Roe"))
+  (should (equal (a3madkour/library--bib-names "Doe, Jr., Jane") "Jane Doe Jr."))
+  (should (equal (a3madkour/library--bib-names "{World Health Organization}")
+                 "World Health Organization"))
+  (should-not (a3madkour/library--bib-names nil)))
+
+(ert-deftest a3madkour-library-queue-test/citar-editor-when-no-author ()
+  (a3madkour-library-queue-test--with-env ""
+    (let ((file (a3madkour/library-citar-add-book
+                 "ex4" '(("=type=" . "book") ("title" . "Example 4")
+                         ("editor" . "Roe, Rick") ("date" . "2010")))))
+      (should (equal (a3madkour-library-queue-test--drawer file "creator") "Rick Roe")))))
+
 
 ;; -- add a book without a bib entry --
 

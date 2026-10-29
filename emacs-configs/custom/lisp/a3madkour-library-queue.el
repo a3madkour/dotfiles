@@ -20,6 +20,7 @@
 (require 'org-id)
 (require 'a3madkour-publish-author)
 (require 'a3madkour-library-items)
+(require 'a3madkour-publish-bib)       ; `--split-authors'
 
 (defvar org-ref-notes)                       ; config.org: ref-note directory
 (defvar a3madkour/reading-queue-wip-limit)   ; config.org: WIP limit defcustom
@@ -102,25 +103,56 @@ The guard is bound while the note is written."
 
 ;; -- citar add --
 
+(defun a3madkour/library--strip-braces (s)
+  "S without BibTeX case-protection braces (as the bib normalizer strips
+titles), trimmed; nil for nil."
+  (and s (string-trim (replace-regexp-in-string "[{}]" "" s))))
+
+(defun a3madkour/library--bib-names (s)
+  "BibTeX name list S (\"Last, First and Last, First\") as \"First Last, ...\".
+A name with no comma is kept as written; \"Last, Jr, First\" reads
+\"First Last Jr\".  Braces are stripped.  Nil for a blank S."
+  (let ((names (a3madkour-pub-bib--split-authors s)))
+    (when names
+      (mapconcat
+       (lambda (name)
+         (let ((parts (mapcar #'string-trim (split-string name ","))))
+           (a3madkour/library--strip-braces
+            (pcase parts
+              (`(,last ,first) (concat first " " last))
+              (`(,last ,jr ,first) (concat first " " last " " jr))
+              (_ name)))))
+       names ", "))))
+
 (defun a3madkour/library-citar-add-book (key entry)
   "Mark citar KEY's note `reading' when bib ENTRY is a book; else do nothing.
-Creates the note with `citar-create-note' when missing, then writes the
-blank `LIBRARY_*' fields (book, author, year) and sets status `reading'.
-Returns the note file, or nil for a paper."
+Creates the note with `citar-create-note' when missing, titling it with
+the bib title (braces stripped) in place of citar's \"author, title\"
+template; a note that already existed keeps its title.  Then writes the
+blank `LIBRARY_*' fields (book, author or editor as \"First Last\",
+year) and sets status `reading'.  Returns the note file, or nil for a
+paper."
   (when (a3madkour/library--bib-book-p entry)
     (with-demoted-errors "library: citar book step failed: %S"
       (let ((file (expand-file-name (concat key ".org") org-ref-notes))
+            (title (a3madkour/library--strip-braces
+                    (alist-get "title" entry nil nil #'string=)))
             (year (let ((d (or (alist-get "date" entry nil nil #'string=)
                                (alist-get "year" entry nil nil #'string=))))
-                    (and d (>= (length d) 4) (substring d 0 4)))))
+                    (and d (>= (length d) 4) (substring d 0 4))))
+            (created nil))
         (unless (file-exists-p file)
           (save-window-excursion
-            (save-current-buffer (citar-create-note key entry))))
+            (save-current-buffer (citar-create-note key entry)))
+          (setq created t))
         (let ((a3madkour/library--syncing t))
           (with-current-buffer (find-file-noselect file)
+            (when (and created title (not (string-empty-p title)))
+              (a3madkour-pub-author--upsert-keyword "title" title))
             (a3madkour/library--write-book-fields
-             (or (alist-get "author" entry nil nil #'string=)
-                 (alist-get "editor" entry nil nil #'string=))
+             (a3madkour/library--bib-names
+              (or (alist-get "author" entry nil nil #'string=)
+                  (alist-get "editor" entry nil nil #'string=)))
              year)
             (a3madkour-library/set-status "reading")
             (save-buffer)))
