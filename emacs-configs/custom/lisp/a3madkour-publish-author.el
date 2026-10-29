@@ -2,12 +2,11 @@
 
 ;;; Commentary:
 
-;; Five interactive commands for author-side publish-state management:
+;; Four interactive commands for author-side publish-state management:
 ;;   a3-publish-mark / unmark / status — toggle and query #+HUGO_PUBLISH:
-;;   a3-library-insert-extras — scaffold a library heading's extras drawer
 ;;   a3-publish-jump-to-source — manifest-driven nav from content/ → org
 ;;
-;; All five compose existing primitives (the section registry and the site's
+;; All four compose existing primitives (the section registry and the site's
 ;; data/sections.json contract, keywords API, publish manifest).  No new tables.
 ;;
 ;; See `docs/superpowers/specs/2026-06-08-emacs-publish-author-helpers-design.md'.
@@ -18,7 +17,6 @@
 (require 'org)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-keywords)
-(require 'a3madkour-publish-library)
 (require 'a3madkour-publish-frontmatter)  ; editorial-tag filter
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-history)
@@ -457,64 +455,6 @@ Returns t if the buffer changed, nil if `#+HUGO_PUBLISH:' was already nil."
      ((equal current "nil") nil)
      (t (a3madkour-pub-author--upsert-keyword "HUGO_PUBLISH" "nil")
         t))))
-
-;; -- internal: library section + medium derivation --
-
-(defun a3madkour-pub-author--require-library-section ()
-  "Return the buffer's library `#+HUGO_SECTION:' value.
-Signal `user-error' if missing or not in `(a3madkour-pub-library/sections)'."
-  (let ((section (a3madkour-pub-keywords/extract "HUGO_SECTION")))
-    (unless (and section (member section (a3madkour-pub-library/sections)))
-      (user-error "a3madkour-pub-author: `#+HUGO_SECTION:' missing or not a library section (got %S)"
-                  section))
-    section))
-
-(defun a3madkour-pub-author--default-medium-for (section)
-  "Return the default medium string for SECTION (a library section)."
-  (a3madkour-pub-registry/get section :default-medium))
-
-;; -- a3-library-insert-extras --
-
-;;;###autoload
-(defun a3-library-insert-extras ()
-  "Insert the per-medium extras drawer keys on the current library heading.
-
-Reads section from `#+HUGO_SECTION:' (must be a library section).  Derives
-medium from the section's default (multi-medium sections like
-`library/listening' default to `album'; the author edits the heading
-afterward if they want `track').
-
-If the heading already has some extras, prompts `y-or-n-p' and inserts
-only the missing keys.
-
-Refuses outside `org-mode', when section isn't a library section, or when
-point is not under any heading."
-  (interactive)
-  (unless (derived-mode-p 'org-mode)
-    (user-error "a3-library-insert-extras: current buffer is not org-mode"))
-  (let ((section (a3madkour-pub-author--require-library-section)))
-    ;; Guard: point must be under a heading.  Use ignore-errors around
-    ;; org-back-to-heading so that any internal signal (e.g. "Before first
-    ;; headline") gets translated into our own user-error message.
-    (unless (or (org-at-heading-p)
-                (ignore-errors (save-excursion (org-back-to-heading t))))
-      (user-error "a3-library-insert-extras: point not under any heading"))
-    (let* ((medium (a3madkour-pub-author--default-medium-for section))
-           (extras (a3madkour-pub-library/extras-for medium))
-           (existing (mapcar #'car (org-entry-properties nil 'standard)))
-           (missing (cl-remove-if
-                     (lambda (spec) (member (upcase (car spec)) existing))
-                     extras)))
-      (when (and (< (length missing) (length extras))
-                 (not (y-or-n-p
-                       (format "Heading has %d/%d extras — append the missing %d? "
-                               (- (length extras) (length missing))
-                               (length extras)
-                               (length missing)))))
-        (user-error "a3-library-insert-extras: aborted"))
-      (dolist (spec missing)
-        (org-set-property (car spec) ""))
-      (length missing))))
 
 ;; -- a3-publish-jump-to-source --
 

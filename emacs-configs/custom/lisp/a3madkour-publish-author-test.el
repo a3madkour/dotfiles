@@ -190,57 +190,6 @@ when caller passes the same answer to y-or-n-p)."
     (text-mode)
     (should-error (a3-publish-unmark) :type 'user-error)))
 
-;; -- a3-library-insert-extras --
-
-(defmacro a3-pub-author-test--with-library-buffer (section &rest body)
-  "Run BODY in a temp org buffer set up as a library file for SECTION."
-  (declare (indent 1))
-  `(with-temp-buffer
-     (org-mode)
-     (insert (format "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: %s\n#+title: Test\n\n"
-                     ,section))
-     ,@body))
-
-(ert-deftest a3madkour-pub-author-test/insert-extras-bare-heading-inserts-all ()
-  "insert-extras: bare heading (no drawer) → full extras for the section's medium."
-  (a3-pub-author-test--with-library-buffer "library/reading"
-    (insert "* Pride and Prejudice\n")
-    (goto-char (point-max))
-    (search-backward "Pride")
-    (a3-library-insert-extras)
-    (let ((buf (buffer-string)))
-      ;; Book extras include ISBN, PROGRESS_PCT, PROGRESS_LABEL, COVER_FILE, COVER_URL.
-      (should (string-match-p ":ISBN:" buf))
-      (should (string-match-p ":COVER_FILE:" buf)))))
-
-(ert-deftest a3madkour-pub-author-test/insert-extras-partial-drawer-add-missing-only ()
-  "insert-extras: drawer has some extras → y-or-n-p → t inserts only the missing keys."
-  (a3-pub-author-test--with-library-buffer "library/reading"
-    (insert "* Pride and Prejudice\n:PROPERTIES:\n:ISBN: 1234567890\n:END:\n")
-    (search-backward "Pride")
-    (cl-letf (((symbol-function 'y-or-n-p) (lambda (_p) t)))
-      (a3-library-insert-extras))
-    (let ((buf (buffer-string)))
-      ;; ISBN was already there; new keys appended.
-      (should (string-match-p ":COVER_FILE:" buf))
-      ;; ISBN appears exactly once (no duplicate).
-      (should (= 1 (cl-count-if (lambda (l) (string-match-p ":ISBN:" l))
-                                (split-string buf "\n")))))))
-
-(ert-deftest a3madkour-pub-author-test/insert-extras-refuses-outside-heading ()
-  "insert-extras: point not under any heading → user-error."
-  (a3-pub-author-test--with-library-buffer "library/reading"
-    (goto-char (point-max))
-    (should-error (a3-library-insert-extras) :type 'user-error)))
-
-(ert-deftest a3madkour-pub-author-test/insert-extras-refuses-non-library-section ()
-  "insert-extras: section not in library config → user-error."
-  (with-temp-buffer
-    (org-mode)
-    (insert "#+HUGO_SECTION: garden\n* Heading\n")
-    (search-backward "Heading")
-    (should-error (a3-library-insert-extras) :type 'user-error)))
-
 ;; -- a3-publish-jump-to-source --
 
 (defun a3-pub-author-test--stub-manifest (entries)
