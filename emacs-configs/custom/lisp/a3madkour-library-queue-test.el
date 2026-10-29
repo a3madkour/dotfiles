@@ -234,6 +234,25 @@ not citar's \"author, title\" template; its creator reads First Last."
                          ("editor" . "Roe, Rick") ("date" . "2010")))))
       (should (equal (a3madkour-library-queue-test--drawer file "creator") "Rick Roe")))))
 
+(ert-deftest a3madkour-library-queue-test/entry-resolves-when-citar-is-loadable ()
+  "A Zotero book's queue entry resolves even before citar is loaded: the
+lookup loads citar rather than silently treating the entry as a paper."
+  (a3madkour-library-queue-test--with-env
+      "* TODO Read Example 1 :active:toread:\n:PROPERTIES:\n:CITEKEY: ex1\n:END:\n"
+    (let* ((libdir (make-temp-file "fake-citar-" t))
+           (load-path (cons libdir load-path))
+           (features (remq 'citar features))
+           (f (a3madkour-library-queue-test--book-note "ex1" "reading")))
+      (unwind-protect
+          (progn
+            (with-temp-file (expand-file-name "citar.el" libdir)
+              (insert "(defun citar-get-entry (_key) '((\"=type=\" . \"book\")))\n"
+                      "(provide 'citar)\n"))
+            (cl-letf (((symbol-function 'citar-get-entry) nil))
+              (should-not (fboundp 'citar-get-entry))
+              (a3madkour-library-queue-test--at-entry
+               "ex1" (lambda () (should (equal (a3madkour/queue-entry-note-file) f))))))
+        (delete-directory libdir t)))))
 
 ;; -- add a book without a bib entry --
 

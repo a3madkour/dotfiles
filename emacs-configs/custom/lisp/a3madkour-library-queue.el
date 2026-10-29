@@ -72,7 +72,10 @@ resolves; a paper, or a key with no note on disk, gives nil."
     (cond
      ((and citekey
            (a3madkour/library--bib-book-p
-            (and (fboundp 'citar-get-entry)
+            ;; Load citar when it is not yet: an unloaded citar must not
+            ;; make a Zotero book look like a paper.
+            (and (or (fboundp 'citar-get-entry) (require 'citar nil t))
+                 (fboundp 'citar-get-entry)
                  (ignore-errors (citar-get-entry citekey)))))
       (a3madkour/library--ref-note citekey))
      (boox-key (a3madkour/library--ref-note boox-key)))))
