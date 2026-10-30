@@ -352,7 +352,7 @@ This is the original D.2 figure-ref verification that triggered the spec.
 ## Success criteria
 
 - All ~539 ert tests green (suite up by 14)
-- Integration fixture `essays-figure-ref/` passes clean
+- End-to-end `figure-ref-round-trip` ert test passes clean
 - Manual D.2 figure-ref verification (5-step list above) succeeds
 - No `from-validate` references remain in `assets.el` source (test fixtures may retain for now)
 - D.2 follow-up #1 closed in `memory/project_d2_complete.md`
