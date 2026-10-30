@@ -33,6 +33,9 @@ export PATH="$PATH:$HOME/.cabal/bin"
 export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/gem/ruby/3.3.0/bin/"
+export PATH="$PATH:$HOME/.elan/bin"
+export PATH="$PATH:$HOME/emacs-configs/custom/straight/repos/meta-agent-shell/bin"
+
 export PATH="$PATH:$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin"
 export EDITOR="emacsclient"
 export ORG_MATH_LINT_CONFIG="$HOME/Sync/Workspace/org-math-lint/config.toml"
@@ -90,21 +93,6 @@ say() {
 # exec startx
 #fi
 
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/a3madkour/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/home/a3madkour/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/a3madkour/miniconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/home/a3madkour/miniconda3/bin:$PATH"
-    fi
-fi
-unset __conda_setup
-# <<< conda initialize <<<
-
 
 # bun completions
 [ -s "/Stuff/a3madkour/.bun/_bun" ] && source "/Stuff/a3madkour/.bun/_bun"
@@ -139,3 +127,19 @@ zinit light-mode for \
 # zsh-fzf-history-search
 zinit ice lucid wait'0'
 zinit light joshskidmore/zsh-fzf-history-search
+
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/opt/homebrew/Caskroom/miniconda/base/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then
+        . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"
+    else
+        export PATH="/opt/homebrew/Caskroom/miniconda/base/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
