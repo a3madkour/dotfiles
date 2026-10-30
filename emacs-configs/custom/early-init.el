@@ -1,4 +1,6 @@
-;; [[file:config.org::*Early Init][Early Init:1]]
+;;; early-init.el --- Tangled from config.org -*- lexical-binding: t; -*-
+
+;; [[file:config.org::*Early Init][Early Init:2]]
 ;;Phone config
 (when (eq system-type 'android)
   (setenv "PATH" (format "%s:%s" "/data/data/com.termux/files/usr/bin" (getenv "PATH")))
@@ -39,4 +41,22 @@
 (add-hook 'emacs-startup-hook
 	      (lambda ()
 					(setq file-name-handler-alist default-file-name-handler-alist)))
-;; Early Init:1 ends here
+;; Early Init:2 ends here
+
+;; [[file:config.org::*Native-compilation deny list][Native-compilation deny list:1]]
+(setq native-comp-jit-compilation-deny-list
+      (list (concat "\\`"
+                    (regexp-quote (expand-file-name "config.el"
+                                                    user-emacs-directory))
+                    "\\'")
+            "/org-media-note-core\\.el\\'"))
+;; Native-compilation deny list:1 ends here
+
+;; [[file:config.org::*Native-compilation macOS target][Native-compilation macOS target:1]]
+(when (eq system-type 'darwin)
+  (setq native-comp-driver-options '("-Wl,-w" "-mmacosx-version-min=26.0")))
+;; Native-compilation macOS target:1 ends here
+
+;; [[file:config.org::*lsp-mode plists][lsp-mode plists:1]]
+(setenv "LSP_USE_PLISTS" "true")
+;; lsp-mode plists:1 ends here
