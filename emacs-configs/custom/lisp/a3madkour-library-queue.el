@@ -21,6 +21,7 @@
 (require 'a3madkour-publish-author)
 (require 'a3madkour-library-items)
 (require 'a3madkour-publish-bib)       ; `--split-authors'
+(require 'a3madkour-ref-notes)
 
 (defvar org-ref-notes)                       ; config.org: ref-note directory
 (defvar a3madkour/reading-queue-wip-limit)   ; config.org: WIP limit defcustom
@@ -54,9 +55,10 @@ while it is set, so closing an entry cannot re-enter the note sync.")
       (user-error "a3madkour-library/queue-file is not set")))
 
 (defun a3madkour/library--ref-note (key)
-  "Existing ref-note file for KEY, or nil."
-  (let ((file (expand-file-name (concat key ".org") org-ref-notes)))
-    (and (file-exists-p file) file)))
+  "Existing ref-note file for KEY, or nil.
+Found by the keys a note declares, not only by `<key>.org': the
+rename-to-title save hook moves a note off that name."
+  (a3madkour-ref-notes/file key))
 
 (defun a3madkour/library--bib-book-p (entry)
   "Non-nil when citar bib ENTRY's `=type=' is a book type."
@@ -133,23 +135,25 @@ Creates the note with `citar-create-note' when missing, titling it with
 the bib title (braces stripped) in place of citar's \"author, title\"
 template; a note that already existed keeps its title.  Then writes the
 blank `LIBRARY_*' fields (book, author or editor as \"First Last\",
-year) and sets status `reading'.  Returns the note file, or nil for a
-paper."
+year) and sets status `reading'.  Returns the note file as it is named
+after saving (a save may rename it), or nil for a paper."
   (when (a3madkour/library--bib-book-p entry)
     (with-demoted-errors "library: citar book step failed: %S"
-      (let ((file (expand-file-name (concat key ".org") org-ref-notes))
+      (let ((file (a3madkour/library--ref-note key))
             (title (a3madkour/library--strip-braces
                     (alist-get "title" entry nil nil #'string=)))
             (year (let ((d (or (alist-get "date" entry nil nil #'string=)
                                (alist-get "year" entry nil nil #'string=))))
                     (and d (>= (length d) 4) (substring d 0 4))))
             (created nil))
-        (unless (file-exists-p file)
+        (unless file
           (save-window-excursion
             (save-current-buffer (citar-create-note key entry)))
-          (setq created t))
+          (setq file (a3madkour-ref-notes/new-file key)
+                created t))
         (let ((a3madkour/library--syncing t))
-          (with-current-buffer (find-file-noselect file)
+          ;; citar leaves a new note unsaved: take its buffer, not the disk.
+          (with-current-buffer (or (get-file-buffer file) (find-file-noselect file))
             (when (and created title (not (string-empty-p title)))
               (a3madkour-pub-author--upsert-keyword "title" title))
             (a3madkour/library--write-book-fields
@@ -158,8 +162,8 @@ paper."
                   (alist-get "editor" entry nil nil #'string=)))
              year)
             (a3madkour-library/set-status "reading")
-            (save-buffer)))
-        file))))
+            (save-buffer)
+            buffer-file-name))))))
 
 ;; -- add a book without a bib entry --
 
@@ -170,17 +174,17 @@ paper."
 
 (defun a3madkour/library--write-bare-book-note (key title)
   "Create the ref note for KEY titled TITLE, with no document; return it.
-The shape of `a3madkour/boox--ensure-book-note' minus the document lines."
-  (let ((file (expand-file-name (concat key ".org") org-ref-notes)))
-    (unless (file-exists-p file)
-      (with-current-buffer (find-file-noselect file)
-        (insert (format ":PROPERTIES:\n:ID: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
-                        (org-id-new)
+The shape of `a3madkour/boox--ensure-book-note' minus the document lines.
+Returns the note as it is named after saving (a save may rename it)."
+  (or (a3madkour/library--ref-note key)
+      (with-current-buffer (find-file-noselect (a3madkour-ref-notes/new-file key))
+        (insert (format ":PROPERTIES:\n:ID: %s\n:BOOX_KEY: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
+                        (org-id-new) key
                         (format-time-string "[%Y-%m-%d %a]")
                         (format-time-string "[%Y-%m-%d %a]")
                         title))
-        (save-buffer)))
-    file))
+        (save-buffer)
+        buffer-file-name)))
 
 ;;;###autoload
 (defun a3-reading-queue-add-book (title creator year &optional file)
@@ -215,7 +219,9 @@ entry.  Refuses at the reading-queue WIP limit.  Returns the note file."
         (a3madkour-pub-author--upsert-keyword "title" title)
         (a3madkour/library--write-book-fields creator year)
         (a3madkour-library/set-status "reading")
-        (save-buffer))
+        (save-buffer)
+        ;; The save may rename the note to its title.
+        (setq note buffer-file-name))
       (with-current-buffer (find-file-noselect (a3madkour/library--queue-file))
         (save-excursion
           (goto-char (point-max))
@@ -276,7 +282,8 @@ number of entries dropped."
 (defun a3madkour/library-close-queue-entry (file status)
   "Close FILE's queue entry when its book note becomes finished or abandoned.
 For `a3madkour-library/status-changed-functions'.  Acts only on a book
-item note in `org-ref-notes', whose basename is its queue key."
+item note in `org-ref-notes'; its queue key is the key the note declares
+\(`a3madkour-ref-notes/key'), which survives a rename to its title."
   (when (and (member status '("finished" "abandoned"))
              (not a3madkour/library--syncing)
              file
@@ -286,7 +293,7 @@ item note in `org-ref-notes', whose basename is its queue key."
                                nil nil #'equal)
                     "book"))
     (let ((a3madkour/library--syncing t)
-          (key (file-name-base file)))
+          (key (a3madkour-ref-notes/key file)))
       (if (equal status "finished")
           (a3madkour/boox--close-queue-entry key)
         (a3madkour/library--drop-queue-entry key)))))

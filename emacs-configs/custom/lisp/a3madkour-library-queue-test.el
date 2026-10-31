@@ -42,22 +42,21 @@
 
 (defun a3madkour-library-queue-test--ensure-book-note (key source)
   "`a3madkour/boox--ensure-book-note' as config.org defines it."
-  (let ((file (expand-file-name (concat key ".org") org-ref-notes)))
-    (unless (file-exists-p file)
-      (with-current-buffer (find-file-noselect file)
-        (insert (format ":PROPERTIES:\n:ID: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
-                        (org-id-new) source source
+  (or (a3madkour-ref-notes/file key)
+      (with-current-buffer (find-file-noselect (a3madkour-ref-notes/new-file key))
+        (insert (format ":PROPERTIES:\n:ID: %s\n:BOOX_KEY: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
+                        (org-id-new)
+                        key source source
                         (format-time-string "[%Y-%m-%d %a]")
                         (format-time-string "[%Y-%m-%d %a]")
                         (file-name-base source)))
-        (save-buffer)))
-    file))
+        (save-buffer)
+        buffer-file-name)))
 
 (defun a3madkour-library-queue-test--note-for-key (key)
   "`a3madkour/boox--note-for-key' as config.org defines it (no citar)."
-  (let ((citar-note (expand-file-name (concat key ".org") org-ref-notes)))
-    (if (file-exists-p citar-note) citar-note
-      (a3madkour-library-queue-test--ensure-book-note key "unused"))))
+  (or (a3madkour-ref-notes/file key)
+      (a3madkour-library-queue-test--ensure-book-note key "unused")))
 
 (defun a3madkour-library-queue-test--known-keys ()
   "`a3madkour/boox--all-known-keys' with an empty bibliography."
@@ -253,6 +252,85 @@ lookup loads citar rather than silently treating the entry as a paper."
               (a3madkour-library-queue-test--at-entry
                "ex1" (lambda () (should (equal (a3madkour/queue-entry-note-file) f))))))
         (delete-directory libdir t)))))
+
+;; -- notes renamed to their titles --
+
+(defun a3madkour-library-queue-test--rename-to-title ()
+  "Rename the visited note to its title's slug, as config.org's
+`a3madkour/org-roam-rename-file-to-title' save hook does."
+  (when-let* ((title (save-excursion
+                       (goto-char (point-min))
+                       (and (re-search-forward "^#\\+title: \\(.+\\)$" nil t)
+                            (match-string 1))))
+              (new (expand-file-name
+                    (concat (downcase (replace-regexp-in-string
+                                       "[^[:alnum:]]+" "_" (string-trim title)))
+                            ".org")
+                    (file-name-directory buffer-file-name))))
+    (unless (or (equal new buffer-file-name) (file-exists-p new))
+      (rename-file buffer-file-name new)
+      (set-visited-file-name new t t))))
+
+(defun a3madkour-library-queue-test--org-files ()
+  "The .org files in the test ref-notes dir, by name."
+  (mapcar #'file-name-nondirectory
+          (directory-files org-ref-notes t "\\.org\\'")))
+
+(ert-deftest a3madkour-library-queue-test/citar-book-finds-renamed-note ()
+  "The 2026-10-30 defect: a ref note renamed to its title was not found by
+its citekey, so citar created a second note for the same book."
+  (a3madkour-library-queue-test--with-env ""
+    (let ((after-save-hook (list #'a3madkour-library-queue-test--rename-to-title))
+          (renamed (expand-file-name "example_one.org" org-ref-notes)))
+      (with-temp-file renamed
+        (insert ":PROPERTIES:\n:ID: x\n:ROAM_REFS: @ex1\n:END:\n#+title: Example One\n* Highlights\n"))
+      (should (equal (a3madkour/library-citar-add-book
+                      "ex1" (cdr (assoc "ex1" a3madkour-library-queue-test--bib-book)))
+                     renamed))
+      (should-not a3madkour-library-queue-test--created)
+      (should (equal (a3madkour-library-queue-test--org-files) '("example_one.org")))
+      (should (equal (a3madkour-library-queue-test--drawer renamed "status") "reading"))
+      (should (string-match-p "^\\* Highlights$" (a3madkour-library-queue-test--read renamed))))))
+
+(ert-deftest a3madkour-library-queue-test/citar-book-new-note-returned-as-renamed ()
+  (a3madkour-library-queue-test--with-env ""
+    (let* ((after-save-hook (list #'a3madkour-library-queue-test--rename-to-title))
+           (file (a3madkour/library-citar-add-book
+                  "ex1" (cdr (assoc "ex1" a3madkour-library-queue-test--bib-book)))))
+      (should (equal file (expand-file-name "example_1.org" org-ref-notes)))
+      (should (equal (a3madkour-library-queue-test--org-files) '("example_1.org")))
+      (should (equal (a3madkour-library-queue-test--drawer file "status") "reading"))
+      ;; Found again by its citekey on the next add: no second note.
+      (a3madkour/library-citar-add-book
+       "ex1" (cdr (assoc "ex1" a3madkour-library-queue-test--bib-book)))
+      (should (equal a3madkour-library-queue-test--created '("ex1")))
+      (should (equal (a3madkour-library-queue-test--org-files) '("example_1.org"))))))
+
+(ert-deftest a3madkour-library-queue-test/add-book-note-renamed-and-findable ()
+  (skip-unless (fboundp 'a3madkour/boox--book-key))
+  (a3madkour-library-queue-test--with-env ""
+    (let* ((after-save-hook (list #'a3madkour-library-queue-test--rename-to-title))
+           (note (a3-reading-queue-add-book "Example One" "Example Author" "1999")))
+      (should (equal note (expand-file-name "example_one.org" org-ref-notes)))
+      (should (equal (a3madkour-library-queue-test--org-files) '("example_one.org")))
+      (should (equal (a3madkour-library-queue-test--drawer note "status") "reading"))
+      ;; The queue entry still resolves to the renamed note, by its BOOX_KEY.
+      (with-current-buffer (find-file-noselect a3madkour-library/queue-file)
+        (goto-char (point-min))
+        (re-search-forward "^:BOOX_KEY: ")
+        (org-back-to-heading t)
+        (cl-letf (((symbol-function 'citar-get-entry) #'ignore))
+          (should (equal (a3madkour/queue-entry-note-file) note)))))))
+
+(ert-deftest a3madkour-library-queue-test/status-finished-closes-entry-of-renamed-note ()
+  (a3madkour-library-queue-test--with-env a3madkour-library-queue-test--book-entry
+    (let ((f (expand-file-name "example_one.org" org-ref-notes)))
+      (with-temp-file f
+        (insert ":PROPERTIES:\n:ID: x\n:BOOX_KEY: ex1\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_STATUS: finished\n:END:\n#+title: Example One\n"))
+      (a3madkour/library-close-queue-entry f "finished")
+      (should (equal (a3madkour/library--active-count) 0))
+      (a3madkour-library-queue-test--at-entry
+       "ex1" (lambda () (should (equal (org-get-todo-state) "DONE")))))))
 
 ;; -- add a book without a bib entry --
 

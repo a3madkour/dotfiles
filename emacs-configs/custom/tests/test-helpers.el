@@ -38,6 +38,12 @@
 ;; org-state above.
 (defvar org-ref-notes nil)
 
+;; The config.org Boox defs find ref notes through this module.
+(add-to-list 'load-path
+             (expand-file-name "../lisp"
+                               (file-name-directory (or load-file-name buffer-file-name))))
+(require 'a3madkour-ref-notes)
+
 ;; ---- Loader: extract a3madkour defs from config.org ----
 (defvar a3madkour-test/config-org-path
   (expand-file-name "../config.org"

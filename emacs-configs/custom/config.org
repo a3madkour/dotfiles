@@ -1884,10 +1884,6 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
 							(car (seq-filter (lambda (p) (string-match-p "\\.pdf$" (string-trim p)))
 											 (split-string note-path ";")))))
 		 (note-tags (cdr (citar-get-field-with-value '("keywords") key)))
-		 (formatted-tags (when note-tags
-						   (mapconcat (lambda (tag) (concat ":" (replace-regexp-in-string "\\s-+" "" (string-trim tag))))
-									  (split-string note-tags "[,;]+")
-									  "")))
 		 (filepath (expand-file-name
 					(concat key ".org")
 					(car citar-notes-paths)))
@@ -1918,10 +1914,16 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
 	  )
 	(goto-char (point-max))
 	(insert "#+title: ")
-	(when template (insert note-meta))
-	(insert "\n#+filetags: :Ref")
-	(when formatted-tags (insert formatted-tags))
-	(insert ":\n")
+	;; BibTeX case-protection braces are not part of the title.
+	(when template (insert (string-trim (replace-regexp-in-string "[{}]" "" note-meta))))
+	;; Org tags from the bib keywords: CamelCase subjects, Book for a book,
+	;; zotlib's import bookkeeping dropped (`a3madkour-ref-notes/filetags').
+	(insert "\n#+filetags: "
+			(a3madkour-ref-notes/filetags
+			 note-tags
+			 (and (fboundp 'a3madkour/library--bib-book-p)
+				  (a3madkour/library--bib-book-p entry)))
+			"\n")
 	(insert "\n\n|\n\n#+print_bibliography:")
 	(search-backward "|")
 	(delete-char 1)
@@ -1936,7 +1938,7 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
    '((main . "${author editor:30}     ${date year issued:4}     ${title:48}")
 	 (suffix . "          ${=key= id:15}    ${=type=:12}    ${tags keywords:*}")
 	 (preview . "${author editor} (${year issued date}) ${title}, ${journal journaltitle publisher container-title collection-title}.\n")
-	 (note . "${author editor}, ${title}")
+	 (note . "${title}")
 	 (note-file . "${file}")))
   (org-cite-global-bibliography (list zot-bib))
   (org-cite-insert-processor 'citar)
@@ -1947,7 +1949,25 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
   (citar-notes-paths (list org-ref-notes))
   ;; optional: org-cite-insert is also bound to C-c C-x C-@
   :bind
-  (:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
+  (:map org-mode-map :package org ("C-c b" . #'org-cite-insert))
+  :config
+  ;; Find a citekey's notes by the keys a note declares (ROAM_REFS,
+  ;; BOOX_KEY), not by `<key>.org': the rename-to-title save hook renames
+  ;; notes, and citar's filename lookup then misses them and offers to
+  ;; create a duplicate.  New notes are still created as `<key>.org'.
+  ;; `:no-require' means this runs before citar loads: register after it does.
+  (require 'a3madkour-ref-notes)
+  (with-eval-after-load 'citar
+	(citar-register-notes-source
+	 'a3madkour-ref-notes
+	 (list :name "Notes"
+		   :category 'file
+		   :items #'a3madkour-ref-notes/citar-items
+		   :hasitems #'a3madkour-ref-notes/citar-hasitems
+		   :open #'find-file
+		   :create #'citar-file--create-note
+		   :transform #'file-name-nondirectory))
+	(setq citar-notes-source 'a3madkour-ref-notes)))
 
 (use-package citar-embark
   :after citar embark
@@ -2281,8 +2301,16 @@ writing an empty highlight section."
 (require 'boox-core)
 
 ;; Config-side Boox functions live in the generated config.el, which cannot be
-;; loaded wholesale in batch.  Evaluate just the boox forms out of it.
-(let ((cfg (expand-file-name "~/emacs-configs/custom/config.el")))
+;; loaded wholesale in batch.  Evaluate just the boox forms out of it -- the
+;; config.el beside this checkout, not the live one, so a worktree tests its
+;; own code.  They find notes through `a3madkour-ref-notes'.
+(defconst boox-test--custom-dir
+  (file-name-directory
+   (directory-file-name
+    (file-name-directory (or load-file-name buffer-file-name)))))
+(add-to-list 'load-path (expand-file-name "lisp" boox-test--custom-dir))
+(require 'a3madkour-ref-notes)
+(let ((cfg (expand-file-name "config.el" boox-test--custom-dir)))
   (when (file-readable-p cfg)
     (with-temp-buffer
       (insert-file-contents cfg)
@@ -2521,6 +2549,18 @@ would file pristine push output as an annotated version."
             (should (equal (a3madkour/boox--note-key) "smith2020"))))
       (ignore-errors (delete-directory dir t)))))
 
+(ert-deftest boox-note-key-reads-citekey-of-renamed-paper ()
+  "A paper's note renamed to its title still keys by its ROAM_REFS citekey."
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (f (expand-file-name "a_paper_title.org" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file f
+            (insert ":PROPERTIES:\n:ROAM_REFS: @smith2020\n:END:\n#+title: A Paper Title\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (equal (a3madkour/boox--note-key) "smith2020"))))
+      (ignore-errors (delete-directory dir t)))))
+
 (ert-deftest boox-note-key-nil-without-a-file ()
   (with-temp-buffer
     (org-mode)
@@ -2573,6 +2613,45 @@ would file pristine push output as an annotated version."
             (with-temp-file pdf (insert "different content"))
             (should (a3madkour/boox--stale-p "k1" pdf))))
       (ignore-errors (delete-file pdf))
+      (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-stale-p-finds-renamed-note-by-boox-key ()
+  "A note the rename-to-title hook moved off `<key>.org' keeps its import hash."
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (note (expand-file-name "a_book_title.org" dir))
+         (pdf (make-temp-file "boox-pdf-" nil ".pdf"))
+         (org-ref-notes dir))
+    (unwind-protect
+        (progn
+          (with-temp-file pdf (insert "content"))
+          (with-temp-file note
+            (insert (format ":PROPERTIES:\n:BOOX_KEY: k3\n:BOOX_IMPORTED_SHA: %s\n:END:\n#+title: A Book Title\n"
+                            (a3madkour/boox--file-sha256 pdf))))
+          (should-not (a3madkour/boox--stale-p "k3" pdf))
+          (should (equal (a3madkour/boox--ensure-book-note "k3" "unused") note))
+          (should (equal (directory-files dir nil "\\.org\\'") '("a_book_title.org"))))
+      (ignore-errors (delete-file pdf))
+      (ignore-errors (delete-directory dir t)))))
+
+(ert-deftest boox-ensure-book-note-records-key-and-follows-rename ()
+  (let* ((dir (make-temp-file "boox-notes-" t))
+         (org-ref-notes dir)
+         (after-save-hook
+          (list (lambda ()
+                  (let ((new (expand-file-name "renamed.org" dir)))
+                    (unless (equal buffer-file-name new)
+                      (rename-file buffer-file-name new)
+                      (set-visited-file-name new t t)))))))
+    (unwind-protect
+        (let ((note (a3madkour/boox--ensure-book-note "k4" "/x/Book.pdf")))
+          (should (equal note (expand-file-name "renamed.org" dir)))
+          (should (file-exists-p note))
+          (should (equal (a3madkour-ref-notes/key note) "k4"))
+          (should (equal (a3madkour/boox--ensure-book-note "k4" "/x/Book.pdf") note))
+          (should (equal (directory-files dir nil "\\.org\\'") '("renamed.org"))))
+      (dolist (b (buffer-list))
+        (when (and (buffer-file-name b) (string-prefix-p dir (buffer-file-name b)))
+          (kill-buffer b)))
       (ignore-errors (delete-directory dir t)))))
 
 (ert-deftest boox-stale-p-true-when-never-imported ()
@@ -2833,9 +2912,9 @@ no signal.  The ref note records the hash that was imported; embedding
 more annotations changes the hash and makes the file importable again.
 Text exports, which are still moved aside, fall back to the archive check."
   (let* ((key (a3madkour/boox--key-from-filename file))
-         (note (and key (expand-file-name (concat key ".org") org-ref-notes)))
+         (note (and key (a3madkour-ref-notes/file key)))
          (recorded
-          (when (and note (file-exists-p note))
+          (when note
             (with-current-buffer (find-file-noselect note)
               (org-entry-get (point-min) "BOOX_IMPORTED_SHA")))))
     (or (and recorded
@@ -3064,27 +3143,29 @@ so a reduction is never applied without asking."
                  :source)))
 
 (defun a3madkour/boox--ensure-book-note (key source)
-  "Return the ref-note file for book KEY, creating it against SOURCE if absent."
-  (let ((file (expand-file-name (concat key ".org") org-ref-notes)))
-    (unless (file-exists-p file)
-      (with-current-buffer (find-file-noselect file)
-        (insert (format ":PROPERTIES:\n:ID: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
+  "Return the ref-note file for book KEY, creating it against SOURCE if absent.
+The note is found by the key it declares, not by filename: the rename-to-title
+save hook moves it off `<key>.org' on its first save, so a new note records
+`:BOOX_KEY:' in its drawer and is returned as named after that save."
+  (or (a3madkour-ref-notes/file key)
+      (with-current-buffer (find-file-noselect (a3madkour-ref-notes/new-file key))
+        (insert (format ":PROPERTIES:\n:ID: %s\n:BOOX_KEY: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
                         (org-id-new)
-                        source source
+                        key source source
                         (format-time-string "[%Y-%m-%d %a]")
                         (format-time-string "[%Y-%m-%d %a]")
                         (file-name-base source)))
-        (save-buffer)))
-    file))
+        (save-buffer)
+        buffer-file-name)))
 
 (defun a3madkour/boox--note-for-key (key)
   "Return the ref-note file for KEY, creating it if necessary."
-  (let ((citar-note (expand-file-name (concat key ".org") org-ref-notes)))
+  (let ((note (a3madkour-ref-notes/file key)))
     (cond
-     ((file-exists-p citar-note) citar-note)
+     (note note)
      ((ignore-errors (citar-get-entry key))
       (citar-create-note key)
-      citar-note)
+      (a3madkour-ref-notes/new-file key))
      (t (a3madkour/boox--ensure-book-note key (a3madkour/boox--source-for-key key))))))
 
 (defun a3madkour/boox--annotated-destination (source)
@@ -3234,9 +3315,11 @@ so embedding more annotations later makes the file importable again."
 
 (defun a3madkour/boox--note-key ()
   "Return the Boox key for the current ref note, or nil.
-Books carry an explicit `:BOOX_KEY:'; papers are named after their citekey,
-so the filename base is the key."
+Books carry an explicit `:BOOX_KEY:'; a paper's key is its citekey, read
+from `:ROAM_REFS:' (the note may have been renamed to its title), else the
+filename base of a note never renamed."
   (or (org-entry-get (point-min) "BOOX_KEY")
+      (car (a3madkour-ref-notes/ref-keys (org-entry-get (point-min) "ROAM_REFS")))
       (when (buffer-file-name)
         (file-name-base (buffer-file-name)))))
 
@@ -3304,8 +3387,8 @@ deleting the tablet copy would then destroy the only annotated version."
   "Non-nil when FILE has not been imported into KEY's ref note.
 Compares FILE's hash against the note's `:BOOX_IMPORTED_SHA:'.  A note with
 no recorded hash counts as stale, since nothing has been imported from it."
-  (let* ((note (expand-file-name (concat key ".org") org-ref-notes))
-         (recorded (when (file-exists-p note)
+  (let* ((note (a3madkour-ref-notes/file key))
+         (recorded (when note
                      (with-current-buffer (find-file-noselect note)
                        (org-entry-get (point-min) "BOOX_IMPORTED_SHA")))))
     (not (and recorded
@@ -5275,6 +5358,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 ;; note (and the note's finished/abandoned closing the queue entry).
 (require 'a3madkour-library-items)
 (require 'a3madkour-library-queue)
+(require 'a3madkour-ref-notes)         ; the Boox and citar notes find notes by key
 (setq a3madkour-library/queue-file (a3madkour/org-file "queue.org"))
 (add-hook 'a3madkour-library/status-changed-functions
           #'a3madkour/library-close-queue-entry)
