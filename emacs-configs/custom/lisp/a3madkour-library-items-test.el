@@ -113,6 +113,17 @@
   (a3madkour-library-items-test--with-note f "#+title: x\n\n* Notes :site:\n*Bold* see [[http://x.org][the site]] now! More.\n"
     (should (equal (a3madkour-library/preview f) "Bold see the site now!"))))
 
+(ert-deftest a3madkour-library-items-test/preview-stops-at-paragraph-end ()
+  "A first line with no full stop is not run into the next paragraph or list:
+the 2026-10-30 TAPL row read \"...single line - It must be a single *.\""
+  (dolist (c '(("I don't know why\n- It must be.\n- Save.\n" . "I don't know why")
+               ("First para no stop\n\nSecond. More.\n" . "First para no stop")
+               ("Intro\n  1. Step one.\n" . "Intro")
+               ("- Item one. Two.\n- Item two.\n" . "Item one.")
+               ("Line one\ncontinues. Next.\n" . "Line one continues.")))
+    (a3madkour-library-items-test--with-note f (concat "#+title: x\n\n* Notes :site:\n" (car c))
+      (should (equal (a3madkour-library/preview f) (cdr c))))))
+
 (ert-deftest a3madkour-library-items-test/preview-prefers-drawer ()
   (a3madkour-library-items-test--with-note f
       ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_PREVIEW: Hand written.\n:END:\n* Notes :site:\nOther text.\n"

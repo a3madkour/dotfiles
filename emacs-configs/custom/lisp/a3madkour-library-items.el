@@ -341,13 +341,23 @@ Signals an error when FILE has no usable `:site:' section."
 (defun a3madkour-library/preview (file)
   "FILE's `LIBRARY_PREVIEW', else the first sentence of its site body.
 Headings, `#+' keyword lines (captions, block delimiters) and table rows
-are dropped before the sentence is taken."
+are dropped; the sentence is taken from the first paragraph only, which
+ends at a blank line or where a list starts.  A list opening the body
+gives its first item, marker dropped."
   (or (a3madkour-library--with-file file
         (a3madkour-pub-author--drawer-get "preview"))
       (let ((body (a3madkour-library/site-body file)))
         (when body
-          (let* ((s (replace-regexp-in-string
-                     a3madkour-library--preview-noise-re "" body))
+          (let* ((s (string-trim-left
+                     (replace-regexp-in-string
+                      a3madkour-library--preview-noise-re "" body)))
+                 (s (replace-regexp-in-string
+                     "\\`\\(?:[-+*]\\|[0-9]+[.)]\\)[ \t]+" "" s))
+                 (s (if (string-match
+                         "\n[ \t]*\n\\|\n[ \t]*\\(?:[-+]\\|[0-9]+[.)]\\)[ \t]\\|\n[ \t]+\\*[ \t]"
+                         s)
+                        (substring s 0 (match-beginning 0))
+                      s))
                  (s (replace-regexp-in-string
                      "\\[\\[[^]]*\\]\\[\\([^]]*\\)\\]\\]" "\\1" s))
                  (s (replace-regexp-in-string
