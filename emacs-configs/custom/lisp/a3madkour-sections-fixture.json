@@ -9,7 +9,7 @@
         "lastmod": {"type": "date", "required": true, "from": "pipeline"},
         "draft": {"type": "bool", "required": true, "from": "pipeline"},
         "summary": {"type": "text", "required": true},
-        "tags": {"type": "list", "required": true, "from": "pipeline", "source": "filetags"},
+        "tags": {"type": "list", "required": true, "from": "pipeline"},
         "series": {"type": "text", "required": true, "from": "pipeline"},
         "series_order": {"type": "int", "required": true, "from": "pipeline"},
         "toc": {"type": "bool", "required": true, "from": "pipeline"},
