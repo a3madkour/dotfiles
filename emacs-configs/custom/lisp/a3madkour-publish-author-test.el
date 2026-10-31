@@ -65,6 +65,24 @@
     (should (string-match-p "^#\\+HUGO_SECTION:[[:space:]]+essays$"
                             (buffer-string)))))
 
+(ert-deftest a3madkour-pub-author-test/mark-gives-a-file-without-id-one ()
+  "An essay is a plain org file, not an org-roam note, so nothing gave it an
+:ID:; the publish history keys every page by it.  Mark adds a file-level
+ID in a drawer that is the first element, ahead of the keywords."
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: Test\n#+filetags: :t:\n#+HUGO_SUMMARY: S\n\n* Heading\n")
+    (a3-publish-mark "essays")
+    (should (string-match-p "\\`:PROPERTIES:\n:ID: [-[:xdigit:]]\\{36\\}\n:END:\n#\\+"
+                            (buffer-string)))
+    (should (eq (org-element-type (org-element-at-point (point-min))) 'property-drawer))
+    (let ((id (org-entry-get (point-min) "ID")))
+      (should id)
+      ;; Marking again keeps the same ID.
+      (a3-publish-mark "essays")
+      (should (equal (org-entry-get (point-min) "ID") id))
+      (should (= 1 (how-many "^:ID:" (point-min) (point-max)))))))
+
 (ert-deftest a3madkour-pub-author-test/mark-keeps-file-property-drawer-first ()
   "S1 row 10: an org-roam note opens with its file-level :PROPERTIES: drawer.
 Org only reads that drawer as the file's properties when it is the first

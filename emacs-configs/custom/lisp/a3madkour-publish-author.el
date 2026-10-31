@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'org)
+(require 'org-id)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-publish-frontmatter)  ; editorial-tag filter
@@ -292,12 +293,26 @@ Only a drawer that is the first thing in the buffer counts."
               (and (not (string-empty-p v)) v))))))))
 
 (defun a3madkour-pub-author--drawer-put (name value)
-  "Set field NAME's file-level property to VALUE, first-element drawer.
+  "Set field NAME's file-level property (`LIBRARY_<NAME>') to VALUE."
+  (a3madkour-pub-author--file-property-put
+   (a3madkour-pub-author--drawer-property name) value))
+
+(defun a3madkour-pub-author--ensure-id ()
+  "Give the buffer a file-level `:ID:' when it has none.
+An essay or poem is a plain org file, not an org-roam note, so nothing
+else creates one; the publish history keys every page by it."
+  ;; Hoist first: org reads a drawer as the file's properties only when it
+  ;; is the first element, so a displaced one would look ID-less.
+  (a3madkour-pub-author--hoist-file-property-drawer)
+  (unless (org-entry-get (point-min) "ID")
+    (a3madkour-pub-author--file-property-put "ID" (org-id-new))))
+
+(defun a3madkour-pub-author--file-property-put (key value)
+  "Set file-level property KEY to VALUE, first-element drawer.
 Replaces an existing line in place, else appends before `:END:'; with no
 leading drawer, creates one at the top (hoisting a mis-placed one first)."
   (a3madkour-pub-author--hoist-file-property-drawer)
-  (let ((key (a3madkour-pub-author--drawer-property name))
-        (case-fold-search t))
+  (let ((case-fold-search t))
     (save-excursion
       (goto-char (point-min))
       (if (not (looking-at a3madkour-pub-author--file-drawer-re))
@@ -418,6 +433,7 @@ nil if declined."
                                           section (string-join stale ", ")))))
            (plan (a3madkour-pub-author--gather section)))
       ;; Everything above only read and prompted; everything below writes.
+      (a3madkour-pub-author--ensure-id)
       (a3madkour-pub-author--upsert-keyword "HUGO_PUBLISH" "t")
       (a3madkour-pub-author--upsert-keyword "HUGO_SECTION" section)
       (when remove
