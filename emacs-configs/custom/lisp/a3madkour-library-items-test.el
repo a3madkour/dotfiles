@@ -107,27 +107,15 @@
   (a3madkour-library-items-test--with-note f "#+title: x\n\n* Other\nx\n"
     (should-not (a3madkour-library/site-body f))))
 
-(ert-deftest a3madkour-library-items-test/preview-falls-back-to-first-sentence ()
-  (a3madkour-library-items-test--with-note f "#+title: x\n\n* Notes :site:\nFirst one. Second.\n"
-    (should (equal (a3madkour-library/preview f) "First one.")))
-  (a3madkour-library-items-test--with-note f "#+title: x\n\n* Notes :site:\n*Bold* see [[http://x.org][the site]] now! More.\n"
-    (should (equal (a3madkour-library/preview f) "Bold see the site now!"))))
-
-(ert-deftest a3madkour-library-items-test/preview-stops-at-paragraph-end ()
-  "A first line with no full stop is not run into the next paragraph or list:
-the 2026-10-30 TAPL row read \"...single line - It must be a single *.\""
-  (dolist (c '(("I don't know why\n- It must be.\n- Save.\n" . "I don't know why")
-               ("First para no stop\n\nSecond. More.\n" . "First para no stop")
-               ("Intro\n  1. Step one.\n" . "Intro")
-               ("- Item one. Two.\n- Item two.\n" . "Item one.")
-               ("Line one\ncontinues. Next.\n" . "Line one continues.")))
-    (a3madkour-library-items-test--with-note f (concat "#+title: x\n\n* Notes :site:\n" (car c))
-      (should (equal (a3madkour-library/preview f) (cdr c))))))
-
-(ert-deftest a3madkour-library-items-test/preview-prefers-drawer ()
+(ert-deftest a3madkour-library-items-test/preview-only-from-drawer ()
+  "The preview is the note's own `LIBRARY_PREVIEW' or nothing: an excerpt of
+the site section read as a stray quote on the 2026-10-30 TAPL card."
   (a3madkour-library-items-test--with-note f
       ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:LIBRARY_PREVIEW: Hand written.\n:END:\n* Notes :site:\nOther text.\n"
-    (should (equal (a3madkour-library/preview f) "Hand written."))))
+    (should (equal (a3madkour-library/preview f) "Hand written.")))
+  (a3madkour-library-items-test--with-note f
+      ":PROPERTIES:\n:LIBRARY_MEDIA_TYPE: book\n:END:\n* Notes :site:\nFirst one. Second.\n"
+    (should-not (a3madkour-library/preview f))))
 
 (defun a3madkour-library-items-test--body (text)
   "Site body of a note whose text is TEXT."
@@ -141,25 +129,12 @@ the 2026-10-30 TAPL row read \"...single line - It must be a single *.\""
     (should (string-match-p "More\\." b))
     (should-not (string-match-p "private\\|hidden\\|abc" b))))
 
-(ert-deftest a3madkour-library-items-test/preview-ignores-logbook ()
-  (a3madkour-library-items-test--with-note f
-      "* Notes :site:\n:PROPERTIES:\n:ID: a\n:END:\n:LOGBOOK:\nprivate thought.\n:END:\nPublic.\n"
-    (should (equal (a3madkour-library/preview f) "Public."))))
-
 (ert-deftest a3madkour-library-items-test/site-body-drops-noexport-and-comment-subtrees ()
   (let ((b (a3madkour-library-items-test--body
             "* Notes :site:\nPublic.\n** Private sub :noexport:\nSECRET\n*** Deeper\nSECRET2\n** COMMENT Draft\nSECRET3\n** Kept\nAlso public.\n")))
     (should (string-match-p "Public\\." b))
     (should (string-match-p "Also public\\." b))
     (should-not (string-match-p "SECRET\\|Private sub\\|Draft" b))))
-
-(ert-deftest a3madkour-library-items-test/preview-links ()
-  (dolist (c '(("[[id:abc-123]] is good. Next." . "is good.")
-               ("See [[file:x.org]] here. Next." . "See here.")
-               ("Go [[https://x.org/a]] now. Next." . "Go https://x.org/a now.")
-               ("Go [[https://x.org][site]] now. Next." . "Go site now.")))
-    (a3madkour-library-items-test--with-note f (concat "* Notes :site:\n" (car c) "\n")
-      (should (equal (a3madkour-library/preview f) (cdr c))))))
 
 (ert-deftest a3madkour-library-items-test/site-heading-selection ()
   (should-not (a3madkour-library-items-test--body "* COMMENT Notes :site:\nSECRET\n"))
@@ -190,11 +165,6 @@ the 2026-10-30 TAPL row read \"...single line - It must be a single *.\""
             "* Notes :site:\nPublic.\n#+begin_src python\n# code comment\nx = 1\n#+end_src\n")))
     (should (string-match-p "^# code comment$" b))))
 
-(ert-deftest a3madkour-library-items-test/preview-skips-comment-line ()
-  (a3madkour-library-items-test--with-note f
-      "* Notes :site:\n# private aside.\nPublic first. Second.\n"
-    (should (equal (a3madkour-library/preview f) "Public first."))))
-
 (ert-deftest a3madkour-library-items-test/site-body-comment-only-is-nil ()
   "A section holding only comments is blank: share and the gate refuse it."
   (should-not (a3madkour-library-items-test--body
@@ -217,14 +187,6 @@ never the site heading; a later clean one still is."
               "* Notes :site:\nPublic.\n** Old :ARCHIVE:\nSECRET\n** Mine :private:\nSECRET2\n** Kept\nOK.\n")))
       (should (string-match-p "OK\\." b))
       (should-not (string-match-p "SECRET\\|Old\\|Mine" b)))))
-
-(ert-deftest a3madkour-library-items-test/preview-skips-headings-keywords-tables ()
-  (dolist (c '("** Sub heading\nReal sentence. Next."
-               "#+caption: A caption.\n#+name: fig\nReal sentence. Next."
-               "| a. | b |\n|----+---|\n| c. | d |\nReal sentence. Next."
-               "#+begin_quote\nReal sentence. Next.\n#+end_quote"))
-    (a3madkour-library-items-test--with-note f (concat "* Notes :site:\n" c "\n")
-      (should (equal (a3madkour-library/preview f) "Real sentence.")))))
 
 (defmacro a3madkour-library-items-test--with-copy (var text &rest body)
   "Write TEXT to a note in a temp dir, bind VAR to its site-only copy's

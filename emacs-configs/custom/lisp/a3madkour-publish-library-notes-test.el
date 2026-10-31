@@ -78,7 +78,7 @@ With BUNDLE, also write its garden bundle `content/garden/<slug>/index.md'."
   (a3madkour-pub-library-notes-test--with-site
     (let ((f (a3madkour-pub-library-notes-test--note
               "example-book-one" :title "Example Book One"
-              :extra-drawer ":LIBRARY_PROGRESS_PCT: 40\n")))
+              :extra-drawer ":LIBRARY_PROGRESS_PCT: 40\n:LIBRARY_PREVIEW: Lorem ipsum dolor.\n")))
       (should (equal (a3madkour-pub-library-notes/row f)
                      '(:slug "example-book-one" :note_slug "example-book-one"
                        :title "Example Book One" :creator "Example Author"
