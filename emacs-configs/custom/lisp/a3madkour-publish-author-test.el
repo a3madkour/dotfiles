@@ -83,6 +83,35 @@ ID in a drawer that is the first element, ahead of the keywords."
       (should (equal (org-entry-get (point-min) "ID") id))
       (should (= 1 (how-many "^:ID:" (point-min) (point-max)))))))
 
+(ert-deftest a3madkour-pub-author-test/mark-essay-stamps-publication-date ()
+  "An essay's date is its publication date: mark writes `#+date:' today when
+the file has none (the 2026-10-31 test essay published with no date and
+failed check_fixtures), and never moves one already there."
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n#+filetags: :pl:\n#+HUGO_SUMMARY: S\n\n* H\n")
+    (a3-publish-mark "essays")
+    (should (string-match-p (concat "^#\\+date: " (format-time-string "%Y-%m-%d") "$")
+                            (buffer-string))))
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n#+date: 2026-01-02\n#+filetags: :pl:\n#+HUGO_SUMMARY: S\n\n* H\n")
+    (a3-publish-mark "essays")
+    (should (string-match-p "^#\\+date: 2026-01-02$" (buffer-string)))
+    (should (= 1 (how-many "^#\\+date:" (point-min) (point-max))))))
+
+(ert-deftest a3madkour-pub-author-test/mark-tags-refuse-editorial-only ()
+  "Tags made only of editorial tags (TODO, ...) would be filtered out of the
+page, so the prompt asks again instead of writing them."
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+title: T\n#+date: 2026-01-02\n#+HUGO_SUMMARY: S\n\n* H\n")
+    (let ((answers (list "TODO" "pl")))
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (&rest _) (pop answers))))
+        (a3-publish-mark "essays")))
+    (should (string-match-p "^#\\+filetags: :pl:$" (buffer-string)))))
+
 (ert-deftest a3madkour-pub-author-test/mark-keeps-file-property-drawer-first ()
   "S1 row 10: an org-roam note opens with its file-level :PROPERTIES: drawer.
 Org only reads that drawer as the file's properties when it is the first
@@ -544,7 +573,7 @@ bundle exists is listed once."
                    '("description" "status" "theme" "supporting_notes" "started")))
     (should-not (a3madkour-pub-author--fields-to-fill "garden"))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "essays"))
-                   '("summary" "tags")))
+                   '("date" "summary" "tags")))
     (should-not (a3madkour-pub-author--fields-to-fill "library/reading"))
     (should (equal (mapcar #'car (a3madkour-pub-author--fields-to-fill "recipes"))
                    '("summary")))
@@ -918,7 +947,7 @@ publish the whole note.  The refusal comes before any prompt or write."
                     ("streams" "platforms" "category" "archive_status")
                     ("library/reading") ("library/listening")
                     ("library/playing") ("library/watching")
-                    ("essays" "summary" "tags") ("recipes" "summary"))))
+                    ("essays" "date" "summary" "tags") ("recipes" "summary"))))
       (dolist (e expect)
         (with-temp-buffer
           (org-mode)

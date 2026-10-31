@@ -97,6 +97,39 @@ which flows through to finish-publish."
     (should (a3-pub-async-run-p run-seen))
     (should (cl-find 'finish calls :key #'car))))
 
+;; -- contract gate --
+
+(ert-deftest a3madkour-pub-delib-test/missing-required-field-refused-before-handler ()
+  "A note missing a field its contract requires is refused before its handler
+writes anything, naming the fix, as living publish does: the 2026-10-31 test
+essay went out with no date and failed check_fixtures."
+  (let ((file (make-temp-file "delib-gate-" nil ".org"))
+        (ran nil) (finish-status 'unset) (logged nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert ":PROPERTIES:\n:ID: 3e650e6f-2222-0000-0000-000000000000\n:END:\n"
+                    "#+title: T\n#+filetags: :pl:\n#+HUGO_SUMMARY: S\n"
+                    "#+HUGO_SECTION: essays\n#+HUGO_PUBLISH: t\n\n* H\nBody.\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+                    ((symbol-function 'a3-pub-async/finish-publish)
+                     (lambda (_run &rest kw) (setq finish-status (plist-get kw :status))))
+                    ((symbol-function 'a3-pub-async/log-step)
+                     (lambda (_run label _status &rest kw)
+                       (push (cons label (plist-get kw :err-snippet)) logged)))
+                    ((symbol-function 'a3madkour-pub-essays/publish-essay-file)
+                     (lambda (&rest _) (setq ran t))))
+            (let ((a3-pub-async--in-flight-run nil))
+              (with-a3-pub-async-sync
+               (a3-publish-deliberate file)))))
+      (delete-file file))
+    (should-not ran)
+    (should (eq finish-status 'err))
+    (should (cl-some (lambda (l) (and (equal (car l) "contract")
+                                      (string-match-p "missing required date.*a3-publish-mark"
+                                                      (cdr l))))
+                     logged))))
+
 ;; -- P4.2: deliberate handler-error aggregation --
 
 (ert-deftest a3madkour-pub-delib-test/handler-throw-reports-err-and-logs ()

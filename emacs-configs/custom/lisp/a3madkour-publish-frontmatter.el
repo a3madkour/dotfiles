@@ -317,6 +317,10 @@ Returns the normalized alist."
       ;; P2.11: set unconditionally — an explicit 0 or negative order is a
       ;; legitimate author value, not a reason to revert to the default.
       (setf (alist-get 'series_order out) (string-to-number src-so)))
+    ;; Editorial tags (TODO, ...) never publish, as in garden.
+    (when-let* ((tags (alist-get 'tags out)))
+      (setf (alist-get 'tags out)
+            (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
     ;; tags default: emit tags: [] when absent (linter requires the key).
     (unless (assq 'tags out)
       (push (cons 'tags '()) out))

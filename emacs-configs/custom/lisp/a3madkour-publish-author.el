@@ -328,11 +328,13 @@ leading drawer, creates one at the top (hoisting a mis-placed one first)."
 (defun a3madkour-pub-author--write-field (name type value &optional source)
   "Write field NAME (of TYPE) with VALUE into the buffer preamble.
 A field whose SOURCE is `filetags' is written as tags on `#+filetags:';
-one whose SOURCE is `drawer' as a `LIBRARY_*' file-level property."
+one whose SOURCE is `drawer' as a `LIBRARY_*' file-level property, one
+whose SOURCE is `date' as `#+date:'."
   (let ((kw (cdr (assoc name a3madkour-pub-author--keyword-fields))))
     (cond
      ((equal source "filetags") (a3madkour-pub-author--add-filetags value))
      ((equal source "drawer") (a3madkour-pub-author--drawer-put name value))
+     ((equal source "date") (a3madkour-pub-author--upsert-keyword "date" value))
      (kw (a3madkour-pub-author--upsert-keyword kw value))
      (t (a3madkour-pub-author--upsert-cfm-key
          name (a3madkour-pub-author--cfm-value type value))))))
@@ -668,7 +670,7 @@ the custom front matter key."
 
 (defun a3madkour-pub-author--source-satisfied-p (name source)
   "Non-nil when the buffer gives pipeline field NAME a value via SOURCE.
-`title' is the `#+title:' keyword.  `drawer' is a non-blank file-level
+`title' is the `#+title:' keyword, `date' the `#+date:' one.  `drawer' is a non-blank file-level
 `LIBRARY_*' property.  `filetags' needs a tag that survives
 the pipeline's editorial filter: a note tagged only `:TODO:' exports no
 tags key at all."
@@ -678,6 +680,7 @@ tags key at all."
                       (a3madkour-pub-author--filetags))
                      t))
     ("drawer" (and (a3madkour-pub-author--drawer-get name) t))
+    ("date" (and (a3madkour-pub-keywords/extract "DATE") t))
     (_ (error "a3-publish-mark: field %s has unknown source %S" name source))))
 
 (defun a3madkour-pub-author--add-filetags (tags)
@@ -702,6 +705,10 @@ tags key at all."
        ((cl-find-if-not (lambda (tg) (string-match-p a3madkour-pub-author--org-tag-re tg))
                         tags)
         (message "%s: org tags may use only letters, digits, _ @ # %%" name))
+       ;; The pipeline filters editorial tags (TODO, ...) out of the page.
+       ((and tags (null (a3madkour-pub-frontmatter/filter-editorial-tags tags)))
+        (message "%s: %s are editorial and never published; give a real tag"
+                 name (string-join tags ", ")))
        (t (setq done t))))
     (or tags 'skip)))
 

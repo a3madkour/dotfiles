@@ -41,7 +41,7 @@ is not checked here (see `a3madkour-pub-living--dispatch')."
               (push (list section file handler) triples))))))
     (nreverse triples)))
 
-(defun a3madkour-pub-living--contract-gap (file section)
+(defun a3madkour-pub-living/contract-gap (file section)
   "Why FILE cannot publish under SECTION's contract, or nil when it can.
 A library item note is refused first when SECTION is not garden (only
 the garden handler narrows a note to its `:site:' section; any other
@@ -102,7 +102,7 @@ publishing a bundle the site would reject (S1 row 24)."
          (file (nth 1 triple))
          (handler (nth 2 triple))
          (gap (and (fboundp handler)
-                   (a3madkour-pub-living--contract-gap file section))))
+                   (a3madkour-pub-living/contract-gap file section))))
     (cond
      ((not (fboundp handler))
       (let ((msg (format "%s: handler `%s' for section %s is not loaded"

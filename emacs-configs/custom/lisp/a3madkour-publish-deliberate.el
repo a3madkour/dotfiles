@@ -17,6 +17,7 @@
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-essays)
 (require 'a3madkour-publish-poetry)
+(require 'a3madkour-publish-living)    ; the contract gate
 
 (defun a3madkour-pub-deliberate--handler-for (section file)
   "The deliberate handler for SECTION (FILE is for the message).
@@ -41,7 +42,10 @@ sentinel chain completes; finish-publish then fires."
   (interactive "fOrg file or ID: ")
   (let* ((file (a3madkour-pub--resolve-file-or-id file-or-id))
          (section (a3madkour-pub/note-section file))
-         (handler (a3madkour-pub-deliberate--handler-for section file)))
+         (handler (a3madkour-pub-deliberate--handler-for section file))
+         ;; The same gate living publish applies: a note missing a field its
+         ;; contract requires never reaches its handler.
+         (gap (a3madkour-pub-living/contract-gap file section)))
     (let* ((planned-steps-fn (intern (format "%s/planned-steps" handler)))
            (planned (if (fboundp planned-steps-fn)
                         (funcall planned-steps-fn file)
@@ -50,6 +54,11 @@ sentinel chain completes; finish-publish then fires."
                  :scope 'deliberate
                  :source-label (format "%s/%s" section (file-name-base file))
                  :planned-steps planned)))
+      (if gap
+          (progn
+            (message "a3-publish-deliberate: %s" gap)
+            (a3-pub-async/log-step run "contract" :err :err-snippet gap)
+            (a3-pub-async/finish-publish run :scope 'deliberate :status 'err))
       (condition-case err
           (funcall handler file run
                    :on-done
@@ -60,7 +69,7 @@ sentinel chain completes; finish-publish then fires."
         (error
          (a3-pub-async/log-step run "handler-error" :err
                                 :err-snippet (error-message-string err))
-         (a3-pub-async/finish-publish run :scope 'deliberate :status 'err))))))
+         (a3-pub-async/finish-publish run :scope 'deliberate :status 'err)))))))
 
 ;;;###autoload
 (defun a3-unpublish-deliberate (file-or-id)

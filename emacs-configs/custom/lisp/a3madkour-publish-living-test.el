@@ -525,7 +525,7 @@ finish-publish, on the live garden item notes of the run's triples only."
                                (list "garden" draft 'ok-h)
                                (list "garden" plain 'ok-h)
                                (list "garden" "/no/such/file.org" 'ok-h))))
-                      ((symbol-function 'a3madkour-pub-living--contract-gap)
+                      ((symbol-function 'a3madkour-pub-living/contract-gap)
                        #'ignore)
                       ((symbol-function 'ok-h)
                        (lambda (f _r &rest rest)
@@ -605,7 +605,7 @@ collector report `err' through the run, which still finishes once."
                       ((symbol-function 'a3madkour-pub-living--collect-triples)
                        (lambda () (list (list "garden" src 'ok-h))))
                       ;; Only the collector may fail this run.
-                      ((symbol-function 'a3madkour-pub-living--contract-gap) #'ignore)
+                      ((symbol-function 'a3madkour-pub-living/contract-gap) #'ignore)
                       ((symbol-function 'ok-h)
                        (lambda (_f _r &rest rest)
                          (funcall (plist-get rest :on-done) 'ok)))

@@ -691,6 +691,23 @@ alist value (if any) passes through unchanged."
               (should (assq k out)))))
       (delete-file tmp))))
 
+(ert-deftest a3madkour-pub-frontmatter-test/essays-editorial-tags-filtered ()
+  "Editorial tags (TODO, ...) never reach an essay's tags, as in garden: the
+2026-10-30 test essay published `tags: [\"TODO\"]'.  The key stays (the
+linter requires it), empty when every tag was editorial."
+  (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file tmp (insert ":PROPERTIES:\n:ID: e1\n:END:\n#+title: x\n"))
+          (should (equal (alist-get 'tags (a3madkour-pub-frontmatter/normalize
+                                           'essays '((title . "x") (tags "TODO" "pl")) tmp))
+                         '("pl")))
+          (let ((out (a3madkour-pub-frontmatter/normalize
+                      'essays '((title . "x") (tags "TODO")) tmp)))
+            (should (assq 'tags out))
+            (should-not (alist-get 'tags out))))
+      (delete-file tmp))))
+
 (ert-deftest a3madkour-pub-frontmatter-test/essays-draft-defaults-false ()
   "B.4 Task 3: absent draft → false."
   (let ((tmp (make-temp-file "essays-norm-" nil ".org")))
