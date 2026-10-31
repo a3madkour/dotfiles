@@ -404,6 +404,9 @@ run finishes `ok'."
 (defvar a3-pub-living-test--item-section "garden"
   "The `#+HUGO_SECTION:' (and triple section) `--gate-item' writes.")
 
+(defvar a3-pub-living-test--item-publish "t"
+  "The `#+HUGO_PUBLISH:' value `--gate-item' writes.")
+
 (defmacro a3-pub-living-test--gate-item (site &rest body)
   "Run `a3-publish-living' over one garden library item note.
 SITE is the text of the note after its preamble (its headings).  Binds
@@ -419,7 +422,7 @@ SITE is the text of the note after its preamble (its headings).  Binds
                      ":LIBRARY_CREATOR: Example Author\n:END:\n"
                      "#+title: Example Book\n#+HUGO_SECTION: "
                      a3-pub-living-test--item-section "\n"
-                     "#+HUGO_PUBLISH: t\n#+filetags: :Ref:\n"
+                     "#+HUGO_PUBLISH: " a3-pub-living-test--item-publish "\n#+filetags: :Ref:\n"
                      ,site))
            (a3-pub-living-test--capture-finish-status captured
              (cl-letf (((symbol-function 'a3madkour-pub-living--collect-triples)
@@ -453,6 +456,17 @@ the gate refuses it before the section contract, naming the fix."
     (should-not ran)
     (should (eq captured 'err))
     (should (a3-pub-living-test--no-site-logged-p file logged))))
+
+(ert-deftest a3madkour-pub-living-test/unshared-item-without-site-reaches-its-handler ()
+  "An unshared item note (`#+HUGO_PUBLISH: nil') is not held to the publish
+contract: its handler must run to withdraw its page.  On 2026-10-30 the
+gate refused the unshared TAPL note, the run went err, and the stale page
+stayed up."
+  (let ((a3-pub-living-test--item-publish "nil"))
+    (a3-pub-living-test--gate-item "* Highlights\nLorem ipsum.\n"
+      (should ran)
+      (should (eq captured 'ok))
+      (should-not (a3-pub-living-test--no-site-logged-p file logged)))))
 
 (ert-deftest a3madkour-pub-living-test/item-with-whitespace-site-section-is-not-published ()
   "A `:site:' heading with only whitespace under it is no site section."

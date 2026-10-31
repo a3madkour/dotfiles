@@ -47,8 +47,10 @@ A library item note is refused first when SECTION is not garden (only
 the garden handler narrows a note to its `:site:' section; any other
 would publish the whole note), then when it has no usable `:site:'
 section: there is nothing in it that may publish.  A missing file is
-left to its handler to report."
-  (when (file-readable-p file)
+left to its handler to report.  A note not marked to publish (no
+`#+HUGO_PUBLISH:' state) owes no contract: its handler withdraws it."
+  (when (and (file-readable-p file)
+             (a3madkour-pub/published-p file))
     (cond
      ((and (a3madkour-library/item-p file) (not (equal section "garden")))
       (format "%s: library item notes publish only to garden (section %s)"
