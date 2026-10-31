@@ -349,6 +349,35 @@ Mirror the existing `flavor' / `author' strip pattern in --normalize-garden."
                     "/tmp/x.org" :drawer "2026-05-30" :keyword "2026-05-29")
                    "2026-05-30"))))
 
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-later-of-drawer-and-keyword ()
+  "With both a drawer date and #+HUGO_LASTMOD:, the later one wins."
+  (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+             (lambda (_) "2024-01-01")))
+    (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                    "/tmp/x.org" :drawer "2026-05-29" :keyword "2026-05-30")
+                   "2026-05-30"))))
+
+(ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-reads-source-dates ()
+  "The source's own drawer and keyword count even when the caller passes
+neither (ox-hugo's export drops the drawer): the 2026-10-30 TAPL note read
+`tended 1y ago' from a stale #+HUGO_LASTMOD: beside today's drawer date."
+  (let ((f (make-temp-file "fm-src-" nil ".org")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)
+                   (lambda (_) "2023-01-01")))
+          (with-temp-file f
+            (insert ":PROPERTIES:\n:ID: x\n:LAST_MODIFIED: [2026-10-30 Fri]\n:END:\n#+title: X\n#+HUGO_LASTMOD:[2024-12-18]\n* H\n:PROPERTIES:\n:LAST_MODIFIED: [2027-01-01 Fri]\n:END:\n"))
+          (should (equal (a3madkour-pub-frontmatter/last-modified-cascade f)
+                         "2026-10-30"))
+          (should (equal (a3madkour-pub-frontmatter/last-modified-cascade
+                          f :keyword "2024-12-18")
+                         "2026-10-30"))
+          (with-temp-file f
+            (insert "#+title: X\n#+HUGO_LASTMOD: 2025-02-03\n"))
+          (should (equal (a3madkour-pub-frontmatter/last-modified-cascade f)
+                         "2025-02-03")))
+      (delete-file f))))
+
 (ert-deftest a3madkour-pub-frontmatter--last-modified-cascade-keyword-second ()
   "#+HUGO_LASTMOD: keyword wins when drawer absent."
   (cl-letf (((symbol-function 'a3madkour-pub-history/git-mtime-of-file)

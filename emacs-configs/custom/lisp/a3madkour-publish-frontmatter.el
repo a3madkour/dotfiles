@@ -184,13 +184,43 @@ Per-section handlers `let'-bind this to the note's manifest-recorded
 last_modified around their `normalize' call so the cascade can prefer it over a
 churning filesystem mtime for never-committed notes.  nil = absent.")
 
+(defun a3madkour-pub-frontmatter--source-dates (file)
+  "(DRAWER . KEYWORD): org source FILE's own last-modified dates, or nil.
+DRAWER is the YYYY-MM-DD in the file-level `:LAST_MODIFIED:' (an org
+timestamp such as `[2026-10-30 Fri]'); KEYWORD the one in a
+`#+HUGO_LASTMOD:' before the first heading.  Either may be nil.  Read from
+the source because ox-hugo's export carries the keyword but not the drawer."
+  (when (and (stringp file) (string-suffix-p ".org" file) (file-readable-p file))
+    (with-temp-buffer
+      (insert-file-contents file nil 0 16384)
+      (let ((case-fold-search t)
+            (date "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)")
+            (head-end (save-excursion
+                        (goto-char (point-min))
+                        (if (re-search-forward "^\\*+ " nil t)
+                            (match-beginning 0)
+                          (point-max))))
+            drawer keyword)
+        (goto-char (point-min))
+        (skip-chars-forward " \t\n")
+        (when (looking-at "[ \t]*:PROPERTIES:[ \t]*$")
+          (let ((end (save-excursion (re-search-forward "^[ \t]*:END:" head-end t))))
+            (when (and end (re-search-forward
+                            (concat "^[ \t]*:LAST_MODIFIED:.*?" date) end t))
+              (setq drawer (match-string 1)))))
+        (goto-char (point-min))
+        (when (re-search-forward (concat "^#\\+HUGO_LASTMOD:.*?" date) head-end t)
+          (setq keyword (match-string 1)))
+        (cons drawer keyword)))))
+
 (cl-defun a3madkour-pub-frontmatter/last-modified-cascade
     (file &key drawer keyword prior-recorded)
   "Resolve the last_modified value for FILE via the cascade.
 
 Cascade order:
-  1. DRAWER (the :LAST_MODIFIED: property if present in the source)
-  2. KEYWORD (the #+HUGO_LASTMOD: keyword value if present)
+  1-2. the later of DRAWER (the :LAST_MODIFIED: property) and KEYWORD (the
+     #+HUGO_LASTMOD: value); each not passed is read from FILE's own org
+     source (`--source-dates'), so a stale keyword cannot hide a newer edit
   3. git-mtime via `a3madkour-pub-history/git-mtime-of-file'
   4. PRIOR-RECORDED (the note's last_modified from a previous publish) — P2.14
   5. filesystem mtime via `a3madkour-pub-history/filesystem-mtime-of-file'
@@ -214,8 +244,13 @@ Empty-string values for DRAWER / KEYWORD / PRIOR-RECORDED are treated as
 absent: Elisp `\"\"' is truthy so a bare `or' would short-circuit on it,
 returning an empty string that the downstream linter rejects."
   (cl-flet ((nonempty (v) (and (stringp v) (not (string-empty-p v)) v)))
-    (or (nonempty drawer)
-        (nonempty keyword)
+    (let ((src (and (not (and (nonempty drawer) (nonempty keyword)))
+                    (a3madkour-pub-frontmatter--source-dates file))))
+      (setq drawer (or (nonempty drawer) (car src))
+            keyword (or (nonempty keyword) (cdr src))))
+    (or (and drawer keyword (if (string> keyword drawer) keyword drawer))
+        drawer
+        keyword
         (nonempty (a3madkour-pub-history/git-mtime-of-file file))
         ;; P2.14: the explicit PRIOR-RECORDED key, else the ambient value the
         ;; handler bound around this publish's normalize (the note's previously
