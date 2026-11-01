@@ -17,6 +17,7 @@
 (require 'org-element)
 (require 'a3madkour-publish-bib)
 (require 'a3madkour-publish-paths)
+(require 'a3madkour-ref-notes)
 
 ;; Forward declaration only — the real defcustom lives in
 ;; `a3madkour-publish-history.el'.  We avoid `require'ing history here
@@ -192,7 +193,7 @@ recorded by org-element-parse-buffer."
 
 (defcustom a3madkour-pub-citations/ref-notes-dir nil
   "Directory holding per-cite-key reference org notes.  For a cite key
-KEY, F probes for `<ref-notes-dir>/<KEY>.org' to auto-populate the
+KEY, F finds the note via `a3madkour-ref-notes/file' to auto-populate the
 :notes_ref yaml field.  Set in config.org's Publishing paths block (see
 `a3madkour-publish-paths')."
   :type '(choice (const :tag "Not set" nil) directory)
@@ -235,10 +236,10 @@ or nil if not found."
 (defun a3madkour-pub-citations--lookup-notes-ref (cite-key)
   "If a ref-note exists for CITE-KEY, is published as garden, and resolves
 in the manifest snapshot, return its garden slug.  Otherwise nil."
-  (let ((path (expand-file-name
-               (format "%s.org" cite-key)
+  (let ((path (a3madkour-ref-notes/file
+               cite-key
                (a3madkour-pub/path 'a3madkour-pub-citations/ref-notes-dir))))
-    (when (file-exists-p path)
+    (when path
       (let ((publish (a3madkour-pub-citations--read-keyword path "HUGO_PUBLISH"))
             (section (a3madkour-pub-citations--read-keyword path "HUGO_SECTION"))
             (slug-override (a3madkour-pub-citations--read-keyword path "HUGO_SLUG")))

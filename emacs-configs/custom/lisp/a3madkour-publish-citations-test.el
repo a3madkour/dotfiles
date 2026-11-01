@@ -286,6 +286,19 @@ returns <slug> string.  Slug is title-derived (P2.5): `My Key' → `my-key'."
       (should (equal "my-key"
                      (a3madkour-pub-citations--lookup-notes-ref "myKey2020"))))))
 
+(ert-deftest a3madkour-pub-citations-test/notes-ref-found-by-declared-key ()
+  "Row 40: the rename-to-title hook means a ref note need not sit at
+`<key>.org'.  A note declaring KEY in `:ROAM_REFS:' still resolves."
+  (a3madkour-pub-citations-test--with-ref-note-dir
+      '(("the-nature-of-time" .
+         ":PROPERTIES:\n:ID: x\n:ROAM_REFS: cite:smith2020\n:END:\n#+HUGO_PUBLISH: t\n#+HUGO_SECTION: garden\n#+title: The Nature of Time\n"))
+    (a3madkour-pub-citations-test--with-manifest
+        '((notes . [((id . "id-smith")
+                     (current_url . "/garden/the-nature-of-time/")
+                     (state . "live"))]))
+      (should (equal "the-nature-of-time"
+                     (a3madkour-pub-citations--lookup-notes-ref "smith2020"))))))
+
 (ert-deftest a3madkour-pub-citations-test/notes-ref-filename-differs-from-title-slug ()
   "P2.5: ref-note whose FILENAME (the cite key) differs from its
 title-derived published slug must still resolve notes_ref.  The probe URL
