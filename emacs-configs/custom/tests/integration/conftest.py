@@ -11,6 +11,7 @@ import subprocess
 import pytest
 
 A3_PUB_SH = pathlib.Path(__file__).parent.parent.parent / "lisp" / "a3-pub.sh"
+SITE_SECTIONS = pathlib.Path.home() / "Sync/Workspace/a3madkour.github.io/data/sections.json"
 
 
 def _have(cmd):
@@ -31,6 +32,9 @@ def site_data_dir(tmp_path):
     d = tmp_path / "data"
     d.mkdir()
     (d / "url-history.yaml").write_text("notes: []\n")
+    # The publisher reads the section contract from the site it publishes
+    # into and fails closed without it.
+    shutil.copyfile(SITE_SECTIONS, d / "sections.json")
     return d
 
 
