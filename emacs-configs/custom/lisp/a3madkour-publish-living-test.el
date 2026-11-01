@@ -673,5 +673,15 @@ naming the fix, and its items never reach reading.yaml."
       (delete-directory notes t)
       (delete-directory site t))))
 
+;; S1 2026-11-01: the gate let a dateless poem through.
+(ert-deftest a3madkour-pub-living-test/gate-refuses-a-poem-without-a-date ()
+  (a3madkour-sections-test--with-real-site
+    (let ((file (make-temp-file "a3-poem" nil ".org"
+                                "#+title: T\n#+HUGO_SECTION: works/poetry\n#+HUGO_PUBLISH: t\n\nA line\n")))
+      (unwind-protect
+          (should (string-match-p "date"
+                                  (or (a3madkour-pub-living/contract-gap file "works/poetry") "")))
+        (delete-file file)))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

@@ -100,6 +100,21 @@ failed check_fixtures), and never moves one already there."
     (should (string-match-p "^#\\+date: 2026-01-02$" (buffer-string)))
     (should (= 1 (how-many "^#\\+date:" (point-min) (point-max))))))
 
+;; S1 2026-11-01: a real poem published with no date.
+(ert-deftest a3madkour-pub-author-test/mark-works-stamp-date ()
+  "Every works section gets `#+date:' from mark, like an essay."
+  (a3madkour-sections-test--with-real-site
+    (dolist (section '("works/poetry" "works/games" "works/music"))
+      (with-temp-buffer
+        (org-mode)
+        (insert "#+title: T\n\nA line\n")
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (_p coll &rest _) (if (listp coll) (car coll) "x")))
+                  ((symbol-function 'read-string) (lambda (&rest _) "1999")))
+          (a3-publish-mark section))
+        (should (string-match-p (concat "^#\\+date: " (format-time-string "%Y-%m-%d") "$")
+                                (buffer-string)))))))
+
 (ert-deftest a3madkour-pub-author-test/mark-tags-refuse-editorial-only ()
   "Tags made only of editorial tags (TODO, ...) would be filtered out of the
 page, so the prompt asks again instead of writing them."
@@ -1070,9 +1085,9 @@ publish the whole note.  The refusal comes before any prompt or write."
     (let ((expect '(("research/themes" "tags" "description" "status" "weight")
                     ("research/questions" "description" "status" "theme"
                      "supporting_notes" "started")
-                    ("works/games" "status" "game_kind" "tagline" "year")
-                    ("works/music" "format" "year")
-                    ("works/poetry") ("garden") ("about")
+                    ("works/games" "date" "status" "game_kind" "tagline" "year")
+                    ("works/music" "date" "format" "year")
+                    ("works/poetry" "date") ("garden") ("about")
                     ("streams" "platforms" "category" "archive_status")
                     ("library/reading") ("library/listening")
                     ("library/playing") ("library/watching")
