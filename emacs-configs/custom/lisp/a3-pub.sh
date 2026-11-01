@@ -19,6 +19,17 @@ LISP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUSTOM_DIR="$(dirname "$LISP_DIR")"
 STRAIGHT_BOOTSTRAP="$CUSTOM_DIR/straight/repos/straight.el/bootstrap.el"
 
+# The author's folders come from config.org's "Publishing paths" block,
+# tangled to publish-paths.el beside config.el.  A batch run never loads
+# config.el, so every emacs below loads this file itself; the library names
+# no folder of its own.  $A3_PUB_PATHS_FILE overrides the location (tests).
+PATHS_FILE="${A3_PUB_PATHS_FILE:-$CUSTOM_DIR/publish-paths.el}"
+if [ ! -f "$PATHS_FILE" ]; then
+  echo "a3-pub.sh: no publish-paths.el at $PATHS_FILE" >&2
+  echo "a3-pub.sh: it is tangled from config.org's Publishing paths block; start Emacs once (or tangle config.org) to write it." >&2
+  exit 2
+fi
+
 # Every `emacs --batch' below sets `load-prefer-newer': the publish modules sit
 # beside untracked .elc files, and `require' otherwise loads a stale .elc over
 # an edited .el — a fix that is silently not what publishes (S1 row 4).
@@ -177,6 +188,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
+    -l "$PATHS_FILE" \
     -l a3madkour-publish \
     -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
@@ -235,6 +247,7 @@ if [ "${1:-}" = "--publish-living" ]; then
     --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
+    -l "$PATHS_FILE" \
     -l a3madkour-publish \
     -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
@@ -319,6 +332,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
     --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
+    -l "$PATHS_FILE" \
     -l a3madkour-publish \
     -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
@@ -388,6 +402,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
     --eval "(straight-use-package 'yaml)" \
     --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
     -L "$LISP_DIR" \
+    -l "$PATHS_FILE" \
     -l a3madkour-publish \
     -l a3madkour-publish-registry \
     -l a3madkour-publish-rewrite \
@@ -420,6 +435,7 @@ exec emacs --batch \
   --eval "(straight-use-package 'yaml)" \
   --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
   -L "$LISP_DIR" \
+  -l "$PATHS_FILE" \
   -l a3madkour-publish \
   -l a3madkour-publish-registry \
   -l a3madkour-publish-rewrite \

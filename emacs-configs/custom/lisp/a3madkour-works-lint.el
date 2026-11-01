@@ -28,6 +28,7 @@
 ;; `a3madkour-publish'.  Requiring the poetry module directly is safe: it
 ;; does not depend on this module or on `a3madkour-publish-works'.
 (require 'a3madkour-publish-poetry)
+(require 'a3madkour-publish-paths)
 
 (defvar a3madkour-works-lint-enabled t
   "When non-nil, the works handler runs this linter before publishing.")
@@ -94,7 +95,8 @@ post-push CI failure into a file:line error."
          (line (or (cdr cell) 1))
          (errs '()))
     (when slug
-      (let ((poem (expand-file-name (format "%s.org" slug) a3madkour-pub/poetry-dir)))
+      (let ((poem (expand-file-name (format "%s.org" slug)
+                                     (a3madkour-pub/path 'a3madkour-pub/poetry-dir))))
         (cond
          ((not (file-exists-p poem))
           (push (format "%s:%d: :lyrics_poem %S has no org source at %s"

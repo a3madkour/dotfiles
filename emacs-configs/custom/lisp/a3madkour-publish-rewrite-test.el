@@ -474,39 +474,47 @@ one.  Spec wording amendment is deferred to Task 19."
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-relative ()
   "[[./assets/page/foo/diagram.png]] → :inert (missing); no :pending-asset."
-  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
-            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
-    (let ((result (a3madkour-pub/rewrite-link
-                   "[[./assets/page/foo/diagram.png]]" "source-id")))
-      (should (plist-get result :inert))
-      (should-not (plist-get result :pending-asset)))))
+  (let ((a3madkour-pub-canonical-asset-root
+         (expand-file-name "a3-pub-no-assets" temporary-file-directory)))
+    (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+              ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+      (let ((result (a3madkour-pub/rewrite-link
+                     "[[./assets/page/foo/diagram.png]]" "source-id")))
+        (should (plist-get result :inert))
+        (should-not (plist-get result :pending-asset))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-relative-shared ()
   "[[./assets/shared/common.svg]] → :inert (missing); no :pending-asset."
-  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
-            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
-    (let ((result (a3madkour-pub/rewrite-link
-                   "[[./assets/shared/common.svg]]" "source-id")))
-      (should (plist-get result :inert))
-      (should-not (plist-get result :pending-asset)))))
+  (let ((a3madkour-pub-canonical-asset-root
+         (expand-file-name "a3-pub-no-assets" temporary-file-directory)))
+    (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+              ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+      (let ((result (a3madkour-pub/rewrite-link
+                     "[[./assets/shared/common.svg]]" "source-id")))
+        (should (plist-get result :inert))
+        (should-not (plist-get result :pending-asset))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-absolute ()
   "Absolute path to non-existent file → :inert (missing); no :pending-asset."
-  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
-            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
-    (let ((result (a3madkour-pub/rewrite-link
-                   "[[/home/user/some/path/screenshot.jpg]]" "source-id")))
-      (should (plist-get result :inert))
-      (should-not (plist-get result :pending-asset)))))
+  (let ((a3madkour-pub-canonical-asset-root
+         (expand-file-name "a3-pub-no-assets" temporary-file-directory)))
+    (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+              ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+      (let ((result (a3madkour-pub/rewrite-link
+                     "[[/home/user/some/path/screenshot.jpg]]" "source-id")))
+        (should (plist-get result :inert))
+        (should-not (plist-get result :pending-asset))))))
 
 (ert-deftest a3madkour-pub-rewrite-test/pending-asset-tilde ()
   "Tilde-path to non-existent file → :inert (missing); no :pending-asset."
-  (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
-            ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
-    (let ((result (a3madkour-pub/rewrite-link
-                   "[[~/org/notes/assets/page/foo/x.png]]" "source-id")))
-      (should (plist-get result :inert))
-      (should-not (plist-get result :pending-asset)))))
+  (let ((a3madkour-pub-canonical-asset-root
+         (expand-file-name "a3-pub-no-assets" temporary-file-directory)))
+    (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+              ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "foo")))
+      (let ((result (a3madkour-pub/rewrite-link
+                     "[[~/org/notes/assets/page/foo/x.png]]" "source-id")))
+        (should (plist-get result :inert))
+        (should-not (plist-get result :pending-asset))))))
 
 ;; -- --html-escape helper --
 

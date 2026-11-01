@@ -25,12 +25,13 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'a3madkour-publish-paths)
 
-(defcustom a3madkour-pub-bib/library-path
-  (expand-file-name "~/org/notes/ref-notes/library.bib")
-  "Path to the BibTeX library used by F.  Default is the author's
-Zotero/BBT-exported file."
-  :type 'file
+(defcustom a3madkour-pub-bib/library-path nil
+  "Path to the BibTeX library used by F: the author's Zotero/BBT-exported
+file.  Set in config.org's Publishing paths block (see
+`a3madkour-publish-paths')."
+  :type '(choice (const :tag "Not set" nil) file)
   :group 'a3madkour-pub)
 
 (defcustom a3madkour-pub-bib/bbt-endpoint
@@ -361,7 +362,8 @@ string on 2xx + valid JSON, else nil.  Buffer is killed at end."
 `a3madkour-pub-bib/library-path'.  Returns t on success, nil on
 disabled / unreachable / non-2xx / malformed response."
   (when a3madkour-pub-bib/bbt-endpoint
-    (let* ((url-request-method "POST")
+    (let* ((target (a3madkour-pub/path 'a3madkour-pub-bib/library-path))
+           (url-request-method "POST")
            (url-request-extra-headers '(("Content-Type" . "application/json")))
            (url-request-data (a3madkour-pub-bib--bbt-payload))
            (url-show-status nil)
@@ -378,9 +380,9 @@ disabled / unreachable / non-2xx / malformed response."
         (message "[a3-pub-bib] BBT JSON-RPC: refresh failed; keeping on-disk .bib")
         nil)
        (t
-        (let ((tmp (concat a3madkour-pub-bib/library-path ".tmp")))
+        (let ((tmp (concat target ".tmp")))
           (with-temp-file tmp (insert result))
-          (rename-file tmp a3madkour-pub-bib/library-path t)
+          (rename-file tmp target t)
           t))))))
 
 (provide 'a3madkour-publish-bib)

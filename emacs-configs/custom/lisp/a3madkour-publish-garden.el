@@ -63,8 +63,8 @@ not counted (they are a separate concern)."
   "Log FILE's refusal over out-of-root asset paths STRAY to RUN; return \='err."
   (let ((msg (format "%s: the :site: section links %s outside the asset root %s; move it under %s (page/<slug>/ or shared/) and link it as ./assets/..., then publish"
                      file (string-join stray ", ")
-                     (expand-file-name a3madkour-pub-canonical-asset-root)
-                     (expand-file-name a3madkour-pub-canonical-asset-root))))
+                     (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)
+                     (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root))))
     (message "a3madkour-pub-garden: %s" msg)
     (when run
       (a3-pub-async/log-step run "site-asset" :err :err-snippet msg))

@@ -750,7 +750,8 @@
   "Public adapter resolves [[file:NAME]] / [[NAME]] refs to absolute paths."
   (let ((tmp (file-name-as-directory (make-temp-file "a3-pub-assets-list-" t))))
     (unwind-protect
-        (let ((org-file (expand-file-name "x.org" tmp))
+        (let ((a3madkour-pub-canonical-asset-root (expand-file-name "assets" tmp))
+              (org-file (expand-file-name "x.org" tmp))
               (svg (expand-file-name "diagram-1.svg" tmp)))
           (with-temp-file svg (insert "<svg/>"))
           (with-temp-file org-file
@@ -766,7 +767,8 @@
   "Refs to non-existent files are not included."
   (let ((tmp (file-name-as-directory (make-temp-file "a3-pub-assets-miss-" t))))
     (unwind-protect
-        (let ((org-file (expand-file-name "x.org" tmp)))
+        (let ((a3madkour-pub-canonical-asset-root (expand-file-name "assets" tmp))
+              (org-file (expand-file-name "x.org" tmp)))
           (with-temp-file org-file
             (insert "* H\n[[file:does-not-exist.png]]\n"))
           (should (null (a3madkour-pub-assets/list-referenced-files org-file))))

@@ -371,8 +371,8 @@ login shell so =exec-path= matches the terminal.
   (require 'a3madkour-publish-bib)
   (require 'a3madkour-publish-citations)
 
-(setq a3madkour-pub/site-data-dir
-        (expand-file-name "~/Sync/Workspace/a3madkour.github.io/data/"))
+;; Every folder the publisher reads; see "Publishing paths" under Website publish.
+(load (expand-file-name "publish-paths.el" user-emacs-directory) nil 'nomessage)
 #+end_src
 * Editor
 ** Evil
@@ -5364,6 +5364,31 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
           #'a3madkour/library-close-queue-entry)
 ;; DONE/DROP on a :toread: book marks its item note finished/abandoned.
 (add-hook 'org-after-todo-state-change-hook #'a3madkour/library-sync-on-todo-change)
+#+end_src
+
+** Publishing paths
+Every folder the site publisher reads. The publisher's own code names none of
+them: each variable defaults to nil, and a publish that needs an unset one
+stops with an error naming it. This block tangles to =publish-paths.el= beside
+=config.el=; =config.el= loads it (under General configuration) and =a3-pub.sh=
+loads it before every batch run, so interactive and batch publishing read the
+same folders.
+
+Poems are the works themselves, not notes about them, so they live outside the
+roam tree; games and music pages are notes about a work and stay in it.
+#+begin_src emacs-lisp :tangle "./publish-paths.el" :comments no
+;;; publish-paths.el --- tangled from config.org, "Publishing paths"; edit it there  -*- lexical-binding: t; -*-
+(setq a3madkour-pub/site-data-dir
+      (expand-file-name "~/Sync/Workspace/a3madkour.github.io/data/")
+      a3madkour-pub/org-notes-dir (expand-file-name "~/org/notes/")
+      a3madkour-pub/essays-dir (expand-file-name "~/org/essays/")
+      a3madkour-pub/poetry-dir
+      (expand-file-name "~/org/Artistic/creative-writing/poetry/")
+      a3madkour-pub-canonical-asset-root (expand-file-name "~/org/notes/assets")
+      a3madkour-pub-bib/library-path
+      (expand-file-name "~/org/notes/ref-notes/library.bib")
+      a3madkour-pub-citations/ref-notes-dir (expand-file-name "~/org/notes/ref-notes/")
+      a3madkour-library/notes-dir (expand-file-name "~/org/notes/"))
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp

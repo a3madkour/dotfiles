@@ -261,7 +261,8 @@ naming the exact command to close the gap."
       (a3madkour-pub/warn
        "works" bundle
        "poem bundle lacks set_to_music; run: a3-pub.sh --publish-deliberate %s"
-       (expand-file-name (format "%s.org" poem-slug) a3madkour-pub/poetry-dir)))))
+       (expand-file-name (format "%s.org" poem-slug)
+                         (a3madkour-pub/path 'a3madkour-pub/poetry-dir))))))
 
 (cl-defun a3madkour-pub-works/publish-works-file (file run &key on-done)
   "Publish a works/games or works/music FILE to content/works/<type>/<slug>/index.md.

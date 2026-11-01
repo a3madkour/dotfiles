@@ -24,6 +24,7 @@
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-keywords)
 (require 'a3madkour-sections)
+(require 'a3madkour-publish-paths)
 
 (defcustom a3madkour-pub-poetry/section-dir-name "works/poetry"
   "Relative content directory under `content/' for poetry bundles.
@@ -32,13 +33,13 @@ Independent of the `#+HUGO_SECTION:' dispatch symbol (`works-poetry')."
   :type 'string
   :group 'a3madkour-pub)
 
-(defcustom a3madkour-pub/poetry-dir
-  (expand-file-name "~/org/notes/works/poetry/")
+(defcustom a3madkour-pub/poetry-dir nil
   "Root directory of the author's poem org files.  Source corpus for the
 `works-poetry' dispatch.  Each poem lives at `<poetry-dir>/<slug>.org'
-with assets under `<poetry-dir>/assets/<id>/'.  Default matches the
-`a3madkour-pub/org-notes-dir' convention (`~/org/notes/`)."
-  :type 'directory
+with assets under `<poetry-dir>/assets/<id>/'.  A poem is the work
+itself, not a note about it, so this sits outside the roam tree.  Set in
+config.org's Publishing paths block (see `a3madkour-publish-paths')."
+  :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub)
 
 (defconst a3madkour-pub-poetry--audio-extensions
@@ -266,7 +267,7 @@ Signals `user-error' on any validation failure.  Returns FILENAME on
 success.  Creates BUNDLE-DEST-DIR if missing."
   (let* ((ext (file-name-extension filename))
          (src (expand-file-name (format "assets/%s/%s" id filename)
-                                a3madkour-pub/poetry-dir))
+                                (a3madkour-pub/path 'a3madkour-pub/poetry-dir)))
          (dest (expand-file-name filename bundle-dest-dir)))
     (unless (and ext (member (downcase ext) a3madkour-pub-poetry--audio-extensions))
       (user-error "a3madkour-pub-poetry: #+AUDIO: extension %S not in allowlist %S"

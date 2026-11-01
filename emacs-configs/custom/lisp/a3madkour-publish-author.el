@@ -21,6 +21,7 @@
 (require 'a3madkour-publish-frontmatter)  ; editorial-tag filter
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-paths)
 (require 'a3madkour-publish-id)
 (require 'ob-core)          ; the header-argument parser ox-hugo uses
 (require 'a3madkour-publish-yaml)
@@ -600,7 +601,7 @@ Returns `a3madkour-pub--parse-file' plists that carry a slug, skipping the
 buffer being marked.  Read uncached: `note-metadata' snapshots per publish
 run, and mark runs between runs.  A note whose keywords are invalid (a
 `user-error' from the parser) is skipped; living publish reports it."
-  (let ((dir (bound-and-true-p a3madkour-pub/org-notes-dir))
+  (let ((dir (a3madkour-pub/path 'a3madkour-pub/org-notes-dir))
         (self (and buffer-file-name (expand-file-name buffer-file-name))))
     (when (and dir (file-directory-p dir))
       (cl-loop for f in (directory-files-recursively dir "\\.org\\'")

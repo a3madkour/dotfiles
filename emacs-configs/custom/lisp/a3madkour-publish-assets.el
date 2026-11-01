@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'a3madkour-publish-paths)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-rewrite)         ; for --html-escape
 (require 'a3madkour-publish-async)           ; for run-process + with-a3-pub-async-sync
@@ -20,15 +21,15 @@
   "Asset link handling for the a3madkour-publish library."
   :group 'a3madkour-pub)
 
-(defcustom a3madkour-pub-canonical-asset-root
-  "~/org/notes/assets"
+(defcustom a3madkour-pub-canonical-asset-root nil
   "Root directory for canonical assets.  Two sub-folders below:
   page/<note-slug>/   — per-note assets (copied into the bundle)
   shared/             — assets referenced by many notes (one copy site-wide
                         in static/notes-shared/)
 
-See parent spec §7."
-  :type 'directory
+Set in config.org's Publishing paths block (see
+`a3madkour-publish-paths').  See parent spec §7."
+  :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub-assets)
 
 (defcustom a3madkour-pub-asset-image-extensions
@@ -108,7 +109,7 @@ non-existent file at a canonical-looking path still reports missing."
                  (and candidate (file-exists-p candidate) candidate))))
          (abs (or essays-page-path
                   (expand-file-name path source-dir)))
-         (root (expand-file-name a3madkour-pub-canonical-asset-root))
+         (root (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root))
          (root-page (file-name-as-directory (expand-file-name "page" root)))
          (root-shared (file-name-as-directory (expand-file-name "shared" root)))
          (exists (file-exists-p abs)))
@@ -255,7 +256,7 @@ Filename-collision handling:
   - If dest exists + content differs          → append -<6hex> SHA-1 of src.
 
 Returns the absolute destination path (no I/O performed)."
-  (let* ((root (expand-file-name a3madkour-pub-canonical-asset-root))
+  (let* ((root (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root))
          (dest-dir (expand-file-name (format "page/%s" dest-slug) root))
          (filename (file-name-nondirectory src))
          (dest (expand-file-name filename dest-dir)))
@@ -493,7 +494,7 @@ Any other relative path is resolved against ORG-FILE's directory via
     (if (string-prefix-p assets-prefix path)
         ;; Strip the ./assets/ alias and resolve against the canonical root:
         (expand-file-name (substring path (length assets-prefix))
-                          (expand-file-name a3madkour-pub-canonical-asset-root))
+                          (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root))
       ;; All other paths: resolve against the org file's directory.
       (expand-file-name path
                         (file-name-directory (expand-file-name org-file))))))

@@ -632,7 +632,8 @@ write the org source.  `slug-path' must be bound by BODY's caller via
 ;; the end-to-end run might not happen; it did.
 
 (ert-deftest a3madkour-pub-works--publish-fires-the-stale-backlink-warning ()
-  (let ((poetry-dir (make-temp-file "a3-works-poetry-" t)))
+  (let* ((poetry-dir (make-temp-file "a3-works-poetry-" t))
+         (a3madkour-pub/poetry-dir (file-name-as-directory poetry-dir)))
     (unwind-protect
         (a3madkour-pub-works-test--with-published
             (progn

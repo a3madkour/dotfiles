@@ -8,6 +8,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'a3madkour-publish-paths)
 (require 'org)
 (require 'ox)                          ; `org-export-exclude-tags'
 (require 'a3madkour-sections)
@@ -337,9 +338,16 @@ section read as a stray quote under the title."
 
 ;; -- interactive commands --
 
-(defvar a3madkour-library/notes-dir
-  (if (boundp 'org-roam-directory) org-roam-directory "~/org/notes/")
-  "Directory `a3-library-add' creates item notes in.")
+(defcustom a3madkour-library/notes-dir nil
+  "Directory `a3-library-add' creates item notes in.
+Set in config.org's Publishing paths block (see `a3madkour-publish-paths')."
+  :type '(choice (const :tag "Not set" nil) directory)
+  :group 'a3madkour-pub)
+
+(defun a3madkour-library--new-item-file (title)
+  "The file `a3-library-add' writes for TITLE: `<notes-dir>/<slug>.org'."
+  (expand-file-name (concat (a3madkour-pub-slug/slugify title) ".org")
+                    (a3madkour-pub/path 'a3madkour-library/notes-dir)))
 
 (defvar a3madkour-library/status-changed-functions nil
   "Abnormal hook run with (FILE STATUS) after `a3-library-status' saves.")
@@ -382,7 +390,7 @@ Refuses when the file already exists."
          (creator (a3madkour-library--read-required "Creator: "))
          (year (a3madkour-library--read-required "Year: " t))
          (slug (a3madkour-pub-slug/slugify title))
-         (file (expand-file-name (concat slug ".org") a3madkour-library/notes-dir)))
+         (file (a3madkour-library--new-item-file title)))
     (when (string-empty-p slug)
       (user-error "a3-library-add: title %S yields an empty slug" title))
     (when (file-exists-p file)

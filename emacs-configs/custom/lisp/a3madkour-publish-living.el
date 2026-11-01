@@ -18,6 +18,7 @@
 ;;; Code:
 
 (require 'a3madkour-publish)
+(require 'a3madkour-publish-paths)
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
 (require 'a3madkour-publish-unpublish)
@@ -33,7 +34,7 @@ Walks the notes tree exactly once.  HANDLER is the registry's symbol; it
 is not checked here (see `a3madkour-pub-living--dispatch')."
   (let ((triples nil))
     (dolist (file (directory-files-recursively
-                   a3madkour-pub/org-notes-dir "\\.org\\'"))
+                   (a3madkour-pub/path 'a3madkour-pub/org-notes-dir) "\\.org\\'"))
       (let ((section (a3madkour-pub/note-section file)))
         (when section
           (let ((handler (a3madkour-pub-registry/handler section 'living)))

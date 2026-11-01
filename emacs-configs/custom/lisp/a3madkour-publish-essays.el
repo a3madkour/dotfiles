@@ -20,6 +20,7 @@
 (require 'a3madkour-publish-rewrite)
 (require 'a3madkour-publish-assets)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-paths)
 
 ;; Task 4: has_* body scanner.
 
@@ -130,7 +131,7 @@ else SCAN-PLIST's value passes through.  Returns a new plist."
 No-op when the source directory does not exist.  Returns the list of
 basenames copied, or nil if no source dir."
   (let* ((src-dir (expand-file-name (format "assets/%s/" id)
-                                    a3madkour-pub/essays-dir))
+                                    (a3madkour-pub/path 'a3madkour-pub/essays-dir)))
          (src-dir-as-dir (file-name-as-directory src-dir)))
     (when (file-directory-p src-dir-as-dir)
       (make-directory bundle-dest-dir t)

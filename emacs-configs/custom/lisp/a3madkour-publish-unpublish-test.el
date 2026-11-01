@@ -107,10 +107,12 @@
 ;; -- walk-published-source-set: standalone-mode driver --
 
 (defmacro a3-pub-unpublish-test--with-tmp-notes-dir (dir-var &rest body)
-  "Bind DIR-VAR to a fresh tmpdir + bind `a3madkour-pub/org-notes-dir' to it."
+  "Bind DIR-VAR to a fresh tmpdir + bind `a3madkour-pub/org-notes-dir' to it.
+The asset root is bound under it too, so nothing resolves a real folder."
   (declare (indent 1))
   `(let* ((,dir-var (make-temp-file "a3-pub-walk-" t))
-          (a3madkour-pub/org-notes-dir ,dir-var))
+          (a3madkour-pub/org-notes-dir ,dir-var)
+          (a3madkour-pub-canonical-asset-root (expand-file-name "assets" ,dir-var)))
      (unwind-protect (progn ,@body)
        (delete-directory ,dir-var t))))
 
@@ -467,15 +469,18 @@ the next publish run's diff re-includes the id in :removed and retries."
 ;; -- unpublish--bulk-rewrite-source-links helper --
 
 (ert-deftest a3madkour-pub-unpublish-test/bulk-rewrite-three-link-forms ()
-  "All three link forms (relative ./assets/, ~-absolute, $HOME-absolute) rewrite."
+  "All three link forms (relative ./assets/, and the configured asset root
+written ~-abbreviated and expanded) rewrite.  The root is a string under
+$HOME that is never created: only its spelling matters here."
   (a3-pub-unpublish-test--with-tmp-notes-dir d
-    (let ((home-prefix (expand-file-name "~/")))
+    (let ((home-prefix (expand-file-name "~/"))
+          (a3madkour-pub-canonical-asset-root "~/a3-pub-test-assets"))
       (a3-pub-unpublish-test--write-org d "rel.org"
         "See [[./assets/page/foo/x.png][x]]\n")
       (a3-pub-unpublish-test--write-org d "tilde.org"
-        "See [[~/org/notes/assets/page/foo/y.png][y]]\n")
+        "See [[~/a3-pub-test-assets/page/foo/y.png][y]]\n")
       (a3-pub-unpublish-test--write-org d "abs.org"
-        (format "See [[%sorg/notes/assets/page/foo/z.png][z]]\n" home-prefix))
+        (format "See [[%sa3-pub-test-assets/page/foo/z.png][z]]\n" home-prefix))
       (let ((result (a3madkour-pub--unpublish-bulk-rewrite-source-links
                      "foo" "foo-v2" d)))
         (should (= 3 (length (plist-get result :modified))))
@@ -484,7 +489,7 @@ the next publish run's diff re-includes the id in :removed and retries."
                               (with-temp-buffer
                                 (insert-file-contents (expand-file-name "rel.org" d))
                                 (buffer-string))))
-      (should (string-match-p "~/org/notes/assets/page/foo-v2/y.png"
+      (should (string-match-p "~/a3-pub-test-assets/page/foo-v2/y.png"
                               (with-temp-buffer
                                 (insert-file-contents (expand-file-name "tilde.org" d))
                                 (buffer-string))))
@@ -938,7 +943,11 @@ diff-published-set re-read disk and saw the new URL already there."
   (let ((tmp-data (make-temp-file "b0-regression-" t))
         (a3madkour-pub--manifest-snapshot nil))
     (unwind-protect
-        (let ((a3madkour-pub/site-data-dir tmp-data))
+        ;; finish-publish acts on the slug shift: it renames the asset dir and
+        ;; rewrites links across the notes tree, so both point at the tmp dir.
+        (let ((a3madkour-pub/site-data-dir tmp-data)
+              (a3madkour-pub/org-notes-dir tmp-data)
+              (a3madkour-pub-canonical-asset-root (expand-file-name "assets" tmp-data)))
           ;; Seed manifest at the OLD url.
           (with-temp-file (expand-file-name "url-history.yaml" tmp-data)
             (insert "notes:\n  - id: shifter\n    current_url: /garden/old-name/\n    history: []\n    state: live\n"))

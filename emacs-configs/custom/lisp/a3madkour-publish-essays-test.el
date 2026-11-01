@@ -161,7 +161,10 @@ calls record-publish with the correct URL."
                            (directory-file-name
                             (file-name-directory
                              (file-name-as-directory tmp-site-data)))))
-               (a3madkour-pub/site-data-dir (file-name-as-directory tmp-site-data)))
+               (a3madkour-pub/site-data-dir (file-name-as-directory tmp-site-data))
+               (a3madkour-pub/essays-dir (file-name-as-directory tmp-essays-dir))
+               (a3madkour-pub-canonical-asset-root
+                (expand-file-name "assets" tmp-essays-dir)))
           (with-temp-file src
             (insert ":PROPERTIES:\n:ID: essay-one-uuid\n:END:\n"
                     "#+title: Example essay one\n"
@@ -487,7 +490,8 @@ Body text.
                      (lambda (_id _b) nil))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
-            (let ((a3madkour-pub/essays-dir essays-dir))
+            (let ((a3madkour-pub/essays-dir essays-dir)
+                  (a3madkour-pub-canonical-asset-root (expand-file-name "assets" tmp)))
               (a3madkour-pub-essays/publish-essay-file
                org-file (make-a3-pub-async-run) :on-done (lambda (_) nil))))
           (let* ((index-path (expand-file-name "index.md" bundle-dir))
@@ -578,7 +582,8 @@ Body text.
                      (lambda (_id _b) nil))
                     ((symbol-function 'a3madkour-pub-history/record-publish)
                      (lambda (_id _url _state) nil)))
-            (let ((a3madkour-pub/essays-dir essays-dir))
+            (let ((a3madkour-pub/essays-dir essays-dir)
+                  (a3madkour-pub-canonical-asset-root (expand-file-name "assets" tmp)))
               (a3madkour-pub-essays/publish-essay-file
                org-file (make-a3-pub-async-run) :on-done (lambda (_) nil))))
           (let* ((index-path (expand-file-name "index.md" bundle-dir))

@@ -311,7 +311,9 @@ derivation, honoring `#+HUGO_SLUG:'), NOT `file-name-base'."
           (tmp-data (expand-file-name "data/" tmp-root)))
      (make-directory tmp-data t)
      (unwind-protect
-         (let ((a3madkour-pub/site-data-dir tmp-data))
+         (let ((a3madkour-pub/site-data-dir tmp-data)
+               (a3madkour-pub-citations/ref-notes-dir
+                (expand-file-name "ref-notes/" tmp-root)))
            ,@body)
        (delete-directory tmp-root t))))
 

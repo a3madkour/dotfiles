@@ -25,6 +25,7 @@
 (require 'cl-lib)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-history)
+(require 'a3madkour-publish-paths)
 (require 'a3madkour-publish-async)
 
 (defcustom a3madkour-pub-site-content-dir nil
@@ -159,7 +160,7 @@ This walk takes a fresh per-call snapshot of the source tree; it does NOT
 hit the metadata cache populated by `note-metadata' (which is per-file
 keyed, not per-walk).  Repeated calls are independent."
   (let ((set (make-hash-table :test 'equal)))
-    (dolist (file (directory-files-recursively a3madkour-pub/org-notes-dir
+    (dolist (file (directory-files-recursively (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)
                                                 "\\.org\\'"))
       (let* ((parsed (a3madkour-pub--parse-file file))
              (state (plist-get parsed :state))
@@ -462,7 +463,8 @@ Returns a symbol indicating what happened:
 
 If `git mv' fails (git not installed, not a git repo), falls through to
 `rename-file' and returns `:renamed-mv'."
-  (let* ((root (or canonical-root a3madkour-pub-canonical-asset-root))
+  (let* ((root (or canonical-root
+                   (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)))
          (old-dir (file-name-as-directory
                    (expand-file-name (format "page/%s" old-slug) root)))
          (new-dir (file-name-as-directory
@@ -496,9 +498,11 @@ If `git mv' fails (git not installed, not a git repo), falls through to
   "Walk ORG-NOTES-DIR for .org files; substitute `page/<OLD-SLUG>/' →
 `page/<NEW-SLUG>/' across three link forms:
 
-  ./assets/page/<old>/...           → ./assets/page/<new>/...
-  ~/org/notes/assets/page/<old>/... → ~/org/notes/assets/page/<new>/...
-  <$HOME>/org/notes/assets/page/<old>/... → <$HOME>/org/notes/assets/page/<new>/...
+  ./assets/page/<old>/...         → ./assets/page/<new>/...
+  <root>/page/<old>/... (as ~/...) → <root>/page/<new>/...
+  <root>/page/<old>/... (expanded) → <root>/page/<new>/...
+
+where <root> is `a3madkour-pub-canonical-asset-root'.
 
 ORG-NOTES-DIR defaults to `a3madkour-pub/org-notes-dir'.
 
@@ -508,16 +512,20 @@ Returns a plist:
 
 Idempotent: re-runs after a successful pass produce zero modifications
 (the substitution regex doesn't match the new slug)."
-  (let* ((dir (or org-notes-dir a3madkour-pub/org-notes-dir))
-         (home (expand-file-name "~/"))
-         (patterns (list
+  (let* ((dir (or org-notes-dir (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)))
+         (root (file-name-as-directory
+                (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)))
+         (patterns (cons
                     (cons (format "\\./assets/page/%s/" (regexp-quote old-slug))
                           (format "./assets/page/%s/" new-slug))
-                    (cons (format "~/org/notes/assets/page/%s/" (regexp-quote old-slug))
-                          (format "~/org/notes/assets/page/%s/" new-slug))
-                    (cons (format "%sorg/notes/assets/page/%s/"
-                                  (regexp-quote home) (regexp-quote old-slug))
-                          (format "%sorg/notes/assets/page/%s/" home new-slug))))
+                    ;; The root as the author may have typed it: abbreviated
+                    ;; (`~/...') and expanded.
+                    (mapcar (lambda (r)
+                              (cons (format "%spage/%s/" (regexp-quote r)
+                                            (regexp-quote old-slug))
+                                    (format "%spage/%s/" r new-slug)))
+                            (delete-dups
+                             (list (abbreviate-file-name root) root)))))
          modified warnings)
     (dolist (file (directory-files-recursively dir "\\.org\\'"))
       (let* ((orig (with-temp-buffer

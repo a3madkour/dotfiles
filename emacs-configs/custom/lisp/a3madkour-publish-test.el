@@ -445,12 +445,9 @@ Uses a temp data dir with a seeded manifest; stubs org-roam-db-sync."
       (delete-directory tmp-data t))))
 
 (ert-deftest a3madkour-pub-test/essays-dir-defvar-exists ()
-  "B.4 Task 1: `a3madkour-pub/essays-dir' must be a defcustom or defvar,
-non-empty string, defaulting to a path under ~/org/."
-  (should (boundp 'a3madkour-pub/essays-dir))
-  (should (stringp a3madkour-pub/essays-dir))
-  (should (not (string-empty-p a3madkour-pub/essays-dir)))
-  (should (string-match-p "/org/essays" a3madkour-pub/essays-dir)))
+  "B.4 Task 1: `a3madkour-pub/essays-dir' is a defcustom.  Its value comes
+from config.org's Publishing paths block, not from the library."
+  (should (custom-variable-p 'a3madkour-pub/essays-dir)))
 
 (ert-deftest a3madkour-pub-test/yaml-escape-scalar ()
   "P1.2: the shared YAML scalar escaper backslash-escapes `\\' then `\"' so

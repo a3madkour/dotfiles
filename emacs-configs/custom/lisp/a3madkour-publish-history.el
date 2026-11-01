@@ -21,19 +21,20 @@
 ;; group (defined in a3madkour-publish.el) so `M-x customize-group RET
 ;; a3madkour-pub' surfaces every site-config knob in one place.
 
-(defcustom a3madkour-pub/org-notes-dir
-  (expand-file-name "~/org/notes/")
-  "Root directory of the org-roam notes corpus."
-  :type 'directory
+(defcustom a3madkour-pub/org-notes-dir nil
+  "Root directory of the org-roam notes corpus.
+Set in config.org's Publishing paths block (see `a3madkour-publish-paths')."
+  :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub)
 
-(defcustom a3madkour-pub/essays-dir (expand-file-name "~/org/essays/")
+(defcustom a3madkour-pub/essays-dir nil
   "Directory holding essay source `.org' files for B.4 essays handler.
+Set in config.org's Publishing paths block (see `a3madkour-publish-paths').
 
 Essays are NOT roam-indexed and do NOT live under
 `a3madkour-pub/org-notes-dir'.  The handler walks this directory only
 under `publish-deliberate'; `publish-living' does not touch essays."
-  :type 'directory
+  :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub)
 
 (defcustom a3madkour-pub/site-data-dir
@@ -41,10 +42,9 @@ under `publish-deliberate'; `publish-living' does not touch essays."
   "Path to the Hugo site repo's `data/' directory.
 
 Required for URL-history manifest I/O.  Errors clearly when nil and
-manifest reads/writes are attempted.  Set in your emacs config:
-
-  (setq a3madkour-pub/site-data-dir
-        \"~/Workspace/a3madkour.github.io/data/\")"
+manifest reads/writes are attempted.  Set in config.org's Publishing
+paths block; a3-pub.sh overrides it from $A3_PUB_SITE_DATA_DIR or the
+site checkout it runs in."
   :type '(choice (const :tag "Not set" nil) directory)
   :group 'a3madkour-pub)
 
