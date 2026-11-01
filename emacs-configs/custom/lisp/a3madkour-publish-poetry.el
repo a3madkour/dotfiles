@@ -158,6 +158,7 @@ Returns a plist:
               (when on-done (funcall on-done 'ok))
               (list :status 'ok :id id :slug slug :url new-url :warnings warnings))))
       (error
+       (message "%s: %s" file (error-message-string err))
        (when on-done (funcall on-done 'err))
        (list :status 'err
              :id id :slug slug :url new-url

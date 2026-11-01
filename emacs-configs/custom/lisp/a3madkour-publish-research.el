@@ -251,7 +251,7 @@ parse/strip steps run.
 
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
-  (condition-case _err
+  (condition-case err
       (progn
         (ignore run)
         (let* ((md        (a3madkour-pub/note-metadata file))
@@ -314,6 +314,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                                                     (alist-get 'last_modified final-fm))))
         (when on-done (funcall on-done 'ok)))
     (error
+     (message "%s: %s" file (error-message-string err))
      (when on-done (funcall on-done 'err)))))
 
 (defun a3madkour-pub-research/planned-steps (_file)

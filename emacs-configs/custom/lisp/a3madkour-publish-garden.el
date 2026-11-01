@@ -95,7 +95,7 @@ auto-moved on behalf of the copy.
 
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
-  (condition-case _err
+  (condition-case err
       (let ((result 'ok))
         (let* ((md        (a3madkour-pub/note-metadata file))
                (id        (plist-get md :id))
@@ -158,6 +158,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
               (delete-file site-src))))
         (when on-done (funcall on-done result)))
     (error
+     (message "%s: %s" file (error-message-string err))
      (when on-done (funcall on-done 'err)))))
 
 (defun a3madkour-pub-garden/planned-steps (_file)

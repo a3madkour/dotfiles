@@ -190,7 +190,7 @@ Pipeline:
 
 RUN is the a3-pub-async-run handle (used for log-step in later tasks).
 ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
-  (condition-case _err
+  (condition-case err
       (let* ((md         (a3madkour-pub/note-metadata file))
              (id         (plist-get md :id))
              (slug       (plist-get md :slug))
@@ -251,6 +251,7 @@ ON-DONE is invoked with \\='ok on completion or \\='err if any step throws."
                           (if (eq (plist-get result :status) 'ok) 'ok 'err)))))
           (when on-done (funcall on-done 'ok))))
     (error
+     (message "%s: %s" file (error-message-string err))
      (when on-done (funcall on-done 'err)))))
 
 (defun a3madkour-pub-essays/planned-steps (file)

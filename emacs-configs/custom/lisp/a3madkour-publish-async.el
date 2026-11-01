@@ -360,6 +360,10 @@ the new run handle."
                           (side . bottom) (window-height . 0.25)))
     run))
 
+(defvar a3-pub-async/last-status nil
+  "Status keyword of the last finished run (:ok, :err or :cancelled).
+`a3-pub.sh' exits non-zero on :err or :cancelled.")
+
 (cl-defun a3-pub-async/finish-publish (run &key scope status)
   "End the publish run.
 
@@ -379,19 +383,30 @@ clears the mode-line indicator."
                       (_ status))))
     (setf (a3-pub-async-run-status run) status-kw)
     (unwind-protect
-        (progn
+        (condition-case err
+            (progn
           ;; P1.1a: gate the destructive orphan sweep on run success.  A
           ;; partial (err) or cancelled run leaves the accumulator incomplete;
           ;; reaping off it would delete still-valid bundles.  `:reap nil'
           ;; makes the orchestrator compute+log the diff but skip all deletes.
-          (a3madkour-pub/finish-publish :scope scope :reap (eq status 'ok))
-          ;; Citations flush fires on both deliberate and living per the
-          ;; original F slice behavior (a3-publish-deliberate AND
-          ;; a3-publish-living both tail-called emit-yaml).  Gated on
-          ;; status=ok only — cancelled / err skip the flush.
-          (when (eq status 'ok)
-            (when (require 'a3madkour-publish-citations nil 'noerror)
-              (a3madkour-pub-citations/emit-yaml :mode 'merge))))
+              (a3madkour-pub/finish-publish :scope scope :reap (eq status 'ok))
+              ;; Citations flush fires on both deliberate and living per the
+              ;; original F slice behavior (a3-publish-deliberate AND
+              ;; a3-publish-living both tail-called emit-yaml).  Gated on
+              ;; status=ok only — cancelled / err skip the flush.
+              (when (eq status 'ok)
+                (when (require 'a3madkour-publish-citations nil 'noerror)
+                  (a3madkour-pub-citations/emit-yaml :mode 'merge))))
+          ;; Never re-signal: the last handler's on-done runs inside the
+          ;; dispatcher's `condition-case', which would swallow this and
+          ;; leave a half-finished run that reads as success.
+          (error
+           (let ((msg (error-message-string err)))
+             (message "a3-pub: finish failed: %s" msg)
+             (a3-pub-async/log-step run "finish" :err :err-snippet msg))
+           (setq status 'err)
+           (setf (a3-pub-async-run-status run) :err)))
+      (setq a3-pub-async/last-status (a3-pub-async-run-status run))
       (setq a3-pub-async--in-flight-run nil)
       (a3-pub-async--modeline-stop run))
     ;; Append summary.

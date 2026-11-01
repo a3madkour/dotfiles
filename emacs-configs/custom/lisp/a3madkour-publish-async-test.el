@@ -532,5 +532,72 @@ value the inner orchestrator was called with."
   "P1.1a: a clean run (status ok) reaps normally (`:reap t')."
   (should (eq t (a3-pub-async-test--capture-reap 'ok))))
 
+;; -- finish-publish failures reach the author --
+
+(ert-deftest a3-pub-async-test/finish-error-marks-run-err-and-does-not-signal ()
+  "An error inside finish-publish must not escape: the last handler's
+on-done runs inside the dispatcher's `condition-case', which would swallow
+it and leave a run with no status line that looks like success."
+  (let ((a3-pub-async/last-status nil)
+        (run (make-a3-pub-async-run :id 'r :status :running
+                                    :buffer (a3-pub-async/buffer)
+                                    :start-time (current-time)))
+        (msgs nil))
+    (cl-letf (((symbol-function 'a3madkour-pub/finish-publish)
+               (lambda (&rest _) (user-error "boom")))
+              ((symbol-function 'message)
+               (lambda (fmt &rest args) (push (apply #'format fmt args) msgs))))
+      (a3-pub-async/finish-publish run :scope 'living :status 'ok))
+    (should (eq (a3-pub-async-run-status run) :err))
+    (should (eq a3-pub-async/last-status :err))
+    (should-not a3-pub-async--in-flight-run)
+    (should (cl-some (lambda (m) (string-match-p "boom" m)) msgs))
+    (should (member "a3-pub: err (0.0s)"
+                    (mapcar (lambda (m)
+                              (replace-regexp-in-string
+                               "([0-9.]+s)" "(0.0s)" m))
+                            msgs)))))
+
+(ert-deftest a3-pub-async-test/last-status-records-the-run ()
+  "`a3-pub.sh' reads this to choose its exit status."
+  (let ((a3-pub-async/last-status nil)
+        (run (make-a3-pub-async-run :id 'r :status :running
+                                    :buffer (a3-pub-async/buffer)
+                                    :start-time (current-time))))
+    (cl-letf (((symbol-function 'a3madkour-pub/finish-publish) #'ignore))
+      (a3-pub-async/finish-publish run :scope 'deliberate :status 'err))
+    (should (eq a3-pub-async/last-status :err))))
+
+;; -- a failed handler says why --
+
+(ert-deftest a3-pub-async-test/handlers-name-their-error ()
+  "Each handler reports `err' AND prints the reason.  Garden, research,
+essays and poetry used to drop it, leaving a bare `a3-pub: err'."
+  (require 'a3madkour-publish-garden)
+  (require 'a3madkour-publish-research)
+  (require 'a3madkour-publish-essays)
+  (require 'a3madkour-publish-poetry)
+  (dolist (handler '(a3madkour-pub-garden/publish-garden-file
+                     a3madkour-pub-research/publish-research-file
+                     a3madkour-pub-essays/publish-essay-file
+                     a3madkour-pub-poetry/publish-poetry-file))
+    (let ((msgs nil) (status nil)
+          (a3madkour-works-lint-enabled nil))
+      (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                 (lambda (&rest _) (error "boom")))
+                ((symbol-function 'a3madkour-pub/note-section)
+                 (lambda (&rest _) (error "boom")))
+                ((symbol-function 'a3madkour-pub/note-slug)
+                 (lambda (&rest _) (error "boom")))
+                ((symbol-function 'a3madkour-pub/published-p)
+                 (lambda (&rest _) 'live))
+                ((symbol-function 'message)
+                 (lambda (fmt &rest args)
+                   (push (apply #'format fmt args) msgs))))
+        (funcall handler "/tmp/a3-pub-no-such.org" nil
+                 :on-done (lambda (s) (setq status s))))
+      (should (eq status 'err))
+      (should (cl-some (lambda (m) (string-match-p "boom" m)) msgs)))))
+
 (provide 'a3madkour-publish-async-test)
 ;;; a3madkour-publish-async-test.el ends here

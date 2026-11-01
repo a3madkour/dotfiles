@@ -180,6 +180,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     exit 2
   fi
   exec emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
     --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -239,6 +240,7 @@ if [ "${1:-}" = "--publish-living" ]; then
   # C: source-side math validation before invoking emacs.
   a3_pub_check_math "$HOME/org/notes" || exit $?
   exec emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
     --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -277,7 +279,7 @@ if [ "${1:-}" = "--publish-living" ]; then
               (a3-publish-living)
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
                      (kill-emacs 1)))" \
-    --eval "(kill-emacs 0)" \
+    --eval "(kill-emacs (if (memq a3-pub-async/last-status '(:err :cancelled)) 1 0))" \
     "$@"
 fi
 
@@ -324,6 +326,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
   emacs_pid=
   trap 'if [ -n "$emacs_pid" ]; then kill -TERM "$emacs_pid" 2>/dev/null; fi' TERM INT
   emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
     --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -368,7 +371,7 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
               (a3-publish-deliberate (getenv \"A3_PUB_TARGET_PATH\"))
               (error (princ (format \"ERROR: %s\\n\" (error-message-string err)))
                      (kill-emacs 1)))" \
-    --eval "(kill-emacs 0)" \
+    --eval "(kill-emacs (if (memq a3-pub-async/last-status '(:err :cancelled)) 1 0))" \
     "$@" &
   emacs_pid=$!
   wait "$emacs_pid"
@@ -394,6 +397,7 @@ if [ "${1:-}" = "--sync-citations" ]; then
   # C: source-side math validation across all org dirs (sync walks the whole corpus).
   a3_pub_check_math "$HOME/org" || exit $?
   exec emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
     --eval "(setq load-prefer-newer t)" \
     --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
     --eval "(setq straight-base-dir user-emacs-directory)" \
@@ -427,6 +431,7 @@ if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
 fi
 
 exec emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
   --eval "(setq load-prefer-newer t)" \
   --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
   --eval "(setq straight-base-dir user-emacs-directory)" \
