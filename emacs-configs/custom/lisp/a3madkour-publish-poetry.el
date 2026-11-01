@@ -74,7 +74,8 @@ Pipeline:
   1. Resolve metadata (id / slug).
   2. Soft-warning sweep (multi_export + marker/audio mismatch); collect for result.
   3. Pre-export rewrite via shared rewrite-to-tmp-file.
-  4. ox-hugo export → markdown body string.
+  4. ox-hugo export → frontmatter only; the body is copied from the org
+     file by `--raw-body' (ox-hugo reshapes verse).
   5. Read `#+AUDIO:'; classify; if relative, copy to bundle; inject `audio_url'.
   6. Normalize via `works-poetry' dispatch arm (injects lines, scrubs summary).
   7. Render frontmatter + body; write if different.
@@ -109,15 +110,14 @@ Returns a plist:
           ;; Stage 3: pre-export rewrite.
           (let* ((tmp-file (a3madkour-pub-rewrite/rewrite-to-tmp-file
                             file id "a3-pub-poetry"))
-                 ;; Stage 4: ox-hugo export to markdown body.
+                 ;; Stage 4: ox-hugo export, for frontmatter only.
                  (export-result (unwind-protect
                                     (a3madkour-pub-export/export-file tmp-file)
                                   (when (file-exists-p tmp-file)
                                     (delete-file tmp-file))))
                  (raw-fm    (plist-get export-result :frontmatter))
-                 ;; Case C: collapse `\\[mm:ss]' → `\[mm:ss]' before downstream use.
-                 (body      (a3madkour-pub-poetry--collapse-escaped-markers
-                             (or (plist-get export-result :body) ""))))
+                 ;; The poem is the org file's own lines, not ox-hugo's.
+                 (body      (a3madkour-pub-poetry--raw-body file)))
             ;; Stage 5a: inject audio_url + line-count into raw-fm.
             (when audio-class
               (setf (alist-get 'audio_url raw-fm) (plist-get audio-class :value)))
@@ -231,16 +231,11 @@ supply an explicit `(lastmod . \"YYYY-MM-DD\")' cell."
 Rules:
   - Stanza-break blank lines excluded.
   - Lines with only `[mm:ss]' markers still count.
-  - A leading H2 (line matching `## ...') is excluded.
 
 Used by the handler to inject `:body-line-count' into the raw frontmatter
 alist; the normalizer reads it as `lines:'."
-  (let* ((lines (split-string (or body "") "\n"))
-         (stripped (if (and lines
-                            (string-match-p "\\`##[ \t]" (car lines)))
-                       (cdr lines)
-                     lines)))
-    (cl-count-if (lambda (l) (not (string-blank-p l))) stripped)))
+  (cl-count-if (lambda (l) (not (string-blank-p l)))
+               (split-string (or body "") "\n")))
 
 (defun a3madkour-pub-poetry--classify-audio (raw)
   "Classify the value of an `#+AUDIO:' keyword.
@@ -281,19 +276,54 @@ success.  Creates BUNDLE-DEST-DIR if missing."
     (copy-file src dest t)
     filename))
 
-(defun a3madkour-pub-poetry--collapse-escaped-markers (md)
-  "Collapse double-backslash escape sequences ox-hugo emits.
+(defun a3madkour-pub-poetry--raw-body (file)
+  "Return the poem text of FILE exactly as written, ending in one newline.
+Leading blanks, `#+' keywords and a `:PROPERTIES:' drawer are skipped up
+to the first verse line; after that only `#+' lines are dropped.  CRLF
+becomes LF and line-end whitespace is trimmed; indentation and every
+other character are kept.  Blank lines at either end are dropped."
+  (let* ((case-fold-search t)
+         (text (with-temp-buffer
+                 ;; -unix: keep any CR so the normalisation below owns it.
+                 (let ((coding-system-for-read 'utf-8-unix))
+                   (insert-file-contents file))
+                 (replace-regexp-in-string "\r\n?" "\n" (buffer-string))))
+         (lines (split-string text "\n"))
+         (out nil))
+    ;; Settings zone: blanks, keywords and drawers precede the poem.
+    (while (and lines
+                (or (string-blank-p (car lines))
+                    (string-match-p "\\`#\\+" (car lines))
+                    (string-match-p "\\`[ \t]*:PROPERTIES:[ \t]*\\'" (car lines))))
+      (if (string-match-p "\\`[ \t]*:PROPERTIES:[ \t]*\\'" (car lines))
+          (progn
+            (while (and lines
+                        (not (string-match-p "\\`[ \t]*:END:[ \t]*\\'" (car lines))))
+              (pop lines))
+            (pop lines))
+        (pop lines)))
+    (dolist (l lines)
+      (unless (string-match-p "\\`#\\+" l)
+        (push (string-trim-right l) out)))
+    (while (and out (string-empty-p (car out))) (pop out))
+    (if out (concat (string-join (nreverse out) "\n") "\n") "")))
 
-Task 0 recon outcome: org-source `\\[mm:ss]' (single backslash) is emitted
-by ox-hugo as markdown `\\\\[mm:ss]' (double backslash).  The runtime
-parser (layouts/partials/works/synced-text-parser.html:21) matches only
-the single-backslash form; the doubled form leaves a stray backslash in
-rendered output.  This helper restores the single-backslash shape that
-the parser + shipped fixture expect."
-  (replace-regexp-in-string
-   "\\\\\\\\\\(\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]\\)"
-   "\\\\\\1"
-   md t))
+(defun a3madkour-pub-poetry/body-gap (file)
+  "Why FILE's poem text cannot publish as written, or nil when it can.
+A poem with no text, or with a Hugo shortcode (`{{<' or `{{%') in it, is
+refused: the body is copied verbatim and Hugo would run the shortcode.
+Line numbers count from 1 within the poem text."
+  (let ((body (a3madkour-pub-poetry--raw-body file)))
+    (if (string-empty-p body)
+        (format "%s: no poem text" file)
+      (let ((n 0) hit)
+        (dolist (l (split-string body "\n"))
+          (setq n (1+ n))
+          (when (and (not hit) (string-match-p "{{[<%]" l))
+            (setq hit n)))
+        (when hit
+          (format "%s: Hugo shortcode on poem line %d; the poem is published as written"
+                  file hit))))))
 
 (defconst a3madkour-pub-poetry--marker-regexp
   "\\\\?\\[[0-9]\\{1,2\\}:[0-9]\\{2\\}\\(?:\\.[0-9]\\{1,2\\}\\)?\\]"

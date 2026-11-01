@@ -63,9 +63,12 @@ left to its handler to report.  A note not marked to publish (no
      (t
       (condition-case err
           (let ((missing (a3madkour-pub-author/missing-required file section)))
-            (when missing
-              (format "%s: missing required %s for %s; run M-x a3-publish-mark"
-                      file (string-join missing ", ") section)))
+            (if missing
+                (format "%s: missing required %s for %s; run M-x a3-publish-mark"
+                        file (string-join missing ", ") section)
+              (when (equal section "works/poetry")
+                (require 'a3madkour-publish-poetry)
+                (a3madkour-pub-poetry/body-gap file))))
         (user-error (format "%s: %s" file (error-message-string err))))))))
 
 (defun a3madkour-pub-living--library-item-files (triples)

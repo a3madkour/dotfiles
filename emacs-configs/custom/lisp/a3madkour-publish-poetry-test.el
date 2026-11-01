@@ -78,14 +78,6 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
 [00:18]veniam"))
     (should (= (a3madkour-pub-poetry--count-poem-lines body) 3))))
 
-(ert-deftest a3madkour-pub-poetry-test/lines-counter-skips-leading-h2 ()
-  "A leading H2 (e.g. `## Title') is excluded from the count."
-  (let ((body "## Untitled Poem
-
-[00:01]Lorem
-[00:02]ipsum"))
-    (should (= (a3madkour-pub-poetry--count-poem-lines body) 2))))
-
 (ert-deftest a3madkour-pub-poetry-test/lines-counter-empty-body ()
   "Empty body → 0."
   (should (= (a3madkour-pub-poetry--count-poem-lines "") 0))
@@ -188,21 +180,83 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
     (delete-directory poetry-root t)
     (delete-directory bundle-dir t)))
 
-(ert-deftest a3madkour-pub-poetry-test/collapse-double-backslash-escape ()
-  "ox-hugo Case C output `\\\\[mm:ss]' collapses to `\\[mm:ss]'."
-  (let ((md "[00:18]ut [00:19]enim \\\\[00:99] [00:20]minim"))
-    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md)
-                   "[00:18]ut [00:19]enim \\[00:99] [00:20]minim"))))
+(defun a3madkour-pub-poetry-test--raw (content)
+  "Write CONTENT to a temp org file and return its raw body."
+  (let ((f (make-temp-file "a3-poem" nil ".org")))
+    (unwind-protect
+        (progn (with-temp-file f (set-buffer-multibyte t) (insert content))
+               (a3madkour-pub-poetry--raw-body f))
+      (delete-file f))))
 
-(ert-deftest a3madkour-pub-poetry-test/collapse-leaves-bare-markers-alone ()
-  "Bare `[mm:ss]' (no leading backslash) is untouched."
-  (let ((md "[00:01]Lorem [00:02]ipsum"))
-    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md) md))))
+(defconst a3madkour-pub-poetry-test--head
+  ":PROPERTIES:\n:ID: x\n:END:\n#+TITLE: T\n#+DATE: 2026-01-01\n\n")
 
-(ert-deftest a3madkour-pub-poetry-test/collapse-leaves-single-backslash-alone ()
-  "An already-single-backslash escape `\\[mm:ss]' is left untouched."
-  (let ((md "[00:18]ut \\[00:99] [00:20]minim"))
-    (should (equal (a3madkour-pub-poetry--collapse-escaped-markers md) md))))
+(ert-deftest a3madkour-pub-poetry-test/raw-body-keeps-every-line ()
+  (let ((poem "A\n  B\n      C\nD  E\n- F\n1. G\n> H\n*I* /J/\n# K\n* L\n\nM"))
+    (should (equal (a3madkour-pub-poetry-test--raw
+                    (concat a3madkour-pub-poetry-test--head poem))
+                   (concat poem "\n")))))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-drops-drawer-and-keywords ()
+  (let ((out (a3madkour-pub-poetry-test--raw
+              (concat a3madkour-pub-poetry-test--head "A\n"))))
+    (should-not (string-match-p ":ID:" out))
+    (should-not (string-match-p "#\\+TITLE" out))))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-drops-mid-poem-keyword ()
+  (should (equal (a3madkour-pub-poetry-test--raw "a\n#+AUDIO: x.mp3\nb")
+                 "a\nb\n"))
+  (should (equal (a3madkour-pub-poetry-test--raw "a\n#+audio: x.mp3\nb")
+                 "a\nb\n")))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-keeps-first-line-indent ()
+  (should (equal (a3madkour-pub-poetry-test--raw
+                  (concat a3madkour-pub-poetry-test--head "    A\nB"))
+                 "    A\nB\n")))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-skips-drawer-after-keywords ()
+  (should (equal (a3madkour-pub-poetry-test--raw
+                  "#+TITLE: T\n:PROPERTIES:\n:ID: x\n:END:\nA")
+                 "A\n")))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-crlf ()
+  (should (equal (a3madkour-pub-poetry-test--raw "A\r\nB\r\n") "A\nB\n"))
+  (should (equal (a3madkour-pub-poetry-test--raw "A\rB\r") "A\nB\n")))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-trims-line-ends ()
+  (should (equal (a3madkour-pub-poetry-test--raw "A  \nB") "A\nB\n")))
+
+(ert-deftest a3madkour-pub-poetry-test/raw-body-keeps-escaped-marker ()
+  (should (equal (a3madkour-pub-poetry-test--raw "\\[00:99] A")
+                 "\\[00:99] A\n")))
+
+(defun a3madkour-pub-poetry-test--gap (content)
+  (let ((f (make-temp-file "a3-poem" nil ".org")))
+    (unwind-protect
+        (progn (with-temp-file f (insert content))
+               (a3madkour-pub-poetry/body-gap f))
+      (delete-file f))))
+
+(ert-deftest a3madkour-pub-poetry-test/body-gap-nil-for-verse ()
+  (should-not (a3madkour-pub-poetry-test--gap
+               (concat a3madkour-pub-poetry-test--head "A\nB\n"))))
+
+(ert-deftest a3madkour-pub-poetry-test/body-gap-names-shortcode-line ()
+  (should (string-match-p "line 2"
+                          (a3madkour-pub-poetry-test--gap
+                           (concat a3madkour-pub-poetry-test--head
+                                   "A\n{{< x >}}\nB\n")))))
+
+(ert-deftest a3madkour-pub-poetry-test/body-gap-percent-form ()
+  (should (string-match-p "line 2"
+                          (a3madkour-pub-poetry-test--gap
+                           (concat a3madkour-pub-poetry-test--head
+                                   "A\n{{% x %}}\nB\n")))))
+
+(ert-deftest a3madkour-pub-poetry-test/body-gap-empty-poem ()
+  (should (string-match-p "no poem text"
+                          (a3madkour-pub-poetry-test--gap
+                           a3madkour-pub-poetry-test--head))))
 
 (ert-deftest a3madkour-pub-poetry-test/summary-marker-scrub ()
   "Summary containing `[mm:ss]' or `\\[mm:ss]' substrings has them stripped."
@@ -282,7 +336,8 @@ or hugo — pure in-process emacs."
       (insert "#+AUDIO: reading.mp3\n")
       (insert "\n")
       (insert "[00:01]Lorem [00:02]ipsum\n")
-      (insert "[00:17]Duis aute\n"))
+      (insert "[00:17]Duis aute\n")
+      (insert "# K\n"))
     (unwind-protect
         (let* ((a3madkour-pub/poetry-dir poetry-root)
                (a3madkour-pub/site-data-dir (expand-file-name "data/" site-root))
@@ -297,7 +352,8 @@ or hugo — pure in-process emacs."
           (should (file-exists-p bundled-audio))
           (let ((emitted (with-temp-buffer (insert-file-contents index-md) (buffer-string))))
             (should (string-match-p "audio_url: \"reading.mp3\"" emitted))
-            (should (string-match-p "lines: 2" emitted))
+            (should (string-match-p "lines: 3" emitted))
+            (should (string-match-p "^# K$" emitted))
             (should (string-match-p "\\[00:01\\]Lorem \\[00:02\\]ipsum" emitted))))
       (delete-directory poetry-root t)
       (delete-directory site-root t))))

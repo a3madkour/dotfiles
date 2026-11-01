@@ -683,5 +683,25 @@ naming the fix, and its items never reach reading.yaml."
                                   (or (a3madkour-pub-living/contract-gap file "works/poetry") "")))
         (delete-file file)))))
 
+;; S1 2026-11-01: poems are copied as written, so a shortcode would run.
+(ert-deftest a3madkour-pub-living-test/gate-refuses-a-poem-with-a-shortcode ()
+  (a3madkour-sections-test--with-real-site
+    (let ((file (make-temp-file "a3-poem" nil ".org"
+                                "#+title: T\n#+date: 2026-01-01\n#+HUGO_SECTION: works/poetry\n#+HUGO_PUBLISH: t\n\nA\n{{< x >}}\n")))
+      (unwind-protect
+          (should (string-match-p "line"
+                                  (or (a3madkour-pub-living/contract-gap file "works/poetry") "")))
+        (delete-file file)))))
+
+(ert-deftest a3madkour-pub-living-test/gate-leaves-other-sections-alone ()
+  (a3madkour-sections-test--with-real-site
+    (let ((file (make-temp-file "a3-essay" nil ".org"
+                                "#+title: T\n#+date: 2026-01-01\n#+HUGO_SECTION: essays\n#+HUGO_PUBLISH: t\n\nA {{< x >}}\n")))
+      (unwind-protect
+          (should-not (string-match-p
+                       "line"
+                       (or (a3madkour-pub-living/contract-gap file "essays") "")))
+        (delete-file file)))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here
