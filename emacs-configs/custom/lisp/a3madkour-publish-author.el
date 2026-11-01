@@ -14,6 +14,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'org)
 (require 'org-id)
 (require 'a3madkour-publish)
@@ -342,6 +343,44 @@ whose SOURCE is `date' as `#+date:'."
 
 ;; -- a3-publish-mark --
 
+(defun a3madkour-pub-author--sections-for-file (file)
+  "Return the sections whose `:folder' holds FILE, in registry order.
+When folders nest, only the deepest one's sections count.  An unset
+folder holds nothing: this only orders a prompt, so it never errors."
+  (let* ((owned (cl-loop
+                 for section in a3madkour-pub/sections
+                 for var = (a3madkour-pub-registry/get section :folder)
+                 for dir = (and var (boundp var) (symbol-value var))
+                 when (and file (stringp dir) (not (string-empty-p dir))
+                           (file-in-directory-p file dir))
+                 collect (cons section
+                               (length (file-name-as-directory
+                                        (expand-file-name dir))))))
+         (deepest (apply #'max 0 (mapcar #'cdr owned))))
+    (cl-loop for (section . depth) in owned
+             when (= depth deepest) collect section)))
+
+(defun a3madkour-pub-author--read-section ()
+  "Prompt for a section, best guess first and as the default.
+The buffer's own `#+HUGO_SECTION:' leads, then the sections of the folder
+the file is in, then every other section.  With neither, there is no
+default: Enter must not pick a section nobody suggested."
+  (let* ((current (a3madkour-pub-keywords/extract "HUGO_SECTION"))
+         (guesses (append (and (member current a3madkour-pub/sections)
+                               (list current))
+                          (a3madkour-pub-author--sections-for-file
+                           buffer-file-name)))
+         (ordered (seq-uniq (append guesses a3madkour-pub/sections))))
+    (completing-read
+     "Section: "
+     ;; Without these, Vertico re-sorts the list and the order is lost.
+     (lambda (string pred action)
+       (if (eq action 'metadata)
+           '(metadata (display-sort-function . identity)
+                      (cycle-sort-function . identity))
+         (complete-with-action action ordered string pred)))
+     nil t nil nil (car guesses))))
+
 (defmacro a3madkour-pub-author--with-contract (&rest body)
   "Run BODY; turn a section-contract `error' into a `user-error'.
 A `user-error' passes through unchanged."
@@ -405,10 +444,7 @@ Refuses outside `org-mode', in a read-only buffer, when the contract
 is missing or malformed, or when the buffer is a library item note
 \(`LIBRARY_MEDIA_TYPE') and SECTION is not garden.  Returns SECTION, or
 nil if declined."
-  (interactive
-   (let ((current (a3madkour-pub-keywords/extract "HUGO_SECTION")))
-     (list (completing-read "Section: " a3madkour-pub/sections
-                            nil t nil nil current))))
+  (interactive (list (a3madkour-pub-author--read-section)))
   (unless (derived-mode-p 'org-mode)
     (user-error "a3-publish-mark: current buffer is not org-mode"))
   (when buffer-read-only

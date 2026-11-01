@@ -202,6 +202,121 @@ when caller passes the same answer to y-or-n-p)."
         (should (null (a3-publish-mark "essays"))))
       (should (string= (buffer-string) before)))))
 
+;; -- a3-publish-mark: the section prompt follows the file's folder --
+
+(defmacro a3madkour-pub-author-test--with-folders (&rest body)
+  "Run BODY with temp essay, poetry and notes folders bound to the variables.
+Binds `essays', `poetry' and `notes' to those folders."
+  (declare (indent 0))
+  `(let* ((root (make-temp-file "a3-mark-folders" t))
+          (essays (file-name-as-directory (expand-file-name "essays" root)))
+          (poetry (file-name-as-directory (expand-file-name "poetry" root)))
+          (notes (file-name-as-directory (expand-file-name "notes" root)))
+          (a3madkour-pub/essays-dir essays)
+          (a3madkour-pub/poetry-dir poetry)
+          (a3madkour-pub/org-notes-dir notes))
+     (ignore essays poetry notes)
+     (unwind-protect (progn (make-directory essays) (make-directory poetry)
+                            (make-directory notes) ,@body)
+       (delete-directory root t))))
+
+(defun a3madkour-pub-author-test--prompt (file &optional section)
+  "Answer the section prompt in a buffer visiting FILE, a marked SECTION.
+Returns (DEFAULT . CANDIDATES-IN-DISPLAY-ORDER), read the way a completion
+UI reads them: through the table's metadata sort function."
+  (let (seen)
+    (with-temp-buffer
+      (org-mode)
+      (setq buffer-file-name file)
+      (when section (insert "#+HUGO_SECTION: " section "\n"))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_prompt table _pred _req _init _hist default)
+                   (let* ((sorter (completion-metadata-get
+                                   (completion-metadata "" table nil)
+                                   'display-sort-function))
+                          (all (all-completions "" table)))
+                     (setq seen (cons default (funcall sorter all)))
+                     default))))
+        (a3madkour-pub-author--read-section))
+      (setq buffer-file-name nil))
+    seen))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-poem-folder-suggests-poetry ()
+  "A file under the poetry folder offers works/poetry first and as the default."
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt
+                 (expand-file-name "a-poem.org" poetry))))
+      (should (equal (car seen) "works/poetry"))
+      (should (equal (cadr seen) "works/poetry")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-essay-folder-suggests-essays ()
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt
+                 (expand-file-name "an-essay.org" essays))))
+      (should (equal (car seen) "essays"))
+      (should (equal (cadr seen) "essays")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-notes-folder-orders-note-sections ()
+  "The notes folder holds several sections: garden first, the others next,
+in registry order, ahead of sections that do not live there."
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt
+                 (expand-file-name "sub/a-note.org" notes))))
+      (should (equal (car seen) "garden"))
+      (should (equal (seq-take (cdr seen) 5)
+                     '("garden" "research/themes" "research/questions"
+                       "works/games" "works/music"))))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-keeps-every-section ()
+  "Ordering never hides a section: the file's folder is a suggestion."
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt
+                 (expand-file-name "a-poem.org" poetry))))
+      (should (equal (sort (copy-sequence (cdr seen)) #'string<)
+                     (sort (copy-sequence a3madkour-pub/sections) #'string<))))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-existing-section-wins ()
+  "A note already marked keeps that section as the suggestion, even in a
+folder that suggests another: re-marking must not nudge it to move."
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt
+                 (expand-file-name "a-poem.org" poetry) "garden")))
+      (should (equal (car seen) "garden"))
+      (should (equal (cadr seen) "garden")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-deepest-folder-wins ()
+  "A folder nested inside another suggests its own section, not the parent's."
+  (a3madkour-pub-author-test--with-folders
+    (let* ((a3madkour-pub/poetry-dir
+            (file-name-as-directory (expand-file-name "poems" notes)))
+           (seen (progn (make-directory a3madkour-pub/poetry-dir)
+                        (a3madkour-pub-author-test--prompt
+                         (expand-file-name "a-poem.org" a3madkour-pub/poetry-dir)))))
+      (should (equal (car seen) "works/poetry"))
+      (should-not (equal (caddr seen) "garden")))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-outside-every-folder-has-no-default ()
+  "A file in no known folder gets the plain list and no guess: Enter must not
+quietly pick a section."
+  (a3madkour-pub-author-test--with-folders
+    (let ((seen (a3madkour-pub-author-test--prompt "/nowhere/else/x.org")))
+      (should (null (car seen)))
+      (should (equal (cdr seen) a3madkour-pub/sections)))))
+
+(ert-deftest a3madkour-pub-author-test/mark-prompt-tolerates-unset-folders ()
+  "An unset folder cannot fail the prompt: a suggestion is not worth an error."
+  (let ((a3madkour-pub/essays-dir nil)
+        (a3madkour-pub/poetry-dir nil)
+        (a3madkour-pub/org-notes-dir nil))
+    (should (equal (cdr (a3madkour-pub-author-test--prompt "/tmp/x.org"))
+                   a3madkour-pub/sections))))
+
+(ert-deftest a3madkour-pub-author-test/registry-folders-are-config-variables ()
+  "Every registry `:folder' is a variable config.org's block must set."
+  (dolist (section a3madkour-pub/sections)
+    (let ((var (a3madkour-pub-registry/get section :folder)))
+      (when var (should (memq var a3madkour-pub/path-variables))))))
+
 (ert-deftest a3madkour-pub-author-test/mark-refuses-non-org-mode ()
   "mark: non-org-mode buffer → user-error."
   (with-temp-buffer

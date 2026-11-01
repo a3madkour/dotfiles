@@ -23,18 +23,25 @@
 
 (defconst a3madkour-pub-registry
   '(("essays"             :mode deliberate
+     :folder a3madkour-pub/essays-dir
      :handler a3madkour-pub-essays/publish-essay-file)
     ("garden"             :mode living
+     :folder a3madkour-pub/org-notes-dir
      :handler a3madkour-pub-garden/publish-garden-file)
     ("research/themes"    :mode living
+     :folder a3madkour-pub/org-notes-dir
      :handler a3madkour-pub-research/publish-research-file)
     ("research/questions" :mode living
+     :folder a3madkour-pub/org-notes-dir
      :handler a3madkour-pub-research/publish-research-file)
     ("works/games"        :mode living
+     :folder a3madkour-pub/org-notes-dir
      :handler a3madkour-pub-works/publish-works-file)
     ("works/music"        :mode living
+     :folder a3madkour-pub/org-notes-dir
      :handler a3madkour-pub-works/publish-works-file)
     ("works/poetry"       :mode deliberate
+     :folder a3madkour-pub/poetry-dir
      :handler a3madkour-pub-poetry/publish-poetry-file)
     ("library/reading"    :mode living
      :handler a3madkour-pub-library/refuse-shelf-file
@@ -60,6 +67,10 @@ Each entry is (SECTION . PLIST):
                    (valid section, no handler yet: streams, about).
   :handler         handler function SYMBOL, signature
                    (file run &key on-done); resolved at dispatch.
+  :folder          the variable naming the folder this section's files
+                   live in, or absent.  `a3-publish-mark' suggests the
+                   sections of the folder the file is in; it never
+                   restricts them.
   :data-file       library only: the data/ yaml file the section writes.
   :default-medium  library only: the media_type used when a heading
                    declares none.
