@@ -209,6 +209,10 @@ it, `note-section' short-circuits via the publish gate (see `--parse-file')."
   (should (equal (a3madkour-pub-poetry-test--raw "a\n#+audio: x.mp3\nb")
                  "a\nb\n")))
 
+(ert-deftest a3madkour-pub-poetry-test/raw-body-drops-indented-keyword ()
+  (should (equal (a3madkour-pub-poetry-test--raw "  #+TITLE: T\nA\n  #+audio: x.mp3\nB")
+                 "A\nB\n")))
+
 (ert-deftest a3madkour-pub-poetry-test/raw-body-keeps-first-line-indent ()
   (should (equal (a3madkour-pub-poetry-test--raw
                   (concat a3madkour-pub-poetry-test--head "    A\nB"))

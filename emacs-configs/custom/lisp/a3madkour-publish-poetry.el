@@ -278,7 +278,7 @@ success.  Creates BUNDLE-DEST-DIR if missing."
 
 (defun a3madkour-pub-poetry--raw-body (file)
   "Return the poem text of FILE exactly as written, ending in one newline.
-Leading blanks, `#+' keywords and a `:PROPERTIES:' drawer are skipped up
+Leading blanks, `#+' keywords (indented or not) and a `:PROPERTIES:' drawer are skipped up
 to the first verse line; after that only `#+' lines are dropped.  CRLF
 becomes LF and line-end whitespace is trimmed; indentation and every
 other character are kept.  Blank lines at either end are dropped."
@@ -293,7 +293,7 @@ other character are kept.  Blank lines at either end are dropped."
     ;; Settings zone: blanks, keywords and drawers precede the poem.
     (while (and lines
                 (or (string-blank-p (car lines))
-                    (string-match-p "\\`#\\+" (car lines))
+                    (string-match-p "\\`[ \t]*#\\+" (car lines))
                     (string-match-p "\\`[ \t]*:PROPERTIES:[ \t]*\\'" (car lines))))
       (if (string-match-p "\\`[ \t]*:PROPERTIES:[ \t]*\\'" (car lines))
           (progn
@@ -303,7 +303,7 @@ other character are kept.  Blank lines at either end are dropped."
             (pop lines))
         (pop lines)))
     (dolist (l lines)
-      (unless (string-match-p "\\`#\\+" l)
+      (unless (string-match-p "\\`[ \t]*#\\+" l)
         (push (string-trim-right l) out)))
     (while (and out (string-empty-p (car out))) (pop out))
     (if out (concat (string-join (nreverse out) "\n") "\n") "")))
