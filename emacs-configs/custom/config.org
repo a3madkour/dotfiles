@@ -1994,11 +1994,17 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
         (goto-char (point-max))
         (dolist (key keys)
           (let* ((entry (citar-get-entry key))
-                 (title (alist-get "title" entry nil nil #'string=))
+                 (title (when-let* ((s (alist-get "title" entry nil nil #'string=)))
+                          (string-trim (replace-regexp-in-string "[{}]" "" s))))
                  (author (alist-get "author" entry nil nil #'string=))
-                 (year (when-let* ((date (alist-get "date" entry nil nil #'string=)))
-                         (substring date 0 4)))
-                 (display (format "%s (%s)" (or title "Untitled") (or year "")))
+                 ;; biblatex has `date', BibTeX has `year'.
+                 (year (when-let* ((d (or (alist-get "date" entry nil nil #'string=)
+                                          (alist-get "year" entry nil nil #'string=)))
+                                   ((>= (length d) 4)))
+                         (substring d 0 4)))
+                 (display (if year
+                              (format "%s (%s)" (or title "Untitled") year)
+                            (or title "Untitled")))
                  (text (format "* TODO Read %s :active:toread:\n:PROPERTIES:\n:ENERGY: high\n:CITEKEY: %s\n:AUTHOR: %s\n:END:\n[cite:@%s]\n\n"
                                display key (or author "") key)))
             (insert text)))
