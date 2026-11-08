@@ -4313,6 +4313,15 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
         (format "%s/%sd" base (string-to-number flexibility))
       base)))
 
+(defun a3madkour/-habit-tag-candidates ()
+  "Tags worth offering for a new habit: core, the current season's
+tags, and every tag already on a habit in actions.org."
+  (delete-dups
+   (append '("core")
+           (when (file-exists-p (a3madkour/org-file "projects.org"))
+             (a3madkour/get-current-season-tags))
+           (a3madkour/get-habit-tags))))
+
 (defun a3madkour/inbox-to-habit ()
   "Process the current inbox item as a recurring habit."
   (let* ((frequency (completing-read "How often? "
@@ -4322,11 +4331,16 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
          (flexibility (when (member frequency '("daily" "every 2 days" "every 3 days"))
                         (read-string "Max days before overdue (blank for same): ")))
          (full-repeater (a3madkour/-build-habit-repeater frequency flexibility))
+         (tags (completing-read-multiple
+                "Tags (comma-separated, blank for none): "
+                (a3madkour/-habit-tag-candidates)))
          (marker (a3madkour/get-refile-marker (a3madkour/org-file "actions.org") "Habits")))
     (org-set-property "STYLE" "habit")
     (org-schedule nil (format "<%s %s>"
                               (format-time-string "%Y-%m-%d %a")
                               full-repeater))
+    (when tags
+      (org-set-tags (delete-dups (append (org-get-tags nil t) tags))))
     (org-refile nil nil (list "Habits" (a3madkour/org-file "actions.org") nil marker))
     (set-marker marker nil))
   (message "Sent to habits"))

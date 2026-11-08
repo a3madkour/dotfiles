@@ -156,7 +156,9 @@ body text
         (cl-letf (((symbol-function 'completing-read)
                    (a3madkour-test/queue '("daily")))
                   ((symbol-function 'read-string)
-                   (a3madkour-test/queue '(""))))  ;; no flexibility
+                   (a3madkour-test/queue '("")))  ;; no flexibility
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (&rest _) nil)))
           (a3madkour/inbox-to-habit)))
       ;; Actions.org has the habit under Habits with right properties
       (let ((content
@@ -182,13 +184,46 @@ body text
         (cl-letf (((symbol-function 'completing-read)
                    (a3madkour-test/queue '("every 3 days")))
                   ((symbol-function 'read-string)
-                   (a3madkour-test/queue '("5"))))
+                   (a3madkour-test/queue '("5")))
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (&rest _) nil)))
           (a3madkour/inbox-to-habit)))
       (let ((content
              (with-current-buffer
                  (find-file-noselect (a3madkour/org-file "actions.org"))
                (buffer-string))))
         (should (string-match-p "SCHEDULED:.*\\.\\+3d/5d" content))))))
+
+;;; prompts for tags, offering existing habit tags and "core"
+(ert-deftest a3madkour-test/inbox-to-habit-sets-tags ()
+  (a3madkour-test/with-org-env
+      '(("actions.org" . "* Habits\n** TODO Old :health:\n:PROPERTIES:\n:STYLE: habit\n:END:\n"))
+    (find-file-noselect (a3madkour/org-file "actions.org"))
+    (let ((inbox-buf
+           (find-file-noselect
+            (let ((f (a3madkour/org-file "inbox.org")))
+              (with-temp-file f (insert "* TODO Stretch\n"))
+              f)))
+          offered)
+      (with-current-buffer inbox-buf
+        (goto-char (point-min))
+        (re-search-forward "Stretch")
+        (cl-letf (((symbol-function 'completing-read)
+                   (a3madkour-test/queue '("daily")))
+                  ((symbol-function 'read-string)
+                   (a3madkour-test/queue '("")))
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (_prompt table &rest _)
+                     (setq offered table)
+                     '("core" "health"))))
+          (a3madkour/inbox-to-habit)))
+      (should (member "core" offered))
+      (should (member "health" offered))
+      (let ((content
+             (with-current-buffer
+                 (find-file-noselect (a3madkour/org-file "actions.org"))
+               (buffer-string))))
+        (should (string-match-p "Stretch +:core:health:" content))))))
 
 ;;; ---- a3madkour/inbox-to-action ----
 
