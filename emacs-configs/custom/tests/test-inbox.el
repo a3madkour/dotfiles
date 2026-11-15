@@ -319,6 +319,26 @@ body text here
              (buffer-string))))
       (should (string-match-p "Maybe later" content)))))
 
+(ert-deftest a3madkour-test/inbox-to-someday-default-is-parking-lot ()
+  (a3madkour-test/with-org-env
+      '(("someday.org" . "* Books\n* Parking Lot\n"))
+    (find-file-noselect (a3madkour/org-file "someday.org"))
+    (let ((inbox-buf (a3madkour-test--make-inbox))
+          args)
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (&rest a) (setq args a) "Parking Lot")))
+          (a3madkour/inbox-to-someday)))
+      ;; Args: PROMPT COLLECTION PRED REQUIRE INITIAL HIST DEF.
+      (should (equal (car (nth 1 args)) "Parking Lot"))
+      (should (= 1 (seq-count (lambda (h) (equal h "Parking Lot")) (nth 1 args))))
+      (should (equal (nth 6 args) "Parking Lot")))
+    (with-current-buffer (find-file-noselect (a3madkour/org-file "someday.org"))
+      (goto-char (point-min))
+      (re-search-forward "^\\* Parking Lot")
+      (let ((bound (save-excursion (or (re-search-forward "^\\* " nil t) (point-max)))))
+        (should (re-search-forward "Keep me" bound t))))))
+
 (ert-deftest a3madkour-test/inbox-to-someday-explicit-heading ()
   (a3madkour-test/with-org-env
       '(("someday.org" . "* Parking Lot\n* Books\n"))
@@ -381,7 +401,7 @@ body text here
                    (a3madkour-test/queue '("daily")))
                   ((symbol-function 'read-string)
                    (a3madkour-test/queue '("")))  ;; no flexibility
-                  ((symbol-function 'completing-read-multiple)
+                  ((symbol-function 'a3madkour/-read-tags)
                    (lambda (&rest _) nil)))
           (a3madkour/inbox-to-habit)))
       ;; Actions.org has the habit under Habits with right properties
@@ -409,7 +429,7 @@ body text here
                    (a3madkour-test/queue '("every 3 days")))
                   ((symbol-function 'read-string)
                    (a3madkour-test/queue '("5")))
-                  ((symbol-function 'completing-read-multiple)
+                  ((symbol-function 'a3madkour/-read-tags)
                    (lambda (&rest _) nil)))
           (a3madkour/inbox-to-habit)))
       (let ((content
@@ -418,8 +438,10 @@ body text here
                (buffer-string))))
         (should (string-match-p "SCHEDULED:.*\\.\\+3d/5d" content))))))
 
-;;; prompts for tags, offering existing habit tags and "core"
-(ert-deftest a3madkour-test/inbox-to-habit-sets-tags ()
+;;; tags come from the picker, which is offered existing habit tags and "core"
+(defun a3madkour-test--habit-with-tags (tags-fn)
+  "Run `inbox-to-habit' on a fresh item with `-read-tags' stubbed to TAGS-FN.
+Return the text of actions.org afterwards."
   (a3madkour-test/with-org-env
       '(("actions.org" . "* Habits\n** TODO Old :health:\n:PROPERTIES:\n:STYLE: habit\n:END:\n"))
     (find-file-noselect (a3madkour/org-file "actions.org"))
@@ -427,8 +449,7 @@ body text here
            (find-file-noselect
             (let ((f (a3madkour/org-file "inbox.org")))
               (with-temp-file f (insert "* TODO Stretch\n"))
-              f)))
-          offered)
+              f))))
       (with-current-buffer inbox-buf
         (goto-char (point-min))
         (re-search-forward "Stretch")
@@ -437,17 +458,30 @@ body text here
                   ((symbol-function 'read-string)
                    (a3madkour-test/queue '("")))
                   ((symbol-function 'completing-read-multiple)
-                   (lambda (_prompt table &rest _)
-                     (setq offered table)
-                     '("core" "health"))))
+                   (lambda (&rest _) (error "should not be called")))
+                  ((symbol-function 'a3madkour/-read-tags) tags-fn))
           (a3madkour/inbox-to-habit)))
-      (should (member "core" offered))
-      (should (member "health" offered))
-      (let ((content
-             (with-current-buffer
-                 (find-file-noselect (a3madkour/org-file "actions.org"))
-               (buffer-string))))
-        (should (string-match-p "Stretch +:core:health:" content))))))
+      (with-current-buffer (find-file-noselect (a3madkour/org-file "actions.org"))
+        (buffer-string)))))
+
+(ert-deftest a3madkour-test/inbox-to-habit-uses-tag-picker ()
+  (let* (offered
+         (content (a3madkour-test--habit-with-tags
+                   (lambda (_prompt candidates)
+                     (setq offered candidates)
+                     '("core" "health")))))
+    (should (member "core" offered))
+    (should (member "health" offered))
+    (should (string-match-p "Stretch +:core:health:" content))))
+
+(ert-deftest a3madkour-test/inbox-to-habit-sets-tags ()
+  (let ((content (a3madkour-test--habit-with-tags
+                  (lambda (&rest _) '("core" "health")))))
+    (should (string-match-p "Stretch +:core:health:" content))))
+
+(ert-deftest a3madkour-test/inbox-to-habit-done-immediately-means-no-tags ()
+  (let ((content (a3madkour-test--habit-with-tags (lambda (&rest _) nil))))
+    (should (string-match-p "^\\*\\* TODO Stretch$" content))))
 
 ;;; ---- a3madkour/inbox-to-action ----
 
@@ -577,7 +611,7 @@ body text here
                    (a3madkour-test/queue '("every 3 days")))
                   ((symbol-function 'read-string)
                    (a3madkour-test/queue '("3")))
-                  ((symbol-function 'completing-read-multiple)
+                  ((symbol-function 'a3madkour/-read-tags)
                    (lambda (&rest _) nil)))
           (should-error (a3madkour/inbox-to-habit) :type 'user-error))
         (should-not (string-match-p "STYLE\\|SCHEDULED:" (buffer-string))))
@@ -593,7 +627,7 @@ body text here
                    (a3madkour-test/queue '("daily")))
                   ((symbol-function 'read-string)
                    (a3madkour-test/queue '("")))
-                  ((symbol-function 'completing-read-multiple)
+                  ((symbol-function 'a3madkour/-read-tags)
                    (lambda (&rest _) (signal 'quit nil))))
           (condition-case nil (a3madkour/inbox-to-habit) (quit nil)))
         (should-not (string-match-p "STYLE\\|SCHEDULED:" (buffer-string))))

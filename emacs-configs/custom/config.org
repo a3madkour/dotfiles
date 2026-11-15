@@ -4407,9 +4407,10 @@ All answers are gathered and the target resolved before the item changes."
                      (org-map-entries
                       (lambda () (nth 4 (org-heading-components)))
                       "LEVEL=1")))
+         (candidates (cons "Parking Lot" (delete "Parking Lot" headings)))
          (choice (string-trim
-                  (completing-read "Refile under heading (blank for Parking Lot): "
-                                   headings nil nil)))
+                  (completing-read "Refile under heading (default Parking Lot): "
+                                   candidates nil nil nil nil "Parking Lot")))
          (target (if (string-empty-p choice) "Parking Lot" choice))
          (marker (with-current-buffer buf
                    (save-excursion
@@ -4471,9 +4472,7 @@ tags, and every tag already on a habit in actions.org."
          (flexibility (when (member frequency '("daily" "every 2 days" "every 3 days"))
                         (read-string "Max days before overdue (blank for same): ")))
          (full-repeater (a3madkour/-build-habit-repeater frequency flexibility))
-         (tags (completing-read-multiple
-                "Tags (comma-separated, blank for none): "
-                (a3madkour/-habit-tag-candidates)))
+         (tags (a3madkour/-read-tags "Tags" (a3madkour/-habit-tag-candidates)))
          (marker (a3madkour/get-refile-marker (a3madkour/org-file "actions.org") "Habits")))
     (org-set-property "STYLE" "habit")
     (org-schedule nil (format "<%s %s>"
