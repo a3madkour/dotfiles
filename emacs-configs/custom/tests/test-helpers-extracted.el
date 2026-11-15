@@ -151,5 +151,32 @@
     (should (null (funcall q)))
     (should-error (funcall q))))
 
+(ert-deftest a3madkour-test/config-org-elisp-blocks-read-cleanly ()
+  "Every tangled emacs-lisp block of config.org reads as balanced forms."
+  (let (bad)
+    (with-temp-buffer
+      (insert-file-contents a3madkour-test/config-org-path)
+      (goto-char (point-min))
+      (while (re-search-forward
+              "^[ \t]*#\\+begin_src emacs-lisp\\(.*\\)$" nil t)
+        (let ((header (match-string 1))
+              (line (line-number-at-pos (match-beginning 0)))
+              (start (progn (forward-line 1) (point))))
+          (when (re-search-forward "^[ \t]*#\\+end_src" nil t)
+            (unless (string-match-p ":tangle[ \t]+no\\b" header)
+              (let ((text (buffer-substring-no-properties
+                           start (match-beginning 0))))
+                (with-temp-buffer
+                  (set-syntax-table emacs-lisp-mode-syntax-table)
+                  (insert text)
+                  (goto-char (point-min))
+                  (condition-case err
+                      (while (progn (forward-comment (buffer-size))
+                                    (skip-chars-forward " \t\n\r\f")
+                                    (not (eobp)))
+                        (read (current-buffer)))
+                    (error (push (format "line %d: %S" line err) bad))))))))))
+    (should (null (nreverse bad)))))
+
 (provide 'test-helpers-extracted)
 ;;; test-helpers-extracted.el ends here

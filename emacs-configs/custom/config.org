@@ -3968,7 +3968,7 @@ evaluated each time it is built, so they follow the current season."
                          ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
                           (org-agenda-sorting-strategy '(priority-down effort-up)))))
              ((org-agenda-block-separator nil)
-              (org-agenda-overriding-header (a3madkour/-dashboard-header))))))))
+              (org-agenda-overriding-header (a3madkour/-dashboard-header)))))))
 
 (defun a3madkour/-archive-current-season (accomplishments)
   "Rename the existing `* Current Season:' heading in the current buffer to
