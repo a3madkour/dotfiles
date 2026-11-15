@@ -45,54 +45,198 @@ ENERGY/EFFORT properties are tolerated."
 
 ;;; ---- a3madkour/inbox-to-org-roam ----
 
-(ert-deftest a3madkour-test/inbox-to-org-roam-defers-cut-until-finalize ()
-  ;; Bug-fix regression: cut should happen on finalize, not immediately.
+;; Content carried into the note.
+
+(ert-deftest a3madkour-test/inbox-roam-content-relevels-children ()
   (a3madkour-test/in-buffer "\
+* TODO Parent                                                     :ptag:
+:PROPERTIES:
+:CAPTURED: [2026-11-01 Sun]
+:END:
+body line
+*** NEXT Child                                                    :ctag:
+:PROPERTIES:
+:X: 1
+:END:
+**** Grandchild
+* TODO Sibling
+"
+    (let ((content (a3madkour/-inbox-roam-content)))
+      (should (string-prefix-p "body line" content))
+      (should (string-match-p "^\\* NEXT Child +:ctag:$" content))
+      (should (string-match-p "^:X: +1$" content))
+      (should (string-match-p "^\\*\\* Grandchild$" content))
+      (should-not (string-match-p "CAPTURED\\|ptag\\|Sibling" content)))))
+
+(ert-deftest a3madkour-test/inbox-roam-content-empty-body-with-children ()
+  (a3madkour-test/in-buffer "* TODO Parent\n** Child\nchild body\n* TODO Sibling\n"
+    (should (equal (a3madkour/-inbox-roam-content) "* Child\nchild body"))))
+
+(ert-deftest a3madkour-test/inbox-roam-content-no-children ()
+  (a3madkour-test/in-buffer "\
+* TODO Parent
+SCHEDULED: <2026-11-20 Fri>
+:PROPERTIES:
+:CAPTURED: [2026-11-01 Sun]
+:END:
+
+just the body
+
+* TODO Sibling
+"
+    (should (equal (a3madkour/-inbox-roam-content) "just the body"))))
+
+(ert-deftest a3madkour-test/inbox-roam-content-empty ()
+  (a3madkour-test/in-buffer "* TODO Parent\n* TODO Sibling\n"
+    (should (equal (a3madkour/-inbox-roam-content) "")))
+  (a3madkour-test/in-buffer "* TODO Last line, no newline"
+    (should (equal (a3madkour/-inbox-roam-content) ""))))
+
+;; The hand-off, with org-roam's capture stubbed.  The stub does what
+;; `org-roam-capture-' does on success: it returns with a capture buffer
+;; current.  A finalise is simulated the way `org-capture-finalize' runs it:
+;; the prepare hook in the capture buffer, the capture buffer killed, then the
+;; after hook in some other buffer.
+
+(defun a3madkour-test/-fake-roam-capture (name)
+  "Return a stub for `org-roam-capture-' that makes buffer NAME current as a capture buffer."
+  (lambda (&rest args)
+    (set-buffer (get-buffer-create name))
+    (setq-local org-capture-mode t)
+    (setq-local a3madkour-test/-capture-args args)))
+
+(defun a3madkour-test/-hand-off (inbox heading capture-name)
+  "Hand the INBOX item titled HEADING to a fake roam capture named CAPTURE-NAME.
+Return the capture buffer."
+  (with-current-buffer inbox
+    (goto-char (point-min))
+    (re-search-forward (concat "^\\* TODO " (regexp-quote heading)))
+    (cl-letf (((symbol-function 'org-roam-capture-)
+               (a3madkour-test/-fake-roam-capture capture-name)))
+      (a3madkour/inbox-to-org-roam)))
+  (get-buffer capture-name))
+
+(defun a3madkour-test/-capture-template (capture)
+  "The template body string the hand-off passed to `org-roam-capture-' for CAPTURE."
+  (let ((args (buffer-local-value 'a3madkour-test/-capture-args capture)))
+    (nth 3 (car (plist-get args :templates)))))
+
+(defun a3madkour-test/-finalize (capture &optional abort)
+  "Simulate `org-capture-finalize' of buffer CAPTURE; ABORT non-nil is `org-capture-kill'."
+  (let ((org-note-abort abort))
+    (with-current-buffer capture (a3madkour--inbox-roam-prepare-finalize))
+    (kill-buffer capture)
+    (with-temp-buffer (a3madkour--inbox-to-roam-finalize))))
+
+(defun a3madkour-test/-finalize-unrelated ()
+  "Simulate successfully finalising some capture the hand-off did not start."
+  (let ((org-note-abort nil))
+    (with-temp-buffer
+      (setq-local org-capture-mode t)
+      (a3madkour--inbox-roam-prepare-finalize)
+      (a3madkour--inbox-to-roam-finalize))))
+
+(defmacro a3madkour-test/-with-captures (names &rest body)
+  "Run BODY, then kill capture buffers NAMES and disarm any finalise in flight."
+  (declare (indent 1) (debug t))
+  `(unwind-protect (progn ,@body)
+     (dolist (n ,names) (when (get-buffer n) (kill-buffer n)))
+     (setq a3madkour--inbox-roam-finalizing nil)))
+
+(defconst a3madkour-test--roam-inbox "\
 * TODO Send me to roam
 body text here
+** child note
+*** grandchild
+* TODO Sibling
 "
-    (re-search-forward "Send me")
-    (let ((captured-templates nil))
-      (cl-letf (((symbol-function 'org-roam-capture-)
-                 (lambda (&rest args) (setq captured-templates args))))
-        (a3madkour/inbox-to-org-roam))
-      ;; Subtree still present (deferred)
-      (should (string-match-p "Send me to roam" (buffer-string)))
-      ;; org-roam-capture- was called
-      (should captured-templates)
-      ;; Body text is included in the captured template
-      (should (string-match-p "body text here"
-                              (prin1-to-string captured-templates))))
-    ;; Simulate successful finalize
-    (let ((org-note-abort nil))
-      (a3madkour--inbox-to-roam-finalize))
-    (should-not (string-match-p "Send me to roam" (buffer-string)))))
+  "An inbox with an item that has a body and children, and a sibling after it.")
 
-(ert-deftest a3madkour-test/inbox-to-org-roam-preserves-on-abort ()
-  ;; If the user aborts capture, the inbox subtree must remain.
-  (a3madkour-test/in-buffer "\
-* TODO Send me to roam
-body text
-"
-    (re-search-forward "Send me")
-    (cl-letf (((symbol-function 'org-roam-capture-) (lambda (&rest _) nil)))
-      (a3madkour/inbox-to-org-roam))
-    ;; Simulate abort (org-note-abort = t)
-    (let ((org-note-abort t))
-      (a3madkour--inbox-to-roam-finalize))
-    ;; Inbox subtree must still be present
-    (should (string-match-p "Send me to roam" (buffer-string)))))
+(ert-deftest a3madkour-test/inbox-to-org-roam-defers-cut-until-finalize ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (should (string-match-p "Send me to roam" (buffer-string)))
+        (should (buffer-live-p cap))
+        (a3madkour-test/-finalize cap)
+        (should-not (string-match-p "Send me to roam" (buffer-string)))))))
 
 (ert-deftest a3madkour-test/inbox-to-org-roam-empty-body-template ()
-  ;; Empty body produces "%?" only; non-empty body wraps as "<body>\n\n%?"
-  (a3madkour-test/in-buffer "* TODO No body item\n"
-    (re-search-forward "No body")
-    (let ((captured-templates nil))
-      (cl-letf (((symbol-function 'org-roam-capture-)
-                 (lambda (&rest args) (setq captured-templates args))))
-        (a3madkour/inbox-to-org-roam))
-      (let ((dump (prin1-to-string captured-templates)))
-        (should (string-match-p "\"%\\?\"" dump))))))
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer "* TODO No body item\n"
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "No body" "*cap*")))
+        (should (equal (a3madkour-test/-capture-template cap) "%?"))
+        (should (equal (with-current-buffer cap (buffer-string)) ""))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-body-is-not-a-template ()
+  (let ((body "100% %20 %^{x} %(error \"x\") ${foo}"))
+    (a3madkour-test/-with-captures '("*cap*")
+      (a3madkour-test/in-buffer (concat "* TODO Tricky\n" body "\n")
+        (let ((cap (a3madkour-test/-hand-off (current-buffer) "Tricky" "*cap*")))
+          (should (equal (a3madkour-test/-capture-template cap) "%?"))
+          (should (equal (with-current-buffer cap (buffer-string)) body)))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-own-finalize-cuts-whole-item ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        ;; The whole item reached the note, children included.
+        (should (equal (with-current-buffer cap (buffer-string))
+                       "body text here\n* child note\n** grandchild"))
+        (a3madkour-test/-finalize cap)
+        (should (equal (buffer-string) "* TODO Sibling\n"))
+        (should-not a3madkour--inbox-roam-finalizing)))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-preserves-on-abort ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (a3madkour-test/-finalize cap 'abort)
+        (should (equal (buffer-string) a3madkour-test--roam-inbox))
+        (should-not a3madkour--inbox-roam-finalizing)))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-unrelated-capture-cuts-nothing ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (a3madkour-test/-finalize-unrelated)
+        (should (equal (buffer-string) a3madkour-test--roam-inbox))
+        ;; The hand-off is still armed for its own capture.
+        (a3madkour-test/-finalize cap)
+        (should (equal (buffer-string) "* TODO Sibling\n"))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-two-in-flight ()
+  (a3madkour-test/-with-captures '("*cap-a*" "*cap-b*")
+    (a3madkour-test/in-buffer "* TODO Item A\nbody a\n* TODO Item B\nbody b\n* TODO Sibling\n"
+      (let ((cap-a (a3madkour-test/-hand-off (current-buffer) "Item A" "*cap-a*"))
+            (cap-b (a3madkour-test/-hand-off (current-buffer) "Item B" "*cap-b*")))
+        (should (equal (with-current-buffer cap-a (buffer-string)) "body a"))
+        (should (equal (with-current-buffer cap-b (buffer-string)) "body b"))
+        (a3madkour-test/-finalize cap-b)
+        (should (equal (buffer-string) "* TODO Item A\nbody a\n* TODO Sibling\n"))
+        (a3madkour-test/-finalize cap-a)
+        (should (equal (buffer-string) "* TODO Sibling\n"))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-capture-fails-to-start ()
+  (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+    (re-search-forward "Send me")
+    (cl-letf (((symbol-function 'org-roam-capture-) #'ignore))
+      (should-error (a3madkour/inbox-to-org-roam) :type 'user-error))
+    (should-not a3madkour--inbox-roam-finalizing)
+    (should-not (local-variable-p 'a3madkour--inbox-roam-marker))
+    (a3madkour-test/-finalize-unrelated)
+    (should (equal (buffer-string) a3madkour-test--roam-inbox))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-interrupted-finalize-arms-nothing ()
+  ;; If the after hook never runs for the hand-off's capture (another after
+  ;; hook signalled first), the next unrelated finalise must not cut the item.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (with-current-buffer cap (a3madkour--inbox-roam-prepare-finalize))
+        (kill-buffer cap)
+        (a3madkour-test/-finalize-unrelated)
+        (should (equal (buffer-string) a3madkour-test--roam-inbox))))))
 
 ;;; ---- a3madkour/inbox-to-someday ----
 

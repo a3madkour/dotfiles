@@ -4292,51 +4292,95 @@ because `org-todo' runs `org-blocker-hook' directly, not through
   (org-cut-subtree)
   (message "Deleted"))
 
-(defvar a3madkour--inbox-to-roam-marker nil
-  "Marker to the inbox subtree being sent to org-roam, removed on capture finalize.")
+(defun a3madkour/-inbox-roam-content ()
+  "Return what the inbox item at point carries into its org-roam note.
+Point is on the item's heading.  The result is the item's body (after its
+planning line and drawers), then every child subtree verbatim, re-levelled
+so the shallowest child is level 1 with relative depth kept.  The item's
+own heading, tags, planning and drawers are left out.  Trimmed; \"\" when
+there is neither body nor children."
+  (save-excursion
+    (org-back-to-heading t)
+    (let* ((children-start (org-entry-end-position))
+           (subtree-end (save-excursion (org-end-of-subtree t t) (point)))
+           (body (progn (org-end-of-meta-data t)
+                        (buffer-substring-no-properties
+                         (min (point) children-start) children-start)))
+           (children (buffer-substring-no-properties children-start subtree-end)))
+      (unless (string-empty-p (string-trim children))
+        (with-temp-buffer
+          (insert children)
+          (let ((shallowest nil))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\(\\*+\\) " nil t)
+              (setq shallowest (min (or shallowest most-positive-fixnum)
+                                    (length (match-string 1)))))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\*+ " nil t)
+              (goto-char (match-beginning 0))
+              (delete-char (1- shallowest))
+              (forward-line 1)))
+          (setq children (buffer-string))))
+      (string-trim (concat (string-trim body) "\n" children)))))
+
+(defvar a3madkour--inbox-roam-marker nil
+  "Marker to the inbox item an org-roam capture buffer was started for.
+Set buffer-locally in that capture buffer, and nowhere else.")
+
+(defvar a3madkour--inbox-roam-finalizing nil
+  "Marker to the inbox item of the capture being finalised right now, else nil.
+`org-capture-after-finalize-hook' runs after the capture buffer is killed,
+so `a3madkour--inbox-roam-prepare-finalize' hands the marker over here.")
+
+(defun a3madkour--inbox-roam-prepare-finalize ()
+  "Hook: note which inbox item, if any, the capture being finalised belongs to.
+Runs in the capture buffer.  A capture the hand-off did not start has no
+local marker, so this clears anything left from a finalise that never
+reached its after hook."
+  (setq a3madkour--inbox-roam-finalizing
+        (and (local-variable-p 'a3madkour--inbox-roam-marker)
+             a3madkour--inbox-roam-marker)))
 
 (defun a3madkour--inbox-to-roam-finalize ()
-  "Hook: cut the pending inbox subtree if the org-roam capture finalized successfully."
-  (unwind-protect
-      (when (and (not org-note-abort)
-                 (markerp a3madkour--inbox-to-roam-marker)
-                 (marker-buffer a3madkour--inbox-to-roam-marker))
-        (with-current-buffer (marker-buffer a3madkour--inbox-to-roam-marker)
-          (save-excursion
-            (goto-char a3madkour--inbox-to-roam-marker)
-            (org-cut-subtree))))
-    (when (markerp a3madkour--inbox-to-roam-marker)
-      (set-marker a3madkour--inbox-to-roam-marker nil))
-    (setq a3madkour--inbox-to-roam-marker nil)
-    (remove-hook 'org-capture-after-finalize-hook
-                 #'a3madkour--inbox-to-roam-finalize)))
+  "Hook: cut the inbox item of the roam capture just finalised, unless aborted."
+  (when a3madkour--inbox-roam-finalizing
+    (let ((item a3madkour--inbox-roam-finalizing))
+      (setq a3madkour--inbox-roam-finalizing nil)
+      (unwind-protect
+          (when (and (not org-note-abort)
+                     (marker-buffer item))
+            (with-current-buffer (marker-buffer item)
+              (save-excursion
+                (goto-char item)
+                (org-cut-subtree))))
+        (set-marker item nil)))))
+
+(add-hook 'org-capture-prepare-finalize-hook #'a3madkour--inbox-roam-prepare-finalize)
+(add-hook 'org-capture-after-finalize-hook #'a3madkour--inbox-to-roam-finalize)
 
 (defun a3madkour/inbox-to-org-roam ()
   "Send the current inbox item to org-roam as a Zettelkasten seed.
-Preserves the inbox item's body as initial content of the new node.
-The inbox subtree is removed only after the capture finalizes successfully;
-on abort, the inbox item stays where it was."
+The item's body and child headings become the new node's initial content.
+They are inserted into the capture buffer once it is open, so neither
+org-capture nor org-roam expands anything in them.  The inbox item is
+removed only when that capture finalises; on abort it stays where it was,
+and finalising any other capture leaves it alone."
   (org-back-to-heading t)
-  (let* ((title (org-get-heading t t t t))
-         (body (save-excursion
-                 (org-end-of-meta-data t)
-                 (string-trim
-                  (buffer-substring-no-properties
-                   (point)
-                   (org-entry-end-position))))))
-    (setq a3madkour--inbox-to-roam-marker (copy-marker (point) t))
-    (add-hook 'org-capture-after-finalize-hook
-              #'a3madkour--inbox-to-roam-finalize)
+  (let ((title (org-get-heading t t t t))
+        (content (a3madkour/-inbox-roam-content))
+        (item (copy-marker (point) t)))
     (org-roam-capture-
      :node (org-roam-node-create :title title)
-     :templates `(("d" "default" plain
-                   ,(if (string-empty-p body)
-                        "%?"
-                      (concat body "\n\n%?"))
+     :templates '(("d" "default" plain "%?"
                    :target (file+head
                             "${slug}.org"
                             "#+title: ${title}\n#+filetags: :TODO:\n")
-                   :unnarrowed t)))))
+                   :unnarrowed t)))
+    (unless (bound-and-true-p org-capture-mode)
+      (set-marker item nil)
+      (user-error "The org-roam capture did not start; the inbox item is unchanged"))
+    (insert content)
+    (setq-local a3madkour--inbox-roam-marker item)))
 
 (defun a3madkour/inbox-to-someday ()
   "Refile the current inbox item to someday.org under a chosen heading.
