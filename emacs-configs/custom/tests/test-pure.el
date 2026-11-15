@@ -138,6 +138,60 @@ CLOCK: [2026-05-09 Sat 10:00]--[2026-05-09 Sat 10:30] =>  0:30
       '(("projects.org" . "* Random heading\n"))
     (should (null (a3madkour/get-current-season-tags)))))
 
+(ert-deftest a3madkour-test/get-current-season-tags-no-file ()
+  (a3madkour-test/with-org-env nil
+    (should (null (a3madkour/get-current-season-tags)))))
+
+;;; ---- a3madkour/current-season ----
+
+(ert-deftest a3madkour-test/current-season-ok ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "\
+* Current Season: Rust (Nov — Dec)  :programming:rust:
+:PROPERTIES:
+:START: [2026-11-01 Sun]
+:END: [2026-12-26 Sat]
+:END:
+"))
+    (let ((s (a3madkour/current-season)))
+      (should (eq 'ok (plist-get s :status)))
+      (should (equal "Rust (Nov — Dec)" (plist-get s :name)))
+      (should (equal '("programming" "rust") (plist-get s :tags)))
+      (should (equal "[2026-11-01 Sun]" (plist-get s :start)))
+      (should (equal "[2026-12-26 Sat]" (plist-get s :end))))))
+
+(ert-deftest a3madkour-test/current-season-tagless-is-a-season ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* Current Season: Quiet\n"))
+    (let ((s (a3madkour/current-season)))
+      (should (eq 'ok (plist-get s :status)))
+      (should (null (plist-get s :tags))))))
+
+(ert-deftest a3madkour-test/current-season-no-file ()
+  (a3madkour-test/with-org-env nil
+    (should (equal '(:status no-file) (a3madkour/current-season)))))
+
+(ert-deftest a3madkour-test/current-season-no-heading ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* Some project :project:\n"))
+    (should (equal '(:status no-heading) (a3madkour/current-season)))))
+
+(ert-deftest a3madkour-test/current-season-empty-file ()
+  (a3madkour-test/with-org-env '(("projects.org" . ""))
+    (should (equal '(:status no-heading) (a3madkour/current-season)))))
+
+(ert-deftest a3madkour-test/current-season-ignores-filetags ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "#+FILETAGS: :work:\n* Current Season: R  :rust:\n"))
+    (should (equal '("rust") (plist-get (a3madkour/current-season) :tags)))))
+
+(ert-deftest a3madkour-test/current-season-first-heading-wins ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* Current Season: A  :a:\n* Current Season: B  :b:\n"))
+    (let ((s (a3madkour/current-season)))
+      (should (equal "A" (plist-get s :name)))
+      (should (equal '("a") (plist-get s :tags))))))
+
 ;;; ---- a3madkour/get-habit-tags ----
 
 (ert-deftest a3madkour-test/get-habit-tags-basic ()

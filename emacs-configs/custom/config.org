@@ -3521,23 +3521,43 @@ file in the reading directory it reports and returns."
     (org-archive-subtree)))
 
 ;; ---- Season queries ----
+(defun a3madkour/current-season ()
+  "Read the current season from projects.org; never signals.
+Returns (:status ok :name NAME :tags TAGS :start START :end END),
+\(:status no-file) or (:status no-heading).  Only the first
+\"Current Season:\" heading counts; its tags are its own, not
+inherited from #+FILETAGS."
+  (let ((file (a3madkour/org-file "projects.org")))
+    (if (not (file-readable-p file))
+        (list :status 'no-file)
+      (condition-case nil
+          (with-temp-buffer
+            (insert-file-contents file)
+            (delay-mode-hooks (org-mode))
+            (goto-char (point-min))
+            (if (not (re-search-forward "^\\* Current Season: *\\(.*\\)$" nil t))
+                (list :status 'no-heading)
+              (let ((name (string-trim
+                           (replace-regexp-in-string
+                            "\\s-*:[[:alnum:]_@#%:]+:\\s-*$" ""
+                            (match-string 1)))))
+                (list :status 'ok
+                      :name name
+                      :tags (org-get-tags nil t)
+                      :start (org-entry-get nil "START")
+                      :end (org-entry-get nil "END")))))
+        (error (list :status 'no-file))))))
+
 (defun a3madkour/get-current-season ()
-  "Get the current season heading from projects.org."
-  (with-temp-buffer
-    (insert-file-contents (a3madkour/org-file "projects.org"))
-    (goto-char (point-min))
-    (if (re-search-forward "^\\* Current Season: \\(.+\\)" nil t)
-		(replace-regexp-in-string "\\s-*:[[:alnum:]_@:]+:$" "" (match-string 1))
-	  "No season set")))
+  "Name of the current season, or \"No season set\"."
+  (let ((s (a3madkour/current-season)))
+    (if (eq (plist-get s :status) 'ok)
+        (plist-get s :name)
+      "No season set")))
 
 (defun a3madkour/get-current-season-tags ()
-  "Get the tags from the current season heading in projects.org."
-  (with-temp-buffer
-    (insert-file-contents (a3madkour/org-file "projects.org"))
-    (delay-mode-hooks (org-mode))
-    (goto-char (point-min))
-    (when (re-search-forward "^\\* Current Season:" nil t)
-      (org-get-tags))))
+  "Tags of the current season heading, or nil."
+  (plist-get (a3madkour/current-season) :tags))
 
 (defun a3madkour/get-habit-tags ()
   "Collect all unique tags from habit entries in actions.org."
@@ -4321,8 +4341,7 @@ FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
 tags, and every tag already on a habit in actions.org."
   (delete-dups
    (append '("core")
-           (when (file-exists-p (a3madkour/org-file "projects.org"))
-             (a3madkour/get-current-season-tags))
+           (a3madkour/get-current-season-tags)
            (a3madkour/get-habit-tags))))
 
 (defun a3madkour/inbox-to-habit ()
