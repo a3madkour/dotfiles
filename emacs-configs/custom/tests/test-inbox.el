@@ -238,6 +238,59 @@ body text here
         (a3madkour-test/-finalize-unrelated)
         (should (equal (buffer-string) a3madkour-test--roam-inbox))))))
 
+(defun a3madkour-test/-finalize-capturing-messages (capture)
+  "Finalise CAPTURE successfully; return the messages shown, oldest first."
+  (let ((shown nil))
+    (cl-letf (((symbol-function 'message)
+               (lambda (fmt &rest args)
+                 (when fmt (push (apply #'format fmt args) shown)))))
+      (a3madkour-test/-finalize capture))
+    (nreverse shown)))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-item-deleted-meanwhile-cuts-nothing ()
+  ;; The item goes while its capture is open: the marker now sits on the
+  ;; sibling, which must survive the finalise.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (goto-char (point-min))
+        (let ((kill-ring nil)) (org-cut-subtree))
+        (should (equal (buffer-string) "* TODO Sibling\n"))
+        (let ((shown (a3madkour-test/-finalize-capturing-messages cap)))
+          (should (equal (buffer-string) "* TODO Sibling\n"))
+          (should (cl-some (lambda (m) (string-match-p "Send me to roam" m)) shown)))
+        (should-not a3madkour--inbox-roam-finalizing)))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-item-renamed-meanwhile-cuts-nothing ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (goto-char (point-min))
+        (re-search-forward "Send me to roam")
+        (replace-match "Something else")
+        (let ((before (buffer-string))
+              (shown (a3madkour-test/-finalize-capturing-messages cap)))
+          (should (equal (buffer-string) before))
+          (should (cl-some (lambda (m) (string-match-p "Send me to roam" m)) shown)))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-cuts-own-item-when-narrowed-elsewhere ()
+  (a3madkour-test/-with-captures '("*cap*")
+    ;; A third item after the sibling keeps the narrowing observable once
+    ;; everything before the sibling is gone.
+    (a3madkour-test/in-buffer (concat a3madkour-test--roam-inbox "* TODO Third\n")
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (goto-char (point-min))
+        (re-search-forward "^\\* TODO Sibling")
+        (org-narrow-to-subtree)
+        (goto-char (point-min))
+        (let ((narrowed (buffer-string)))
+          (a3madkour-test/-finalize cap)
+          ;; Still narrowed to the sibling, which is untouched.
+          (should (buffer-narrowed-p))
+          (should (equal (buffer-string) narrowed)))
+        (widen)
+        (should (equal (buffer-string) "* TODO Sibling\n* TODO Third\n"))))))
+
 ;;; ---- a3madkour/inbox-to-someday ----
 
 (ert-deftest a3madkour-test/inbox-to-someday-default-parking-lot ()

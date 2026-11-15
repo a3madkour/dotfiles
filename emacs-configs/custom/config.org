@@ -4324,11 +4324,13 @@ there is neither body nor children."
       (string-trim (concat (string-trim body) "\n" children)))))
 
 (defvar a3madkour--inbox-roam-marker nil
-  "Marker to the inbox item an org-roam capture buffer was started for.
-Set buffer-locally in that capture buffer, and nowhere else.")
+  "The inbox item an org-roam capture buffer was started for, as (MARKER . HEADING).
+HEADING is the item's heading text as `org-get-heading' returned it with all
+of its arguments non-nil.  Set buffer-locally in that capture buffer, and
+nowhere else.")
 
 (defvar a3madkour--inbox-roam-finalizing nil
-  "Marker to the inbox item of the capture being finalised right now, else nil.
+  "The (MARKER . HEADING) of the capture being finalised right now, else nil.
 `org-capture-after-finalize-hook' runs after the capture buffer is killed,
 so `a3madkour--inbox-roam-prepare-finalize' hands the marker over here.")
 
@@ -4342,17 +4344,31 @@ reached its after hook."
              a3madkour--inbox-roam-marker)))
 
 (defun a3madkour--inbox-to-roam-finalize ()
-  "Hook: cut the inbox item of the roam capture just finalised, unless aborted."
+  "Hook: cut the inbox item of the roam capture just finalised, unless aborted.
+The item is cut only if the heading at its marker is still the one handed
+off, looked at in the widened buffer; the owner's narrowing is kept.
+Otherwise nothing is cut and a message says so.  Never signals."
   (when a3madkour--inbox-roam-finalizing
-    (let ((item a3madkour--inbox-roam-finalizing))
+    (let* ((item (car a3madkour--inbox-roam-finalizing))
+           (heading (cdr a3madkour--inbox-roam-finalizing))
+           (buf (marker-buffer item)))
       (setq a3madkour--inbox-roam-finalizing nil)
       (unwind-protect
-          (when (and (not org-note-abort)
-                     (marker-buffer item))
-            (with-current-buffer (marker-buffer item)
-              (save-excursion
-                (goto-char item)
-                (org-cut-subtree))))
+          (unless org-note-abort
+            (condition-case err
+                (unless (and (buffer-live-p buf)
+                         (with-current-buffer buf
+                           (org-with-wide-buffer
+                            (goto-char item)
+                            (when (and (org-at-heading-p)
+                                       (equal (org-get-heading t t t t) heading))
+                              (org-cut-subtree)
+                              t))))
+                  (message "Roam note saved, but inbox item \"%s\" was not removed: \
+it is no longer where it was" heading))
+              (error
+               (message "Roam note saved, but inbox item \"%s\" was not removed: %s"
+                        heading (error-message-string err)))))
         (set-marker item nil)))))
 
 (add-hook 'org-capture-prepare-finalize-hook #'a3madkour--inbox-roam-prepare-finalize)
@@ -4380,7 +4396,7 @@ and finalising any other capture leaves it alone."
       (set-marker item nil)
       (user-error "The org-roam capture did not start; the inbox item is unchanged"))
     (insert content)
-    (setq-local a3madkour--inbox-roam-marker item)))
+    (setq-local a3madkour--inbox-roam-marker (cons item title))))
 
 (defun a3madkour/inbox-to-someday ()
   "Refile the current inbox item to someday.org under a chosen heading.
