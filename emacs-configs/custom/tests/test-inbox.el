@@ -410,6 +410,29 @@ left at the end, where the template body goes."
           (should (cl-some (lambda (m) (string-match-p "\"Twin\" was not removed" m))
                            shown)))))))
 
+(ert-deftest a3madkour-test/inbox-to-org-roam-cuts-item-handed-off-while-narrowed-to-it ()
+  ;; `org-narrow-to-subtree' stops before the newline ahead of the sibling.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (org-narrow-to-subtree)
+      (let* ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*"))
+             (shown (a3madkour-test/-finalize-capturing-messages cap)))
+        (widen)
+        (should (equal (buffer-string) "* TODO Sibling\n"))
+        (should-not (cl-some (lambda (m) (string-match-p "not removed" m)) shown))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-cuts-last-item-after-text-appended ()
+  ;; The item ends the file with no final newline; a new heading appended
+  ;; meanwhile gives its last line one.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer "* TODO Sibling\n* TODO Last item\nbody"
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Last item" "*cap*")))
+        (goto-char (point-max))
+        (insert "\n* TODO Appended\n")
+        (let ((shown (a3madkour-test/-finalize-capturing-messages cap)))
+          (should (equal (buffer-string) "* TODO Sibling\n* TODO Appended\n"))
+          (should-not (cl-some (lambda (m) (string-match-p "not removed" m)) shown)))))))
+
 ;; Whether the capture really started, and what is left when it did not.
 
 (ert-deftest a3madkour-test/inbox-to-org-roam-already-in-a-capture-buffer ()

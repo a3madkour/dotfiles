@@ -4336,9 +4336,12 @@ indentation; \"\" when there is neither body nor children."
       (funcall trim (concat (funcall trim body) "\n" children)))))
 
 (defun a3madkour/-inbox-subtree-text ()
-  "Return the text of the subtree whose heading point is at the start of."
-  (buffer-substring-no-properties
-   (point) (save-excursion (org-end-of-subtree t t) (point))))
+  "Return the text of the subtree whose heading point is at the start of.
+Trailing whitespace is left out, so the text does not depend on whether a
+newline follows the subtree.  Call it in a widened buffer."
+  (string-trim-right
+   (buffer-substring-no-properties
+    (point) (save-excursion (org-end-of-subtree t t) (point)))))
 
 (defvar a3madkour--inbox-roam-marker nil
   "The inbox item an org-roam capture buffer was started for.
@@ -4404,7 +4407,7 @@ still exactly as it was sent; on abort it stays where it was, and
 finalising any other capture leaves it alone."
   (org-back-to-heading t)
   (let ((title (org-get-heading t t t t))
-        (subtree (a3madkour/-inbox-subtree-text))
+        (subtree (org-with-wide-buffer (a3madkour/-inbox-subtree-text)))
         (content (a3madkour/-inbox-roam-content))
         (origin (current-buffer))
         (item (copy-marker (point) t))
