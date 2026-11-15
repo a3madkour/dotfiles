@@ -37,10 +37,14 @@
 (ert-deftest a3madkour-test/build-habit-repeater-monthly ()
   (should (equal ".+1m" (a3madkour/-build-habit-repeater "monthly" nil))))
 
-(ert-deftest a3madkour-test/build-habit-repeater-bad-flexibility-foot-gun ()
-  ;; Documented foot-gun: string-to-number of "abc" → 0. Test pins current
-  ;; behavior so we notice if validation is added later.
-  (should (equal ".+1d/0d" (a3madkour/-build-habit-repeater "daily" "abc"))))
+(ert-deftest a3madkour-test/build-habit-repeater-validates-flexibility ()
+  (dolist (bad '("3" "2" "0" "-1" "x" "5d"))
+    (should-error (a3madkour/-build-habit-repeater "every 3 days" bad)
+                  :type 'user-error))
+  (should (equal ".+3d/5d" (a3madkour/-build-habit-repeater "every 3 days" " 5 ")))
+  (should (equal ".+3d" (a3madkour/-build-habit-repeater "every 3 days" "")))
+  (should (equal ".+1d/2d" (a3madkour/-build-habit-repeater "daily" "2")))
+  (should-error (a3madkour/-build-habit-repeater "daily" "1") :type 'user-error))
 
 ;;; ---- a3madkour/-project-heading-string ----
 

@@ -2,6 +2,33 @@
 
 (require 'test-helpers)
 
+;;; ---- shared: abort-safety fixtures ----
+
+(defconst a3madkour-test--abort-item
+  "* TODO Keep me
+Some body text
+** child note
+"
+  "An inbox item with a body and a child, for the abort tests.")
+
+(defun a3madkour-test--make-inbox ()
+  "Write the abort-test item to inbox.org and return its buffer at point-min."
+  (let ((buf (find-file-noselect
+              (let ((f (a3madkour/org-file "inbox.org")))
+                (with-temp-file f (insert a3madkour-test--abort-item))
+                f))))
+    (with-current-buffer buf (goto-char (point-min)))
+    buf))
+
+(defun a3madkour-test--should-be-intact (buf)
+  "Assert the item in BUF is still a TODO with its body and child.
+ENERGY/EFFORT properties are tolerated."
+  (with-current-buffer buf
+    (let ((s (buffer-string)))
+      (should (string-match-p "\\`\\* TODO Keep me" s))
+      (should (string-match-p "Some body text" s))
+      (should (string-match-p "^\\*\\* child note$" s)))))
+
 ;;; ---- a3madkour/inbox-delete ----
 
 (ert-deftest a3madkour-test/inbox-delete-removes-subtree ()
@@ -121,17 +148,23 @@ body text
   (a3madkour-test/with-org-env
       '(("someday.org" . "* Parking Lot\n"))
     (find-file-noselect (a3madkour/org-file "someday.org"))
-    (let ((inbox-buf
-           (find-file-noselect
-            (let ((f (a3madkour/org-file "inbox.org")))
-              (with-temp-file f (insert "* TODO Foo\n"))
-              f))))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
       (with-current-buffer inbox-buf
-        (goto-char (point-min))
-        (re-search-forward "Foo")
         (cl-letf (((symbol-function 'completing-read)
-                   (lambda (&rest _) "Nonexistent")))
-          (should-error (a3madkour/inbox-to-someday) :type 'user-error))))))
+                   (lambda (&rest _) "Nope")))
+          (should-error (a3madkour/inbox-to-someday) :type 'user-error)))
+      (a3madkour-test--should-be-intact inbox-buf))))
+
+(ert-deftest a3madkour-test/inbox-to-someday-abort-keeps-keyword ()
+  (a3madkour-test/with-org-env
+      '(("someday.org" . "* Parking Lot\n"))
+    (find-file-noselect (a3madkour/org-file "someday.org"))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (&rest _) (signal 'quit nil))))
+          (condition-case nil (a3madkour/inbox-to-someday) (quit nil))))
+      (a3madkour-test--should-be-intact inbox-buf))))
 
 ;;; ---- a3madkour/inbox-to-habit ----
 
@@ -313,6 +346,95 @@ body text
               (a3madkour/inbox-to-new-project)))
           (should create-called)
           (should refile-captured))))))
+
+;;; ---- aborting a hand-off leaves the item as it was ----
+
+(ert-deftest a3madkour-test/inbox-to-new-project-abort-leaves-no-project ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* Existing :project:active:\n"))
+    (let* ((pbuf (find-file-noselect (a3madkour/org-file "projects.org")))
+           (before (with-current-buffer pbuf (buffer-string)))
+           (inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (prompt &rest _)
+                     (cond ((string-match-p "Energy" prompt) (signal 'quit nil))
+                           ((string-match-p "Life area" prompt) "artistic")
+                           (t "active"))))
+                  ((symbol-function 'read-string) (lambda (&rest _) "x"))
+                  ((symbol-function 'yes-or-no-p) (lambda (&rest _) nil)))
+          (condition-case nil (a3madkour/inbox-to-new-project) (quit nil))))
+      (should (equal before (with-current-buffer pbuf (buffer-string))))
+      (should (equal before (with-temp-buffer
+                              (insert-file-contents (a3madkour/org-file "projects.org"))
+                              (buffer-string))))
+      (a3madkour-test--should-be-intact inbox-buf))))
+
+(ert-deftest a3madkour-test/inbox-to-habit-bad-flexibility-touches-nothing ()
+  (a3madkour-test/with-org-env
+      '(("actions.org" . "* Habits\n"))
+    (find-file-noselect (a3madkour/org-file "actions.org"))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (a3madkour-test/queue '("every 3 days")))
+                  ((symbol-function 'read-string)
+                   (a3madkour-test/queue '("3")))
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (&rest _) nil)))
+          (should-error (a3madkour/inbox-to-habit) :type 'user-error))
+        (should-not (string-match-p "STYLE\\|SCHEDULED:" (buffer-string))))
+      (a3madkour-test--should-be-intact inbox-buf))))
+
+(ert-deftest a3madkour-test/inbox-to-habit-abort-at-tags ()
+  (a3madkour-test/with-org-env
+      '(("actions.org" . "* Habits\n"))
+    (find-file-noselect (a3madkour/org-file "actions.org"))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (a3madkour-test/queue '("daily")))
+                  ((symbol-function 'read-string)
+                   (a3madkour-test/queue '("")))
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (&rest _) (signal 'quit nil))))
+          (condition-case nil (a3madkour/inbox-to-habit) (quit nil)))
+        (should-not (string-match-p "STYLE\\|SCHEDULED:" (buffer-string))))
+      (a3madkour-test--should-be-intact inbox-buf))))
+
+(ert-deftest a3madkour-test/inbox-to-action-abort-at-schedule ()
+  (a3madkour-test/with-org-env
+      '(("actions.org" . "* Actions\n"))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (a3madkour-test/queue '("high")))
+                  ((symbol-function 'read-string)
+                   (a3madkour-test/queue '("0:30")))
+                  ((symbol-function 'yes-or-no-p)
+                   (lambda (&rest _) (signal 'quit nil))))
+          (condition-case nil (a3madkour/inbox-to-action) (quit nil))))
+      (should-not (string-match-p
+                   "Keep me"
+                   (with-current-buffer
+                       (find-file-noselect (a3madkour/org-file "actions.org"))
+                     (buffer-string))))
+      (a3madkour-test--should-be-intact inbox-buf))))
+
+(ert-deftest a3madkour-test/inbox-to-existing-project-abort-in-refile ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* Some Project :project:active:\n"))
+    (find-file-noselect (a3madkour/org-file "projects.org"))
+    (let ((inbox-buf (a3madkour-test--make-inbox)))
+      (with-current-buffer inbox-buf
+        (cl-letf (((symbol-function 'completing-read)
+                   (a3madkour-test/queue '("high")))
+                  ((symbol-function 'read-string)
+                   (a3madkour-test/queue '("0:30")))
+                  ((symbol-function 'org-refile)
+                   (lambda (&rest _) (signal 'quit nil))))
+          (condition-case nil (a3madkour/inbox-to-existing-project) (quit nil))))
+      (a3madkour-test--should-be-intact inbox-buf))))
 
 ;;; ---- a3madkour/process-inbox-item ----
 

@@ -4339,8 +4339,8 @@ on abort, the inbox item stays where it was."
                    :unnarrowed t)))))
 
 (defun a3madkour/inbox-to-someday ()
-  "Refile the current inbox item to someday.org under a chosen heading."
-  (org-todo "")
+  "Refile the current inbox item to someday.org under a chosen heading.
+All answers are gathered and the target resolved before the item changes."
   (let* ((file (a3madkour/org-file "someday.org"))
          (buf (find-file-noselect file))
          (headings (with-current-buffer buf
@@ -4361,7 +4361,9 @@ on abort, the inbox item stays where it was."
                          (move-marker (make-marker) (line-beginning-position) buf)
                        (user-error "Heading \"%s\" not found in %s" target file))))))
     (unwind-protect
-        (org-refile nil nil (list target file nil marker))
+        (progn
+          (org-todo "")
+          (org-refile nil nil (list target file nil marker)))
       (set-marker marker nil)))
   (message "Sent to someday"))
 
@@ -4369,19 +4371,28 @@ on abort, the inbox item stays where it was."
   "Compute the org-mode repeater string for a habit.
 FREQUENCY is one of \"daily\", \"every 2 days\", \"every 3 days\",
 \"weekly\", \"biweekly\", \"monthly\". FLEXIBILITY (a string) appends a
-`/Nd' tolerance window but only for the daily/every-N-days frequencies."
-  (let ((base (cond
+`/Nd' tolerance window but only for the daily/every-N-days frequencies.
+For those, FLEXIBILITY must be blank or all digits and larger than the
+period (1, 2 or 3 days); anything else signals a `user-error'."
+  (let* ((period (cond ((string= frequency "daily") 1)
+                       ((string= frequency "every 2 days") 2)
+                       ((string= frequency "every 3 days") 3)))
+         (window (and period flexibility (string-trim flexibility)))
+         (base (cond
                ((string= frequency "daily") ".+1d")
                ((string= frequency "every 2 days") ".+2d")
                ((string= frequency "every 3 days") ".+3d")
                ((string= frequency "weekly") ".+1w")
                ((string= frequency "biweekly") ".+2w")
                ((string= frequency "monthly") ".+1m"))))
-    (if (and flexibility
-             (not (string-empty-p flexibility))
-             (member frequency '("daily" "every 2 days" "every 3 days")))
-        (format "%s/%sd" base (string-to-number flexibility))
-      base)))
+    (cond
+     ((or (null window) (string-empty-p window)) base)
+     ((not (string-match-p "\\`[0-9]+\\'" window))
+      (user-error "Flexibility must be a whole number of days, got \"%s\"" window))
+     ((<= (string-to-number window) period)
+      (user-error "Flexibility must be more than %d day%s, got %s"
+                  period (if (= period 1) "" "s") window))
+     (t (format "%s/%sd" base (string-to-number window))))))
 
 (defun a3madkour/-habit-tag-candidates ()
   "Tags worth offering for a new habit: core, the current season's
@@ -4426,8 +4437,8 @@ tags, and every tag already on a habit in actions.org."
 
 (defun a3madkour/inbox-to-new-project ()
   "Refile the current inbox item to a newly created project."
+  (a3madkour/set-task-properties)
   (let ((project-marker (a3madkour/create-project)))
-    (a3madkour/set-task-properties)
     (org-refile nil nil
                 (list nil (a3madkour/org-file "projects.org") nil project-marker))
     (set-marker project-marker nil))
