@@ -3569,33 +3569,43 @@ inherited from #+FILETAGS."
                (org-get-tags))
              "STYLE=\"habit\"")))))
 
-(defun a3madkour/select-season-tags ()
-  "Prompt user to select tags for the new season from existing habit tags or enter new ones."
-  (let* ((existing (a3madkour/get-habit-tags))
-         (selected '())
-         (done nil))
+(defun a3madkour/-valid-tag-p (tag)
+  "Non-nil when TAG is a legal org tag: letters, digits, _, @, # or %."
+  (and (stringp tag) (string-match-p "\\`[[:alnum:]_@#%]+\\'" tag) t))
+
+(defun a3madkour/-read-tags (prompt candidates)
+  "Read tags interactively; return them in selection order.
+Each round offers \"-- Done --\", \"-- Enter new tag --\", then the
+CANDIDATES not yet selected.  Invalid tags are rejected with a message."
+  (let ((selected '())
+        (done nil))
     (while (not done)
       (let* ((choices (append
-                       (cl-remove-if (lambda (tag) (member tag selected)) existing)
-                       '("-- Enter new tag --" "-- Done --")))
+                       '("-- Done --" "-- Enter new tag --")
+                       (cl-remove-if (lambda (tag) (member tag selected))
+                                     candidates)))
              (choice (completing-read
-                      (format "Season tags [%s]: "
+                      (format "%s [%s]: " prompt
                               (if selected
                                   (mapconcat #'identity selected ", ")
                                 "none yet"))
-                      choices nil nil)))
-        (cond
-         ((string= choice "-- Done --")
-          (setq done t))
-         ((string= choice "-- Enter new tag --")
-          (let ((new-tag (read-string "New tag: ")))
-            (when (and (not (string-empty-p new-tag))
-                       (not (member new-tag selected)))
-              (push new-tag selected))))
-         ((not (string-empty-p choice))
-          (unless (member choice selected)
-            (push choice selected))))))
+                      choices nil nil))
+             (new (cond
+                   ((string= choice "-- Done --") (setq done t) nil)
+                   ((string= choice "-- Enter new tag --")
+                    (read-string "New tag: "))
+                   (t choice))))
+        (when (and new (not (string-empty-p new)))
+          (cond
+           ((not (a3madkour/-valid-tag-p new))
+            (message "Invalid tag %S: use only letters, digits, _, @, # or %%" new))
+           ((not (member new selected))
+            (push new selected))))))
     (nreverse selected)))
+
+(defun a3madkour/select-season-tags ()
+  "Prompt user to select tags for the new season from existing habit tags or enter new ones."
+  (a3madkour/-read-tags "Season tags" (a3madkour/get-habit-tags)))
 
 ;; ---- WIP limits ----
 (defcustom a3madkour/project-wip-limit 3
@@ -3718,11 +3728,13 @@ inserts a placeholder \"** TODO \" line ready for editing."
                     name area status done-enough goal repo interactive-call))
 		  project-marker)
 	  (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-        (goto-char (point-max))
-        (insert heading)
-        (save-buffer)
-        (re-search-backward (format "^\\* %s" (regexp-quote name)))
-        (setq project-marker (point-marker)))
+        (save-restriction
+          (widen)
+          (goto-char (point-max))
+          (insert heading)
+          (save-buffer)
+          (re-search-backward (format "^\\* %s" (regexp-quote name)))
+          (setq project-marker (point-marker))))
 	  (when interactive-call
 		(switch-to-buffer (find-file-noselect (a3madkour/org-file "projects.org")))
         (goto-char (marker-position project-marker))
@@ -3998,13 +4010,15 @@ START/END date stamps based on WEEKS from today."
         (weeks (read-number "How many weeks: " 6))
         (tags (a3madkour/select-season-tags)))
     (with-current-buffer (find-file-noselect (a3madkour/org-file "projects.org"))
-      (when (save-excursion
-              (goto-char (point-min))
-              (re-search-forward "^\\* Current Season:" nil t))
-        (let ((accomplished (read-string "What did you accomplish this season? ")))
-          (a3madkour/-archive-current-season accomplished)))
-      (a3madkour/-insert-new-season name weeks tags)
-      (save-buffer)
+      (save-restriction
+        (widen)
+        (when (save-excursion
+                (goto-char (point-min))
+                (re-search-forward "^\\* Current Season:" nil t))
+          (let ((accomplished (read-string "What did you accomplish this season? ")))
+            (a3madkour/-archive-current-season accomplished)))
+        (a3madkour/-insert-new-season name weeks tags)
+        (save-buffer))
       (message "Started season: %s" name))))
 #+end_src
 *** Base
@@ -4421,7 +4435,7 @@ tags, and every tag already on a habit in actions.org."
 (defun a3madkour/inbox-to-existing-project ()
   "Refile the current inbox item to an existing project."
   (a3madkour/set-task-properties)
-  (let ((org-refile-targets `((,(a3madkour/org-file "projects.org") :maxlevel . 1))))
+  (let ((org-refile-targets `((,(a3madkour/org-file "projects.org") :tag . "project"))))
     (org-refile))
   (message "Sent to project"))
 

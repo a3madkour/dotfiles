@@ -27,6 +27,23 @@
           (goto-char (point-min))
           (should-not (re-search-forward "^\\*\\* TODO " nil t)))))))
 
+(ert-deftest a3madkour-test/create-project-in-narrowed-buffer ()
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* First one :project:active:\n* Second one :project:active:\n"))
+    (a3madkour-test/in-org-file "projects.org"
+      (org-narrow-to-subtree))
+    (cl-letf (((symbol-function 'read-string)
+               (a3madkour-test/queue '("Newbie" "Done" "")))
+              ((symbol-function 'completing-read)
+               (a3madkour-test/queue '("career" "inactive")))
+              ((symbol-function 'yes-or-no-p) (lambda (&rest _) nil)))
+      (a3madkour/create-project))
+    (a3madkour-test/in-org-file "projects.org"
+      (widen)
+      (goto-char (point-max))
+      (re-search-backward "^\\* ")
+      (should (looking-at "\\* Newbie")))))
+
 (ert-deftest a3madkour-test/create-project-sets-properties ()
   (a3madkour-test/with-org-env '(("projects.org" . ""))
     (cl-letf (((symbol-function 'read-string)

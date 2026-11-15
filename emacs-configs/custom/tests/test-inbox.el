@@ -400,5 +400,16 @@ body text
         (a3madkour/process-inbox-item))
       (should (eq called 'existing-project)))))
 
+(ert-deftest a3madkour-test/inbox-to-existing-project-offers-only-projects ()
+  (a3madkour-test/with-org-env '(("projects.org" . ""))
+    (let (targets)
+      (cl-letf (((symbol-function 'a3madkour/set-task-properties) #'ignore)
+                ((symbol-function 'message) #'ignore)
+                ((symbol-function 'org-refile)
+                 (lambda (&rest _) (setq targets org-refile-targets))))
+        (a3madkour/inbox-to-existing-project))
+      (should (equal targets
+                     `((,(a3madkour/org-file "projects.org") :tag . "project")))))))
+
 (provide 'test-inbox)
 ;;; test-inbox.el ends here
