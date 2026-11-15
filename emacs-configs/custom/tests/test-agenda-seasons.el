@@ -2,12 +2,6 @@
 
 (require 'test-helpers)
 
-(defmacro a3madkour-test/in-org-file (rel-path &rest body)
-  (declare (indent 1) (debug t))
-  `(with-current-buffer (find-file-noselect (a3madkour/org-file ,rel-path))
-     (goto-char (point-min))
-     ,@body))
-
 ;;; ---- a3madkour/select-season-tags ----
 
 (ert-deftest a3madkour-test/select-season-tags-picks-existing ()

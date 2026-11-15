@@ -2,12 +2,6 @@
 
 (require 'test-helpers)
 
-(defmacro a3madkour-test/in-org-file (rel-path &rest body)
-  (declare (indent 1) (debug t))
-  `(with-current-buffer (find-file-noselect (a3madkour/org-file ,rel-path))
-     (goto-char (point-min))
-     ,@body))
-
 ;;; ---- a3madkour/inbox-delete ----
 
 (ert-deftest a3madkour-test/inbox-delete-removes-subtree ()

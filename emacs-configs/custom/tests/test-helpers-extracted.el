@@ -141,5 +141,11 @@
       (should (cl-some (lambda (l) (string-prefix-p "* Current Season: Foo" l))
                        lines)))))
 
+(ert-deftest a3madkour-test/queue-signals-when-exhausted ()
+  (let ((q (a3madkour-test/queue '("a" nil))))
+    (should (equal "a" (funcall q)))
+    (should (null (funcall q)))
+    (should-error (funcall q))))
+
 (provide 'test-helpers-extracted)
 ;;; test-helpers-extracted.el ends here

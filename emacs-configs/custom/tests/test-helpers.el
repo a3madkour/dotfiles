@@ -93,9 +93,20 @@ up unconditionally after BODY."
 (defun a3madkour-test/queue (values)
   "Return a lambda that pops one value from VALUES on each call.
 Useful for stubbing interactive prompts that fire multiple times in sequence.
-After VALUES is exhausted, the lambda returns nil."
+A nil element is returned as nil.  Calling it after VALUES is used up
+signals an error, so a test that under-supplies answers fails."
   (let ((remaining (copy-sequence values)))
-    (lambda (&rest _) (pop remaining))))
+    (lambda (&rest args)
+      (if remaining
+          (pop remaining)
+        (error "Prompt queue exhausted (called with %S)" args)))))
+
+(defmacro a3madkour-test/in-org-file (rel-path &rest body)
+  "Run BODY in the buffer visiting org file REL-PATH, point at `point-min'."
+  (declare (indent 1) (debug t))
+  `(with-current-buffer (find-file-noselect (a3madkour/org-file ,rel-path))
+     (goto-char (point-min))
+     ,@body))
 
 (defmacro a3madkour-test/in-buffer (content &rest body)
   "Run BODY in a temp org-mode buffer pre-filled with CONTENT.
