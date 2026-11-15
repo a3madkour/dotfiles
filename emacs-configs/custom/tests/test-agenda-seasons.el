@@ -54,9 +54,13 @@
       (let* ((dashboard (assoc "d" org-agenda-custom-commands))
              (dump (prin1-to-string dashboard)))
         (should dashboard)
-        ;; The Seasonal Habits group must include the OR-joined tag glob
+        ;; Each season tag must reach org-super-agenda as its own list
+        ;; element: :tag compares tag names exactly, so an OR-joined
+        ;; "foo|bar" would match no heading at all.
         (should (string-match-p "Seasonal Habits" dump))
-        (should (string-match-p "foo|bar" dump))
+        (should (string-match-p (regexp-quote ":tag (\"foo\" \"bar\")") dump))
+        (should (string-match-p (regexp-quote ":tag (\"core\" \"foo\" \"bar\")") dump))
+        (should-not (string-match-p "foo|bar" dump))
         (should (string-match-p "Core Habits" dump))
         (should (string-match-p "Overdue" dump))))))
 

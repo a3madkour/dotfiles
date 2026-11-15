@@ -3862,19 +3862,22 @@ inserts a placeholder \"** TODO \" line ready for editing."
 (defun a3madkour/setup-agenda-commands ()
   "Set up agenda commands with current season context."
   (let* ((season-tags (a3madkour/get-current-season-tags))
-         (in-season-regex (mapconcat #'identity (cons "core" season-tags) "|"))
+         ;; org-super-agenda's :tag matches tag names exactly, never as a
+         ;; regexp, so several tags must be passed as a list.  Joining them
+         ;; with "|" builds one tag name no heading carries.
+         (in-season-tags (cons "core" season-tags))
          (core-group '(:name "🔁 Core Habits" :and (:habit t :tag "core") :order 1))
          (seasonal-group (when season-tags
                            `(:name "🔁 Seasonal Habits"
-								   :and (:habit t :tag ,(mapconcat #'identity season-tags "|"))
+								   :and (:habit t :tag ,season-tags)
 								   :order 2)))
          (super-groups (delq nil
 							 (list
 							  '(:name "⏰ Scheduled" :and (:time-grid t :scheduled today :not (:habit t)) :order 0)
 							  core-group
 							  seasonal-group
-							  `(:discard (:and (:scheduled past :not (:tag ,in-season-regex))))
-							  `(:discard (:and (:deadline past :not (:tag ,in-season-regex))))
+							  `(:discard (:and (:scheduled past :not (:tag ,in-season-tags))))
+							  `(:discard (:and (:deadline past :not (:tag ,in-season-tags))))
 							  '(:name "⚠️ Overdue" :scheduled past :deadline past :order 3)
 							  '(:discard (:habit t))))))
     (setq org-agenda-custom-commands
