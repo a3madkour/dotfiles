@@ -38,41 +38,97 @@
 
 ;;; ---- a3madkour/setup-agenda-commands ----
 
-(ert-deftest a3madkour-test/setup-agenda-commands-with-season-tags ()
-  (cl-letf (((symbol-function 'a3madkour/get-current-season-tags)
-             (lambda () '("foo" "bar")))
-            ((symbol-function 'a3madkour/get-current-season)
-             (lambda () "Spring 2026")))
-    (let ((org-agenda-custom-commands nil))
-      (a3madkour/setup-agenda-commands)
-      (let* ((dashboard (assoc "d" org-agenda-custom-commands))
-             (dump (prin1-to-string dashboard)))
-        (should dashboard)
-        ;; Each season tag must reach org-super-agenda as its own list
-        ;; element: :tag compares tag names exactly, so an OR-joined
-        ;; "foo|bar" would match no heading at all.
-        (should (string-match-p "Seasonal Habits" dump))
-        (should (string-match-p (regexp-quote ":tag (\"foo\" \"bar\")") dump))
-        (should (string-match-p (regexp-quote ":tag (\"core\" \"foo\" \"bar\")") dump))
-        (should-not (string-match-p "foo|bar" dump))
-        (should (string-match-p "Core Habits" dump))
-        (should (string-match-p "Overdue" dump))))))
+;;; ---- dashboard ----
 
-(ert-deftest a3madkour-test/setup-agenda-commands-without-season-tags ()
-  (cl-letf (((symbol-function 'a3madkour/get-current-season-tags)
-             (lambda () nil))
-            ((symbol-function 'a3madkour/get-current-season)
-             (lambda () "No season set")))
+(defun a3madkour-test/-group-names (groups)
+  (mapcar (lambda (g) (or (plist-get g :name) (car g))) groups))
+
+(ert-deftest a3madkour-test/dashboard-groups-order-with-season ()
+  (cl-letf (((symbol-function 'a3madkour/current-season)
+             (lambda () '(:status ok :name "S" :tags ("foo" "bar")))))
+    (let ((groups (a3madkour/-dashboard-groups)))
+      (should (equal '("⏰ Scheduled" "🔁 Core Habits" "🔁 Seasonal Habits"
+                       "🔁 Untagged Habits" :discard "⚠️ Overdue")
+                     (a3madkour-test/-group-names groups)))
+      (should (equal '(:habit t) (plist-get (nth 4 groups) :discard)))
+      (should (string-match-p (regexp-quote ":tag (\"foo\" \"bar\")")
+                              (prin1-to-string (nth 2 groups)))))))
+
+(ert-deftest a3madkour-test/dashboard-groups-without-season-tags ()
+  (dolist (season '((:status ok :name "S" :tags nil)
+                    (:status no-file)
+                    (:status no-heading)))
+    (cl-letf (((symbol-function 'a3madkour/current-season)
+               (lambda () season)))
+      (should (equal '("⏰ Scheduled" "🔁 Core Habits"
+                       "🔁 Untagged Habits" :discard "⚠️ Overdue")
+                     (a3madkour-test/-group-names
+                      (a3madkour/-dashboard-groups)))))))
+
+(ert-deftest a3madkour-test/dashboard-overdue-is-not-filtered-by-tag ()
+  (cl-letf (((symbol-function 'a3madkour/current-season)
+             (lambda () '(:status ok :name "S" :tags ("foo")))))
+    (let ((dump (prin1-to-string (a3madkour/-dashboard-groups)))
+          (count 0) (start 0))
+      (while (string-match ":discard" dump start)
+        (setq count (1+ count) start (match-end 0)))
+      (should (= 1 count)))))
+
+(ert-deftest a3madkour-test/untagged-habit-predicate ()
+  (should (a3madkour/-untagged-p "item"))
+  (should-not (a3madkour/-untagged-p (propertize "item" 'tags '("x")))))
+
+(ert-deftest a3madkour-test/setup-agenda-commands-reads-no-file ()
+  (cl-letf (((symbol-function 'a3madkour/current-season)
+             (lambda () (error "read at setup"))))
     (let ((org-agenda-custom-commands nil))
       (a3madkour/setup-agenda-commands)
-      (let* ((dashboard (assoc "d" org-agenda-custom-commands))
-             (dump (prin1-to-string dashboard)))
-        (should dashboard)
-        ;; No Seasonal Habits group when there are no tags
-        (should-not (string-match-p "Seasonal Habits" dump))
-        ;; Core Habits and Overdue still present
-        (should (string-match-p "Core Habits" dump))
-        (should (string-match-p "Overdue" dump))))))
+      (let ((dump (prin1-to-string (assoc "d" org-agenda-custom-commands))))
+        (should (string-match-p "a3madkour/-dashboard-groups" dump))
+        (should (string-match-p "a3madkour/-dashboard-header" dump))))))
+
+(defconst a3madkour-test/-now (encode-time 0 0 12 1 1 2027))
+
+(defun a3madkour-test/-notices-match (season regexp)
+  (cl-some (lambda (n) (string-match-p regexp n))
+           (a3madkour/-season-notices season a3madkour-test/-now)))
+
+(ert-deftest a3madkour-test/season-notices-no-file ()
+  (let ((n (a3madkour/-season-notices '(:status no-file) a3madkour-test/-now)))
+    (dolist (r '("No current season" "projects.org not found" "rotate-season"))
+      (should (cl-some (lambda (x) (string-match-p r x)) n)))))
+
+(ert-deftest a3madkour-test/season-notices-no-heading ()
+  (let ((n (a3madkour/-season-notices '(:status no-heading) a3madkour-test/-now)))
+    (dolist (r '("No current season" "Current Season" "rotate-season"))
+      (should (cl-some (lambda (x) (string-match-p r x)) n)))))
+
+(ert-deftest a3madkour-test/season-notices-no-tags ()
+  (should (a3madkour-test/-notices-match '(:status ok :name "S" :tags nil)
+                                         "no tags")))
+
+(ert-deftest a3madkour-test/season-notices-ended ()
+  (should (a3madkour-test/-notices-match
+           '(:status ok :name "S" :tags ("x") :end "[2026-12-26 Sat]")
+           "ended")))
+
+(ert-deftest a3madkour-test/season-notices-bad-or-missing-end ()
+  (dolist (end '(nil "garbage"))
+    (should-not (a3madkour-test/-notices-match
+                 `(:status ok :name "S" :tags ("x") :end ,end) "ended"))))
+
+(ert-deftest a3madkour-test/season-notices-healthy ()
+  (should-not (a3madkour/-season-notices
+               '(:status ok :name "S" :tags ("x") :end "[2027-02-01 Mon]")
+               a3madkour-test/-now)))
+
+(ert-deftest a3madkour-test/dashboard-header-shows-name-and-notices ()
+  (cl-letf (((symbol-function 'a3madkour/current-season)
+             (lambda () '(:status ok :name "Rust" :tags nil))))
+    (let ((h (a3madkour/-dashboard-header)))
+      (should (string-match-p "Season: Rust" h))
+      (should (string-match-p "⚠ .*no tags" h))
+      (should (string-suffix-p "\n" h)))))
 
 ;;; ---- a3madkour/rotate-season ----
 
@@ -92,9 +148,7 @@
               ((symbol-function 'read-number)
                (lambda (&rest _) 6))
               ((symbol-function 'a3madkour/select-season-tags)
-               (lambda () '("new1" "new2")))
-              ((symbol-function 'a3madkour/setup-agenda-commands)
-               (lambda () nil)))
+               (lambda () '("new1" "new2"))))
       (a3madkour/rotate-season))
     (a3madkour-test/in-org-file "projects.org"
       (let ((content (buffer-string)))
@@ -116,8 +170,6 @@
               ((symbol-function 'read-number)
                (lambda (&rest _) 6))
               ((symbol-function 'a3madkour/select-season-tags)
-               (lambda () nil))
-              ((symbol-function 'a3madkour/setup-agenda-commands)
                (lambda () nil)))
       (a3madkour/rotate-season))
     (a3madkour-test/in-org-file "projects.org"

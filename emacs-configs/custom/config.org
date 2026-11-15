@@ -3879,32 +3879,66 @@ inserts a placeholder \"** TODO \" line ready for editing."
     (deactivate-mark)))
 
 ;; ---- Agenda + season rotation ----
+(defun a3madkour/-untagged-p (item)
+  "Non-nil when the agenda ITEM string carries no tags at all.
+Used as an org-super-agenda :pred; ITEM has agenda text properties."
+  (not (org-find-text-property-in-string 'tags item)))
+
+(defun a3madkour/-season-notices (season &optional now)
+  "Return a list of warning strings about SEASON, the plist from
+`a3madkour/current-season'.  NOW is a time value, default the current time."
+  (pcase (plist-get season :status)
+    ('no-file
+     (list "No current season: projects.org not found; run M-x a3madkour/rotate-season"))
+    ('no-heading
+     (list "No current season: no \"* Current Season:\" heading; run M-x a3madkour/rotate-season"))
+    (_
+     (let ((end (plist-get season :end))
+           notices)
+       (unless (plist-get season :tags)
+         (push "The season has no tags, so no seasonal habits are shown" notices))
+       (when (and (stringp end)
+                  (string-match "\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\)" end)
+                  (string< (match-string 1 end)
+                           (format-time-string "%Y-%m-%d" (or now (current-time)))))
+         (push (format "The season ended %s; run M-x a3madkour/rotate-season"
+                       (match-string 1 end))
+               notices))
+       (nreverse notices)))))
+
+(defun a3madkour/-dashboard-header ()
+  "Return the dashboard header: the season name and any notices."
+  (let* ((season (a3madkour/current-season))
+         (notices (a3madkour/-season-notices season))
+         (name (if (eq (plist-get season :status) 'ok)
+                   (plist-get season :name)
+                 (car notices)))
+         (notices (if (eq (plist-get season :status) 'ok) notices (cdr notices))))
+    (concat "Season: " name "\n"
+            (mapconcat (lambda (n) (concat "⚠ " n "\n")) notices ""))))
+
+(defun a3madkour/-dashboard-groups ()
+  "Return the org-super-agenda groups for the dashboard, from the season now."
+  (let ((tags (plist-get (a3madkour/current-season) :tags)))
+    (delq nil
+          (list
+           '(:name "⏰ Scheduled" :and (:time-grid t :scheduled today :not (:habit t)) :order 0)
+           '(:name "🔁 Core Habits" :and (:habit t :tag "core") :order 1)
+           ;; :tag compares tag names exactly, so several tags go in a list.
+           (when tags
+             `(:name "🔁 Seasonal Habits" :and (:habit t :tag ,tags) :order 2))
+           '(:name "🔁 Untagged Habits" :and (:habit t :pred a3madkour/-untagged-p) :order 2)
+           '(:discard (:habit t))
+           '(:name "⚠️ Overdue" :scheduled past :deadline past :order 3)))))
+
 (defun a3madkour/setup-agenda-commands ()
-  "Set up agenda commands with current season context."
-  (let* ((season-tags (a3madkour/get-current-season-tags))
-         ;; org-super-agenda's :tag matches tag names exactly, never as a
-         ;; regexp, so several tags must be passed as a list.  Joining them
-         ;; with "|" builds one tag name no heading carries.
-         (in-season-tags (cons "core" season-tags))
-         (core-group '(:name "🔁 Core Habits" :and (:habit t :tag "core") :order 1))
-         (seasonal-group (when season-tags
-                           `(:name "🔁 Seasonal Habits"
-								   :and (:habit t :tag ,season-tags)
-								   :order 2)))
-         (super-groups (delq nil
-							 (list
-							  '(:name "⏰ Scheduled" :and (:time-grid t :scheduled today :not (:habit t)) :order 0)
-							  core-group
-							  seasonal-group
-							  `(:discard (:and (:scheduled past :not (:tag ,in-season-tags))))
-							  `(:discard (:and (:deadline past :not (:tag ,in-season-tags))))
-							  '(:name "⚠️ Overdue" :scheduled past :deadline past :order 3)
-							  '(:discard (:habit t))))))
-    (setq org-agenda-custom-commands
-          `(("d" "Dashboard"
+  "Set up agenda commands.  The dashboard groups and header are forms
+evaluated each time it is built, so they follow the current season."
+  (setq org-agenda-custom-commands
+          '(("d" "Dashboard"
              ((agenda ""
                       ((org-agenda-span 'day)
-                       (org-super-agenda-groups ',super-groups)))
+                       (org-super-agenda-groups (a3madkour/-dashboard-groups))))
 
               (tags-todo "thisweek"
                          ((org-agenda-overriding-header "📌 This Week")))
@@ -3921,8 +3955,7 @@ inserts a placeholder \"** TODO \" line ready for editing."
                          ((org-agenda-overriding-header "🌊 Low Energy (unmedicated ok)")
                           (org-agenda-sorting-strategy '(priority-down effort-up)))))
              ((org-agenda-block-separator nil)
-              (org-agenda-overriding-header
-               (concat "Season: " (a3madkour/get-current-season) "\n"))))))))
+              (org-agenda-overriding-header (a3madkour/-dashboard-header))))))))
 
 (defun a3madkour/-archive-current-season (accomplishments)
   "Rename the existing `* Current Season:' heading in the current buffer to
@@ -3972,8 +4005,7 @@ START/END date stamps based on WEEKS from today."
           (a3madkour/-archive-current-season accomplished)))
       (a3madkour/-insert-new-season name weeks tags)
       (save-buffer)
-      (message "Started season: %s" name)
-      (a3madkour/setup-agenda-commands))))
+      (message "Started season: %s" name))))
 #+end_src
 *** Base
 #+begin_src emacs-lisp
