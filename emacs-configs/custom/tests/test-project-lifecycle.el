@@ -44,6 +44,25 @@
       (re-search-backward "^\\* ")
       (should (looking-at "\\* Newbie")))))
 
+(ert-deftest a3madkour-test/create-project-interactive-from-narrowed-buffer ()
+  ;; Uses `call-interactively' so the interactive-call branch runs.
+  (a3madkour-test/with-org-env
+      '(("projects.org" . "* First one :project:active:\n* Second one :project:active:\n"))
+    (a3madkour-test/in-org-file "projects.org"
+      (org-narrow-to-subtree))
+    (cl-letf (((symbol-function 'read-string)
+               (a3madkour-test/queue '("Newbie" "Done" "")))
+              ((symbol-function 'completing-read)
+               (a3madkour-test/queue '("career" "inactive")))
+              ((symbol-function 'yes-or-no-p) (lambda (&rest _) nil)))
+      (call-interactively #'a3madkour/create-project))
+    (should (equal (buffer-file-name) (a3madkour/org-file "projects.org")))
+    (should (looking-back "^\\*\\* TODO " (line-beginning-position)))
+    (save-excursion
+      (org-back-to-heading t)
+      (org-up-heading-safe)
+      (should (looking-at "\\* Newbie")))))
+
 (ert-deftest a3madkour-test/create-project-sets-properties ()
   (a3madkour-test/with-org-env '(("projects.org" . ""))
     (cl-letf (((symbol-function 'read-string)

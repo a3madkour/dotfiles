@@ -3737,6 +3737,7 @@ inserts a placeholder \"** TODO \" line ready for editing."
           (setq project-marker (point-marker))))
 	  (when interactive-call
 		(switch-to-buffer (find-file-noselect (a3madkour/org-file "projects.org")))
+        (widen)
         (goto-char (marker-position project-marker))
         (re-search-forward "^\\*\\* TODO ")
         (end-of-line))
