@@ -3576,8 +3576,12 @@ inherited from #+FILETAGS."
 (defun a3madkour/-read-tags (prompt candidates)
   "Read tags interactively; return them in selection order.
 Each round offers \"-- Done --\", \"-- Enter new tag --\", then the
-CANDIDATES not yet selected.  Invalid tags are rejected with a message."
+CANDIDATES not yet selected.  \"-- Done --\" is also the default, so a
+blank RET finishes under any completion UI, including ones that re-sort
+the candidates.  An invalid tag is rejected, and the next round's prompt
+says so."
   (let ((selected '())
+        (rejected nil)
         (done nil))
     (while (not done)
       (let* ((choices (append
@@ -3585,20 +3589,24 @@ CANDIDATES not yet selected.  Invalid tags are rejected with a message."
                        (cl-remove-if (lambda (tag) (member tag selected))
                                      candidates)))
              (choice (completing-read
-                      (format "%s [%s]: " prompt
+                      (format "%s [%s]%s: " prompt
                               (if selected
-                                  (mapconcat #'identity selected ", ")
-                                "none yet"))
-                      choices nil nil))
+                                  (mapconcat #'identity (reverse selected) ", ")
+                                "none yet")
+                              (if rejected
+                                  (format " (%S is not a valid tag)" rejected)
+                                ""))
+                      choices nil nil nil nil "-- Done --"))
              (new (cond
                    ((string= choice "-- Done --") (setq done t) nil)
                    ((string= choice "-- Enter new tag --")
                     (read-string "New tag: "))
                    (t choice))))
+        (setq rejected nil)
         (when (and new (not (string-empty-p new)))
           (cond
            ((not (a3madkour/-valid-tag-p new))
-            (message "Invalid tag %S: use only letters, digits, _, @, # or %%" new))
+            (setq rejected new))
            ((not (member new selected))
             (push new selected))))))
     (nreverse selected)))

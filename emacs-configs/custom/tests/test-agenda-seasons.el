@@ -44,13 +44,48 @@
   (dolist (bad '("deep work" "side-project" "" "a:b"))
     (should-not (a3madkour/-valid-tag-p bad))))
 
-(ert-deftest a3madkour-test/read-tags-done-is-first-candidate ()
-  (let (seen)
+(ert-deftest a3madkour-test/read-tags-done-is-the-default ()
+  ;; Completion UIs such as Vertico re-sort the candidates, so list order
+  ;; alone does not make a blank RET finish; the DEF argument does.
+  (let (seen def)
     (cl-letf (((symbol-function 'completing-read)
-               (lambda (_p coll &rest _) (setq seen coll) "-- Done --")))
+               (lambda (_p coll _pred _req _init _hist &optional d &rest _)
+                 (setq seen coll def d)
+                 "-- Done --")))
       (a3madkour/-read-tags "Tags" '("tag1" "tag2")))
+    (should (equal def "-- Done --"))
     (should (equal (seq-take seen 4)
                    '("-- Done --" "-- Enter new tag --" "tag1" "tag2")))))
+
+(defun a3madkour-test/-read-tags-prompts (answers new-tags)
+  "Run `-read-tags' with completing-read ANSWERS and read-string NEW-TAGS.
+Return (RESULT . PROMPTS), PROMPTS being the completing-read prompts in order."
+  (let ((prompts nil)
+        (answer (a3madkour-test/queue answers)))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (prompt &rest _) (push prompt prompts) (funcall answer)))
+              ((symbol-function 'read-string) (a3madkour-test/queue new-tags)))
+      (let ((result (a3madkour/-read-tags "Tags" '("core" "rust" "health"))))
+        (cons result (nreverse prompts))))))
+
+(ert-deftest a3madkour-test/read-tags-next-prompt-names-rejected-new-tag ()
+  (let ((prompts (cdr (a3madkour-test/-read-tags-prompts
+                       '("core" "-- Enter new tag --" "-- Done --" ) '("deep work")))))
+    (should (string-match-p "\"deep work\" is not a valid tag" (nth 2 prompts)))
+    (should-not (string-match-p "not a valid tag" (nth 1 prompts)))))
+
+(ert-deftest a3madkour-test/read-tags-rejection-shown-once ()
+  (let ((prompts (cdr (a3madkour-test/-read-tags-prompts
+                       '("side-project" "rust" "-- Done --") nil))))
+    (should (string-match-p "\"side-project\" is not a valid tag" (nth 1 prompts)))
+    (should-not (string-match-p "not a valid tag" (nth 2 prompts)))))
+
+(ert-deftest a3madkour-test/read-tags-prompt-lists-selection-order ()
+  (let ((run (a3madkour-test/-read-tags-prompts
+              '("rust" "core" "health" "-- Done --") nil)))
+    (should (equal (car run) '("rust" "core" "health")))
+    (should (string-match-p "\\[rust, core\\]" (nth 2 (cdr run))))
+    (should (string-match-p "\\[rust, core, health\\]" (nth 3 (cdr run))))))
 
 (ert-deftest a3madkour-test/read-tags-rejects-invalid-new-tag ()
   (cl-letf (((symbol-function 'completing-read)
