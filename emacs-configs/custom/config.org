@@ -4305,8 +4305,9 @@ because `org-todo' runs `org-blocker-hook' directly, not through
 Point is on the item's heading.  The result is the item's body (after its
 planning line and drawers), then every child subtree verbatim, re-levelled
 so the shallowest child is level 1 with relative depth kept.  The item's
-own heading, tags, planning and drawers are left out.  Trimmed; \"\" when
-there is neither body nor children."
+own heading, tags, planning and drawers are left out.  Leading blank
+lines and trailing whitespace are trimmed, but not the first line's
+indentation; \"\" when there is neither body nor children."
   (save-excursion
     (org-back-to-heading t)
     (let* ((children-start (org-entry-end-position))
@@ -4314,7 +4315,10 @@ there is neither body nor children."
            (body (progn (org-end-of-meta-data t)
                         (buffer-substring-no-properties
                          (min (point) children-start) children-start)))
-           (children (buffer-substring-no-properties children-start subtree-end)))
+           (children (buffer-substring-no-properties children-start subtree-end))
+           (trim (lambda (s)
+                   (replace-regexp-in-string "\\`\\([ \t]*\n\\)+" ""
+                                             (string-trim-right s)))))
       (unless (string-empty-p (string-trim children))
         (with-temp-buffer
           (insert children)
@@ -4329,16 +4333,22 @@ there is neither body nor children."
               (delete-char (1- shallowest))
               (forward-line 1)))
           (setq children (buffer-string))))
-      (string-trim (concat (string-trim body) "\n" children)))))
+      (funcall trim (concat (funcall trim body) "\n" children)))))
+
+(defun a3madkour/-inbox-subtree-text ()
+  "Return the text of the subtree whose heading point is at the start of."
+  (buffer-substring-no-properties
+   (point) (save-excursion (org-end-of-subtree t t) (point))))
 
 (defvar a3madkour--inbox-roam-marker nil
-  "The inbox item an org-roam capture buffer was started for, as (MARKER . HEADING).
-HEADING is the item's heading text as `org-get-heading' returned it with all
-of its arguments non-nil.  Set buffer-locally in that capture buffer, and
-nowhere else.")
+  "The inbox item an org-roam capture buffer was started for.
+The value is (MARKER HEADING SUBTREE).  HEADING is the item's heading text
+as `org-get-heading' returned it with all of its arguments non-nil, and
+SUBTREE the item's whole text when it was handed off.  Set buffer-locally
+in that capture buffer, and nowhere else.")
 
 (defvar a3madkour--inbox-roam-finalizing nil
-  "The (MARKER . HEADING) of the capture being finalised right now, else nil.
+  "The (MARKER HEADING SUBTREE) of the capture being finalised now, else nil.
 `org-capture-after-finalize-hook' runs after the capture buffer is killed,
 so `a3madkour--inbox-roam-prepare-finalize' hands the marker over here.")
 
@@ -4353,13 +4363,12 @@ reached its after hook."
 
 (defun a3madkour--inbox-to-roam-finalize ()
   "Hook: cut the inbox item of the roam capture just finalised, unless aborted.
-The item is cut only if the heading at its marker is still the one handed
-off, looked at in the widened buffer; the owner's narrowing is kept.
-Otherwise nothing is cut and a message says so.  Never signals."
+The item is cut only if the subtree at its marker is still exactly the
+text handed off, looked at in the widened buffer; the owner's narrowing
+is kept.  Otherwise nothing is cut and a message says so.  Never signals."
   (when a3madkour--inbox-roam-finalizing
-    (let* ((item (car a3madkour--inbox-roam-finalizing))
-           (heading (cdr a3madkour--inbox-roam-finalizing))
-           (buf (marker-buffer item)))
+    (pcase-let* ((`(,item ,heading ,subtree) a3madkour--inbox-roam-finalizing)
+                 (buf (marker-buffer item)))
       (setq a3madkour--inbox-roam-finalizing nil)
       (unwind-protect
           (unless org-note-abort
@@ -4369,11 +4378,11 @@ Otherwise nothing is cut and a message says so.  Never signals."
                            (org-with-wide-buffer
                             (goto-char item)
                             (when (and (org-at-heading-p)
-                                       (equal (org-get-heading t t t t) heading))
+                                       (equal (a3madkour/-inbox-subtree-text) subtree))
                               (org-cut-subtree)
                               t))))
                   (message "Roam note saved, but inbox item \"%s\" was not removed: \
-it is no longer where it was" heading))
+it changed or moved after it was sent" heading))
               (error
                (message "Roam note saved, but inbox item \"%s\" was not removed: %s"
                         heading (error-message-string err)))))
@@ -4386,25 +4395,48 @@ it is no longer where it was" heading))
   "Send the current inbox item to org-roam as a Zettelkasten seed.
 The item's body and child headings become the new node's initial content.
 They are inserted into the capture buffer once it is open, so neither
-org-capture nor org-roam expands anything in them.  The inbox item is
-removed only when that capture finalises; on abort it stays where it was,
-and finalising any other capture leaves it alone."
+org-capture nor org-roam expands anything in them.  The heading becomes
+the new note's title the same way: it goes into no template, and is
+written after the \"#+title:\" the head leaves empty.  (It still names the
+file, through org-roam's slug, which keeps only letters and digits.)  The
+inbox item is removed only when that capture finalises, and only if it is
+still exactly as it was sent; on abort it stays where it was, and
+finalising any other capture leaves it alone."
   (org-back-to-heading t)
   (let ((title (org-get-heading t t t t))
+        (subtree (a3madkour/-inbox-subtree-text))
         (content (a3madkour/-inbox-roam-content))
-        (item (copy-marker (point) t)))
-    (org-roam-capture-
-     :node (org-roam-node-create :title title)
-     :templates '(("d" "default" plain "%?"
-                   :target (file+head
-                            "${slug}.org"
-                            "#+title: ${title}\n#+filetags: :TODO:\n")
-                   :unnarrowed t)))
-    (unless (bound-and-true-p org-capture-mode)
-      (set-marker item nil)
-      (user-error "The org-roam capture did not start; the inbox item is unchanged"))
-    (insert content)
-    (setq-local a3madkour--inbox-roam-marker (cons item title))))
+        (origin (current-buffer))
+        (item (copy-marker (point) t))
+        (armed nil))
+    (unwind-protect
+        (progn
+          (org-roam-capture-
+           :node (org-roam-node-create :title title)
+           :templates '(("d" "default" plain "%?"
+                         :target (file+head
+                                  "${slug}.org"
+                                  "#+title:\n#+filetags: :TODO:\n")
+                         :unnarrowed t)))
+          (unless (and (bound-and-true-p org-capture-mode)
+                       (not (eq (current-buffer) origin)))
+            (user-error "The org-roam capture did not start; the inbox item is unchanged"))
+          ;; Only a new file got the head; an existing note keeps its title.
+          (when (plist-get (plist-get (bound-and-true-p org-capture-current-plist)
+                                      :org-roam)
+                           :new-file)
+            (unless (save-excursion
+                      (save-restriction
+                        (widen)
+                        (goto-char (point-min))
+                        (when (re-search-forward "^#\\+title:$" nil t)
+                          (insert " " title)
+                          t)))
+              (insert "#+title: " title "\n")))
+          (insert content)
+          (setq-local a3madkour--inbox-roam-marker (list item title subtree))
+          (setq armed t))
+      (unless armed (set-marker item nil)))))
 
 (defun a3madkour/inbox-to-someday ()
   "Refile the current inbox item to someday.org under a chosen heading.

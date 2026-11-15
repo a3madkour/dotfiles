@@ -92,6 +92,13 @@ just the body
   (a3madkour-test/in-buffer "* TODO Last line, no newline"
     (should (equal (a3madkour/-inbox-roam-content) ""))))
 
+(ert-deftest a3madkour-test/inbox-roam-content-keeps-first-line-indentation ()
+  ;; Trimming the first line's indentation would make "b" a child of "a".
+  (a3madkour-test/in-buffer "* TODO Parent\n  - a\n  - b\n* TODO Sibling\n"
+    (should (equal (a3madkour/-inbox-roam-content) "  - a\n  - b")))
+  (a3madkour-test/in-buffer "* TODO Parent\n\n  \n  - a\n  - b  \n\n** Child\n"
+    (should (equal (a3madkour/-inbox-roam-content) "  - a\n  - b\n* Child"))))
+
 ;; The hand-off, with org-roam's capture stubbed.  The stub does what
 ;; `org-roam-capture-' does on success: it returns with a capture buffer
 ;; current.  A finalise is simulated the way `org-capture-finalize' runs it:
@@ -290,6 +297,157 @@ body text here
           (should (equal (buffer-string) narrowed)))
         (widen)
         (should (equal (buffer-string) "* TODO Sibling\n* TODO Third\n"))))))
+
+;; The item's own heading is never a template either.
+
+(defconst a3madkour-test--roam-tricky-heading "Caf%C3%A9 100%t %(error \"x\")"
+  "A heading that org-capture would mangle, evaluate or fail on as a template.")
+
+(defun a3madkour-test/-fake-roam-new-note (name)
+  "Return a stub for `org-roam-capture-' that opens buffer NAME as a new note.
+It does what a `file+head' capture into a new file does: the head is
+inserted after a property drawer holding the node's ID, and point is
+left at the end, where the template body goes."
+  (lambda (&rest args)
+    (let ((head (nth 2 (plist-get (car (plist-get args :templates)) :target))))
+      (set-buffer (get-buffer-create name))
+      (insert ":PROPERTIES:\n:ID: 1234\n:END:\n" head)
+      (setq-local org-capture-mode t)
+      (setq-local org-capture-current-plist '(:org-roam (:new-file "/tmp/n.org")))
+      (setq-local a3madkour-test/-capture-args args))))
+
+(defun a3madkour-test/-template-strings (tree)
+  "Every string anywhere in TREE."
+  (cond ((stringp tree) (list tree))
+        ((consp tree) (append (a3madkour-test/-template-strings (car tree))
+                              (a3madkour-test/-template-strings (cdr tree))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-heading-is-not-in-any-template ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer (concat "* TODO " a3madkour-test--roam-tricky-heading "\n")
+      (let* ((cap (a3madkour-test/-hand-off (current-buffer) "Caf" "*cap*"))
+             (args (buffer-local-value 'a3madkour-test/-capture-args cap))
+             (strings (a3madkour-test/-template-strings (plist-get args :templates))))
+        (should strings)
+        (dolist (s strings)
+          (should-not (string-match-p "\\${title}\\|Caf\\|%t\\|%(\\|%C" s)))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-new-note-gets-exact-title ()
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer (concat "* TODO " a3madkour-test--roam-tricky-heading
+                                      "\nthe body\n* TODO Sibling\n")
+      (goto-char (point-min))
+      (cl-letf (((symbol-function 'org-roam-capture-)
+                 (a3madkour-test/-fake-roam-new-note "*cap*")))
+        (a3madkour/inbox-to-org-roam))
+      (should (equal (buffer-name) "*cap*"))
+      (should (equal (buffer-string)
+                     (concat ":PROPERTIES:\n:ID: 1234\n:END:\n#+title: "
+                             a3madkour-test--roam-tricky-heading
+                             "\n#+filetags: :TODO:\nthe body")))
+      ;; The body went in at point, where the template's %? was.
+      (should (eobp)))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-new-note-without-title-line ()
+  ;; Should the head ever arrive without its empty "#+title:" line, the
+  ;; title is still written, ahead of the body.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer (concat "* TODO " a3madkour-test--roam-tricky-heading
+                                      "\nthe body\n")
+      (cl-letf (((symbol-function 'org-roam-capture-)
+                 (lambda (&rest _)
+                   (set-buffer (get-buffer-create "*cap*"))
+                   (insert ":PROPERTIES:\n:ID: 1234\n:END:\n")
+                   (setq-local org-capture-mode t)
+                   (setq-local org-capture-current-plist
+                               '(:org-roam (:new-file "/tmp/n.org"))))))
+        (a3madkour/inbox-to-org-roam))
+      (should (equal (buffer-string)
+                     (concat ":PROPERTIES:\n:ID: 1234\n:END:\n#+title: "
+                             a3madkour-test--roam-tricky-heading "\nthe body"))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-existing-note-keeps-its-title ()
+  ;; A capture into a file that already exists gets no head, so the title
+  ;; line is left alone.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer "* TODO Item\nthe body\n"
+      (cl-letf (((symbol-function 'org-roam-capture-)
+                 (lambda (&rest _)
+                   (set-buffer (get-buffer-create "*cap*"))
+                   (insert "#+title:\nold text\n")
+                   (setq-local org-capture-mode t)
+                   (setq-local org-capture-current-plist '(:org-roam nil)))))
+        (a3madkour/inbox-to-org-roam))
+      (should (equal (buffer-string) "#+title:\nold text\nthe body")))))
+
+;; What the finalise cuts: only the item exactly as it was handed off.
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-item-edited-meanwhile-cuts-nothing ()
+  ;; Edits made after the hand-off never reached the note.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Send me" "*cap*")))
+        (goto-char (point-min))
+        (re-search-forward "body text here")
+        (insert ", and a later thought")
+        (let ((before (buffer-string))
+              (shown (a3madkour-test/-finalize-capturing-messages cap)))
+          (should (equal (buffer-string) before))
+          (should (cl-some (lambda (m) (string-match-p "\"Send me to roam\" was not removed" m))
+                           shown)))
+        (should-not a3madkour--inbox-roam-finalizing)))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-same-named-sibling-survives ()
+  ;; The item goes while its capture is open and the marker lands on a
+  ;; sibling with the same heading but other content.
+  (a3madkour-test/-with-captures '("*cap*")
+    (a3madkour-test/in-buffer "* TODO Twin\nfirst body\n* TODO Twin\nsecond body\n"
+      (let ((cap (a3madkour-test/-hand-off (current-buffer) "Twin" "*cap*")))
+        (goto-char (point-min))
+        (let ((kill-ring nil)) (org-cut-subtree))
+        (let ((shown (a3madkour-test/-finalize-capturing-messages cap)))
+          (should (equal (buffer-string) "* TODO Twin\nsecond body\n"))
+          (should (cl-some (lambda (m) (string-match-p "\"Twin\" was not removed" m))
+                           shown)))))))
+
+;; Whether the capture really started, and what is left when it did not.
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-already-in-a-capture-buffer ()
+  ;; Handing off from a buffer that is itself a capture buffer: a capture
+  ;; that never starts leaves that buffer current, with `org-capture-mode' on.
+  (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+    (setq-local org-capture-mode t)
+    (re-search-forward "Send me")
+    (cl-letf (((symbol-function 'org-roam-capture-) #'ignore))
+      (should-error (a3madkour/inbox-to-org-roam) :type 'user-error))
+    (should (equal (buffer-string) a3madkour-test--roam-inbox))
+    (should-not (local-variable-p 'a3madkour--inbox-roam-marker))))
+
+(defun a3madkour-test/-hand-off-signalling (condition)
+  "Hand off an item while `org-roam-capture-' signals CONDITION.
+Return (CAUGHT MADE . LIVE): the condition that escaped, how many markers
+the hand-off made, and how many of them still point into the inbox
+afterwards.  LIVE is counted before the inbox buffer is killed, since
+killing it would release every marker anyway."
+  (let ((made nil)
+        (copy (symbol-function 'copy-marker)))
+    (a3madkour-test/in-buffer a3madkour-test--roam-inbox
+      (re-search-forward "Send me")
+      (let ((caught
+             (cl-letf (((symbol-function 'copy-marker)
+                        (lambda (&rest args) (car (push (apply copy args) made))))
+                       ((symbol-function 'org-roam-capture-)
+                        (lambda (&rest _) (signal condition '("boom")))))
+               (condition-case err (progn (a3madkour/inbox-to-org-roam) nil)
+                 ((error quit) (car err))))))
+        (cons caught (cons (length made) (cl-count-if #'marker-buffer made)))))))
+
+(ert-deftest a3madkour-test/inbox-to-org-roam-capture-signals-releases-marker ()
+  (dolist (condition '(error quit))
+    (let ((run (a3madkour-test/-hand-off-signalling condition)))
+      (should (eq (car run) condition))
+      (should (> (cadr run) 0))
+      (should (= (cddr run) 0)))))
 
 ;;; ---- a3madkour/inbox-to-someday ----
 
