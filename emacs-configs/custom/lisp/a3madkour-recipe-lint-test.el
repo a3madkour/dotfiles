@@ -118,21 +118,21 @@ With TEXT nil the registry path is set but the file does not exist."
        (delete-directory dir t))))
 
 (ert-deftest a3madkour-recipe-lint--registry-hit ()
-  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE oil\n"
+  (a3madkour-recipe-lint-test--with-registry "* oil :have:\n"
     (should-not (a3madkour-recipe-lint/lint-file f))))
 
 (ert-deftest a3madkour-recipe-lint--registry-alias-hit ()
   (a3madkour-recipe-lint-test--with-registry
-      "* Pantry\n** HAVE olive oil\n:PROPERTIES:\n:ALIASES: oil\n:END:\n"
+      "* olive oil :have:\n:PROPERTIES:\n:ALIASES: oil\n:END:\n"
     (should-not (a3madkour-recipe-lint/lint-file f))))
 
 (ert-deftest a3madkour-recipe-lint--registry-miss ()
-  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE salt\n"
+  (a3madkour-recipe-lint-test--with-registry "* salt :have:\n"
     (should (equal (a3madkour-recipe-lint/lint-file f)
                    (list (format "%s:9: ingredient \"oil\" is not in the registry" base))))))
 
 (ert-deftest a3madkour-recipe-lint--registry-empty-registry ()
-  (a3madkour-recipe-lint-test--with-registry "#+TITLE: Ingredients\n#+TODO: HAVE LOW OUT |\n"
+  (a3madkour-recipe-lint-test--with-registry "#+TITLE: Ingredients\n#+TAGS: { have(h) low(l) out(o) }\n"
     (should (equal (a3madkour-recipe-lint/lint-file f)
                    (list (format "%s:9: ingredient \"oil\" is not in the registry" base))))))
 
@@ -143,9 +143,9 @@ With TEXT nil the registry path is set but the file does not exist."
                                  base a3madkour-ingredients/file))))))
 
 (ert-deftest a3madkour-recipe-lint--registry-problem ()
-  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE oil\n** OUT Oil\n"
+  (a3madkour-recipe-lint-test--with-registry "* oil :have:\n* Oil :out:\n"
     (should (equal (a3madkour-recipe-lint/lint-file f)
-                   '("ingredients.org:3: duplicate name \"oil\" (also line 2)")))))
+                   '("ingredients.org:2: duplicate name \"oil\" (also line 1)")))))
 
 (ert-deftest a3madkour-recipe-lint--registry-unset ()
   (let ((a3madkour-ingredients/file nil)

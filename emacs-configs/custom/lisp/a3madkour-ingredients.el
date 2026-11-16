@@ -2,11 +2,20 @@
 
 ;;; Commentary:
 
-;; One org file names every ingredient once.  Level-1 headings are store
-;; aisles, in the order the store is walked; level-2 headings are ingredients,
-;; whose heading text is the canonical name.  An ingredient's state is the
-;; keyword in front of its name (HAVE, LOW, OUT; none = untracked), and its
-;; other names and usual unit are the :ALIASES: and :UNIT: properties.
+;; One org file names every ingredient once, as a flat list: each level-1
+;; heading is an ingredient and its text is the canonical name.  Deeper
+;; headings are notes and are ignored.  An ingredient's state is an org tag on
+;; its heading (:have:, :low: or :out:; none = untracked), so the heading's
+;; TODO keyword stays free for ordinary use.  Its other names and usual unit
+;; are the :ALIASES: and :UNIT: properties.
+;;
+;; Tags are otherwise open.  An optional header line names the tags that are
+;; store aisles, in the order the store is walked:
+;;
+;;   #+TAGS: [ aisle : produce dairy oils_vinegar ]
+;;
+;; An ingredient's aisle is the first of those it carries.  The line restricts
+;; nothing; it only tells the grocery list what to group by and in what order.
 ;;
 ;; Recipes, the pantry and the grocery list all refer to ingredients through
 ;; `a3madkour-ingredients/lookup'.  This module depends on nothing but org, so
@@ -16,6 +25,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'ucs-normalize)
 (require 'org)
 
 (defgroup a3madkour-ingredients nil
@@ -31,13 +41,14 @@ sets it (see `a3madkour-pub/path-variables')."
   :group 'a3madkour-ingredients)
 
 (defconst a3madkour-ingredients--states
-  '(("HAVE" . have) ("LOW" . low) ("OUT" . out))
-  "State keyword → state symbol.")
+  '(("have" . have) ("low" . low) ("out" . out))
+  "State tag → state symbol.  Tags are matched without regard to case.")
 
 (defconst a3madkour-ingredients--foreign-keywords
-  '("TODO" "NEXT" "WAIT" "DONE" "DROP")
-  "Org keywords that are not ingredient states.
-An ingredient heading that starts with one was given the wrong keyword.")
+  '("TODO" "NEXT" "WAIT" "DONE" "DROP" "HAVE" "LOW" "OUT")
+  "Keywords that must not start an ingredient's name.
+State is a tag, never a keyword; a heading that starts with one of these
+would be read as part of the name.")
 
 (defun a3madkour-ingredients--leading-keyword (name)
   "The keyword NAME starts with, when more text follows it, or nil.
@@ -45,15 +56,18 @@ Case-sensitive, and only real keywords count: \"BBQ sauce\" has none."
   (let ((case-fold-search nil))
     (when (string-match "\\`\\([^ \t]+\\)[ \t]+[^ \t]" name)
       (car (member (match-string 1 name)
-                   (append (mapcar #'car a3madkour-ingredients--states)
-                           a3madkour-ingredients--foreign-keywords))))))
+                   a3madkour-ingredients--foreign-keywords)))))
 
 (defvar a3madkour-ingredients--cache nil
   "(KEY . PARSED) for the last registry read; see `a3madkour-ingredients--parsed'.")
 
 (defun a3madkour-ingredients/normalize (string)
-  "Return STRING downcased, trimmed, with inner whitespace runs collapsed."
-  (downcase (string-join (split-string (or string "") "[[:space:]]+" t) " ")))
+  "Return STRING downcased, trimmed, with inner whitespace runs collapsed.
+Accented letters are composed first, so text that arrives decomposed (a paste
+from some phones and websites) matches the same name typed normally."
+  (downcase (string-join (split-string (ucs-normalize-NFC-string (or string ""))
+                                       "[[:space:]]+" t)
+                         " ")))
 
 ;;; Parsing
 
@@ -62,38 +76,69 @@ Case-sensitive, and only real keywords count: \"BBQ sauce\" has none."
   (string-trim
    (replace-regexp-in-string "[ \t]+:[[:alnum:]_@#%:]+:[ \t]*\\'" "" title)))
 
+(defun a3madkour-ingredients--heading-tags (heading)
+  "The org tags at the end of HEADING, as a list of strings."
+  (when (string-match "[ \t]+:\\([[:alnum:]_@#%:]+\\):[ \t]*\\'" heading)
+    (split-string (match-string 1 heading) ":" t)))
+
+(defun a3madkour-ingredients--state-tag-p (tag)
+  "Non-nil when TAG is one of the state tags, in any case."
+  (assoc (downcase tag) a3madkour-ingredients--states))
+
 (defun a3madkour-ingredients--split-aliases (value)
   "Split a comma-separated :ALIASES: VALUE, dropping empty pieces."
   (split-string (or value "") "," t "[[:space:]]+"))
 
+(defun a3madkour-ingredients--aisle-group-tags (line)
+  "The members of every `aisle' tag group on #+TAGS: LINE, in order.
+A group is [ aisle : a b ] or { aisle : a b }; a member's (k) fast-select
+suffix is dropped.  Nil for any other line."
+  (let ((case-fold-search t) (start 0) (out '()))
+    (when (string-match "\\`[ \t]*#\\+TAGS:" line)
+      (while (string-match "[[{][ \t]+aisle[ \t]*:\\([^]}]*\\)[]}]" line start)
+        (setq start (match-end 0))
+        (dolist (tag (split-string (match-string 1 line) "[ \t]+" t))
+          (push (replace-regexp-in-string "(.)\\'" "" tag) out))))
+    (nreverse out)))
+
+(defun a3madkour-ingredients--tag-member (tag tags)
+  "The element of TAGS equal to TAG without regard to case, or nil."
+  (car (cl-member tag tags :test (lambda (a b) (string= (downcase a) (downcase b))))))
+
 (defun a3madkour-ingredients--parse (text)
   "Parse registry TEXT.  Return a plist (:entries LIST :aisles LIST).
-The state is read from the heading text itself, so the result does not depend
-on the file's #+TODO: line or on the session's keywords."
+The state is read from the heading's tags as written, so the result does not
+depend on the session's settings.  :aisles is what the file's aisle lines
+name, in order."
   (let ((case-fold-search nil)
-        (line 0) (aisle nil) (aisles '()) (entries '())
-        (current nil) (in-drawer nil))
+        (line 0) (aisles '()) (entries '())
+        (current nil) (in-drawer nil) (found nil))
     (cl-flet ((finish ()
                 (when current (push current entries) (setq current nil))
                 (setq in-drawer nil)))
       (dolist (l (split-string text "\n"))
         (cl-incf line)
         (cond
+         ((setq found (a3madkour-ingredients--aisle-group-tags l))
+          (dolist (tag found)
+            (unless (a3madkour-ingredients--tag-member tag aisles)
+              (setq aisles (append aisles (list tag))))))
          ((string-match "\\`\\* +\\(.*\\)\\'" l)
           (finish)
-          (setq aisle (a3madkour-ingredients--strip-tags (match-string 1 l)))
-          (push aisle aisles))
-         ((string-match "\\`\\*\\* +\\(.*\\)\\'" l)
-          (finish)
-          (let* ((title (a3madkour-ingredients--strip-tags (match-string 1 l)))
-                 (state nil))
-            (when (string-match "\\`\\(HAVE\\|LOW\\|OUT\\)\\(?:[ \t]+\\(.*\\)\\)?\\'" title)
-              (setq state (cdr (assoc (match-string 1 title)
-                                      a3madkour-ingredients--states))
-                    title (string-trim (or (match-string 2 title) ""))))
+          (let* ((raw (match-string 1 l))
+                 (title (a3madkour-ingredients--strip-tags raw))
+                 (tags (a3madkour-ingredients--heading-tags raw))
+                 (state-tags (cl-remove-if-not
+                              #'a3madkour-ingredients--state-tag-p tags))
+                 (state (and state-tags
+                             (cdr (a3madkour-ingredients--state-tag-p
+                                   (car state-tags))))))
             (unless (string-empty-p title)
-              (setq current (list :name title :aliases nil :aisle aisle
-                                  :unit nil :state state :line line)))))
+              (setq current (list :name title :aliases nil :aisle nil
+                                  :unit nil :state state :line line
+                                  :tags tags
+                                  :state-tags (length state-tags))))))
+         ;; A deeper heading is a note: it ends the ingredient above it.
          ((string-match-p "\\`\\*+ " l) (finish))
          ((null current))
          ((string-match-p "\\`[ \t]*:PROPERTIES:[ \t]*\\'" l) (setq in-drawer t))
@@ -108,7 +153,14 @@ on the file's #+TODO: line or on the session's keywords."
               (unless (string-empty-p val)
                 (setq current (plist-put current :unit val))))))))
       (finish))
-    (list :entries (nreverse entries) :aisles (nreverse aisles))))
+    ;; The aisle lines may sit anywhere, so aisles are settled last: an
+    ;; ingredient's aisle is the first aisle, in aisle-line order, it carries.
+    (dolist (e entries)
+      (plist-put e :aisle
+                 (cl-find-if (lambda (a) (a3madkour-ingredients--tag-member
+                                          a (plist-get e :tags)))
+                             aisles)))
+    (list :entries (nreverse entries) :aisles aisles)))
 
 ;;; Reading, with a cache
 
@@ -163,12 +215,14 @@ They are only ever listed: never read, merged or deleted."
 
 (defun a3madkour-ingredients/entries ()
   "Every ingredient in the registry, in file order.
-Each is a plist (:name :aliases :aisle :unit :state :line); :state is `have',
-`low', `out' or nil (untracked).  Nil when the registry is unset or missing."
+Each is a plist (:name :aliases :aisle :unit :state :line :tags).  :state is
+`have', `low', `out' or nil (untracked); :tags is every tag on the heading;
+:aisle is the first aisle tag among them, or nil.  Nil when the registry is
+unset or missing."
   (plist-get (a3madkour-ingredients--parsed) :entries))
 
 (defun a3madkour-ingredients/aisles ()
-  "Aisle names (level-1 headings) in file order."
+  "The aisle tags the registry's aisle lines name, in order."
   (plist-get (a3madkour-ingredients--parsed) :aisles))
 
 (defun a3madkour-ingredients/lookup (string)
@@ -197,8 +251,6 @@ Nil when it is clean, unset or missing."
             (name (plist-get e :name)))
         (cl-flet ((emit (fmt &rest args)
                     (push (format "%s:%d: %s" base line (apply #'format fmt args)) out)))
-          (unless (plist-get e :aisle)
-            (emit "ingredient %S is outside any aisle" name))
           (dolist (n (cons name (plist-get e :aliases)))
             (let* ((norm (a3madkour-ingredients/normalize n))
                    (first (gethash norm seen)))
@@ -207,27 +259,31 @@ Nil when it is clean, unset or missing."
                 (puthash norm line seen))))
           (let ((keyword (a3madkour-ingredients--leading-keyword name)))
             (when keyword
-              (emit "%S is not a state (use HAVE, LOW or OUT)" keyword))))))
+              (emit "%S is a keyword, not part of a name; mark state with a tag (:have:, :low: or :out:)"
+                    keyword)))
+          (when (> (or (plist-get e :state-tags) 0) 1)
+            (emit "ingredient %S has more than one state tag" name)))))
     (nreverse out)))
 
 ;;; Editing the registry
 
 (defconst a3madkour-ingredients--header
-  "#+TITLE: Ingredients\n#+TODO: HAVE LOW | OUT\n#+STARTUP: nologdone\n\n"
+  "#+TITLE: Ingredients\n#+TAGS: { have(h) low(l) out(o) }\n\n"
   "What a new registry file starts with.
-Org always treats the last keyword of a sequence as a done state (a trailing
-`|' does not prevent it), so OUT is written as one and `nologdone' keeps the
-in-file keyword keys from stamping CLOSED when an ingredient runs out.")
+The braces make the three state tags one mutually exclusive group, so org's
+tag command (\\[org-set-tags-command]) sets a state with h, l or o and
+replaces the previous one.")
 
-(defun a3madkour-ingredients--state-keyword (state)
-  "The keyword for STATE (`have', `low', `out'), or nil for untracked."
+(defun a3madkour-ingredients--state-tag (state)
+  "The tag for STATE (`have', `low', `out'), or nil for untracked."
   (car (rassq state a3madkour-ingredients--states)))
 
 (defmacro a3madkour-ingredients--editing (&rest body)
   "Run BODY in the registry's buffer, widened, then save it.
 The buffer is the one visiting the file, so an open registry stays current.  If
 the file changed on disk under an unmodified buffer (a sync), the buffer is
-reverted first, so BODY never edits stale text."
+reverted first, so BODY never edits stale text.  If the buffer has unsaved
+edits as well, neither side can be dropped safely: refuse, and leave both."
   (declare (indent 0))
   `(let ((file (or a3madkour-ingredients/file
                    (user-error "a3madkour-ingredients/file is not set"))))
@@ -235,9 +291,10 @@ reverted first, so BODY never edits stale text."
      ;; `find-file-noselect' would ask "reread from disk?" about a buffer whose
      ;; file changed underneath it; take the existing buffer and decide here.
      (with-current-buffer (or (get-file-buffer file) (find-file-noselect file))
-       (when (and (not (buffer-modified-p))
-                  (file-exists-p file)
+       (when (and (file-exists-p file)
                   (not (verify-visited-file-modtime (current-buffer))))
+         (when (buffer-modified-p)
+           (user-error "The registry buffer has unsaved changes and the file changed on disk; save or revert it first"))
          (revert-buffer t t t))
        (prog1 (save-excursion (save-restriction (widen) ,@body))
          (save-buffer)))))
@@ -246,8 +303,11 @@ reverted first, so BODY never edits stale text."
   "Signal a `user-error' when STRING is already a name or alias."
   (let ((e (a3madkour-ingredients/lookup string)))
     (when e
-      (user-error "\"%s\" is already in the registry as \"%s\" (%s)"
-                  string (plist-get e :name) (plist-get e :aisle)))))
+      (user-error "\"%s\" is already in the registry as \"%s\"%s"
+                  string (plist-get e :name)
+                  (if (plist-get e :aisle)
+                      (format " (%s)" (plist-get e :aisle))
+                    "")))))
 
 (defun a3madkour-ingredients--check-name (name)
   "Signal a `user-error' when NAME would not read back as written."
@@ -279,33 +339,44 @@ reverted first, so BODY never edits stale text."
   (goto-char (point-min))
   (forward-line (1- line)))
 
-(defun a3madkour-ingredients--end-of-aisle (aisle)
-  "Move point to where a new ingredient of AISLE goes, creating AISLE if new."
-  (let ((want (a3madkour-ingredients/normalize aisle))
-        (case-fold-search nil)
-        (found nil))
-    (goto-char (point-min))
-    (while (and (not found) (re-search-forward "^\\* +\\(.*\\)$" nil t))
-      (when (string= want (a3madkour-ingredients/normalize
-                           (a3madkour-ingredients--strip-tags (match-string 1))))
-        (setq found t)))
-    (if found
-        (if (re-search-forward "^\\* " nil t)
-            (goto-char (match-beginning 0))
-          (goto-char (point-max)))
-      (goto-char (point-max))
-      (unless (or (bobp) (bolp)) (insert "\n"))
-      (insert "* " (string-trim aisle) "\n"))
-    (unless (or (bobp) (bolp)) (insert "\n"))))
+(defun a3madkour-ingredients--aisle-tag (string)
+  "STRING as an org tag, or nil when nothing of it can be one.
+Trimmed and downcased, with every run of characters a tag cannot hold turned
+into one underscore: \"Oils & vinegar\" is \"oils_vinegar\"."
+  (let ((tag (replace-regexp-in-string
+              "\\`_+\\|_+\\'" ""
+              (replace-regexp-in-string "[^[:alnum:]_@#%]+" "_"
+                                        (downcase (or string ""))))))
+    (unless (string-empty-p tag) tag)))
 
-(defun a3madkour-ingredients/add-entry (name aisle &optional aliases unit state)
-  "Add ingredient NAME under AISLE and save the registry.  Return its entry.
-ALIASES is a list of strings, UNIT a string, STATE `have', `low', `out' or nil
-\(untracked).  Creates the registry, and AISLE, when they do not exist.  Refuses
-a NAME or alias that the registry already knows."
+(defun a3madkour-ingredients--declare-aisle (tag)
+  "Put TAG at the end of the buffer's aisle line, writing one when missing.
+A new aisle line goes after the last #+TAGS: line, or first in the buffer."
+  (let ((case-fold-search t))
+    (goto-char (point-max))
+    (cond
+     ((re-search-backward
+       "^[ \t]*#\\+TAGS:.*[[{][ \t]+aisle[ \t]*:[^]}\n]*\\([]}]\\)" nil t)
+      (goto-char (match-beginning 1))
+      (skip-chars-backward " \t")
+      (insert " " tag)
+      (unless (looking-at-p "[ \t]") (insert " ")))
+     ((re-search-backward "^[ \t]*#\\+TAGS:.*$" nil t)
+      (goto-char (match-end 0))
+      (insert "\n#+TAGS: [ aisle : " tag " ]"))
+     (t
+      (goto-char (point-min))
+      (insert "#+TAGS: [ aisle : " tag " ]\n")))))
+
+(defun a3madkour-ingredients/add-entry (name &optional aisle aliases unit state)
+  "Add ingredient NAME at the end of the registry and save.  Return its entry.
+AISLE is free text, stored as a tag (see `a3madkour-ingredients--aisle-tag')
+and added to the aisle line when new; nil or empty means no aisle.  ALIASES is
+a list of strings, UNIT a string, STATE `have', `low', `out' or nil
+\(untracked).  Creates the registry when it does not exist.  Refuses a NAME or
+alias that the registry already knows."
   (a3madkour-ingredients--editing
     (let* ((name (string-trim (or name "")))
-           (aisle (string-trim (or aisle "")))
            (unit (string-trim (or unit "")))
            (aliases (cl-remove-duplicates
                      (cl-remove-if
@@ -316,19 +387,33 @@ a NAME or alias that the registry already knows."
                      :test (lambda (a b) (string= (a3madkour-ingredients/normalize a)
                                                   (a3madkour-ingredients/normalize b)))
                      :from-end t))
-           (keyword (a3madkour-ingredients--state-keyword state)))
+           (state-tag (a3madkour-ingredients--state-tag state))
+           (aisle-tag (a3madkour-ingredients--aisle-tag aisle))
+           (header-changed nil))
       (a3madkour-ingredients--check-name name)
       (mapc #'a3madkour-ingredients--check-alias aliases)
-      (when (string-empty-p aisle) (user-error "Aisle is empty"))
       (mapc #'a3madkour-ingredients--refuse-if-known (cons name aliases))
       (when (= (point-min) (point-max))
         (insert a3madkour-ingredients--header)
-        ;; The buffer was set up before it had a #+TODO: line; teach it the
-        ;; three states now so the in-file keyword keys work straight away.
-        (when (derived-mode-p 'org-mode)
-          (org-set-regexps-and-options)))
-      (a3madkour-ingredients--end-of-aisle aisle)
-      (insert "** " (if keyword (concat keyword " ") "") name "\n")
+        (setq header-changed t))
+      (when aisle-tag
+        (let ((known (a3madkour-ingredients--tag-member
+                      aisle-tag (a3madkour-ingredients/aisles))))
+          (if known
+              ;; Write the aisle the way the aisle line spells it.
+              (setq aisle-tag known)
+            (a3madkour-ingredients--declare-aisle aisle-tag)
+            (setq header-changed t))))
+      ;; The buffer was set up before these #+TAGS: lines existed; teach it
+      ;; now so org's tag command offers them straight away.
+      (when (and header-changed (derived-mode-p 'org-mode))
+        (org-set-regexps-and-options))
+      (goto-char (point-max))
+      (unless (or (bobp) (bolp)) (insert "\n"))
+      (let ((tags (delq nil (list state-tag aisle-tag))))
+        (insert "* " name
+                (if tags (concat " :" (string-join tags ":") ":") "")
+                "\n"))
       (when (or aliases (not (string-empty-p unit)))
         (insert ":PROPERTIES:\n")
         (when aliases (insert ":ALIASES: " (string-join aliases ", ") "\n"))
@@ -348,40 +433,51 @@ NAME may itself be an alias.  Refuses an ALIAS another ingredient already has."
       (unless (and holder (= (plist-get holder :line) (plist-get entry :line)))
         (a3madkour-ingredients--refuse-if-known alias)
         (let ((value (string-join (append (plist-get entry :aliases) (list alias)) ", "))
-              (case-fold-search t)
-              (limit nil))
+              (case-fold-search t))
           (a3madkour-ingredients--goto-line (plist-get entry :line))
           (forward-line 1)
           ;; The heading may be the file's last line, with no newline after it.
           (unless (bolp) (insert "\n"))
-          (setq limit (save-excursion
-                        (if (re-search-forward "^\\*+ " nil t) (match-beginning 0) (point-max))))
-          (cond
-           ((save-excursion
-              (re-search-forward "^[ \t]*:ALIASES:.*$" limit t))
-            (goto-char (match-beginning 0))
-            (delete-region (point) (line-end-position))
-            (insert ":ALIASES: " value))
-           ((save-excursion
-              (re-search-forward "^[ \t]*:PROPERTIES:[ \t]*\n" limit t))
-            (goto-char (match-end 0))
-            (insert ":ALIASES: " value "\n"))
-           (t
-            (insert ":PROPERTIES:\n:ALIASES: " value "\n:END:\n")))))
+          ;; Only a drawer that directly follows the heading (after an optional
+          ;; planning line) is its property drawer; anything further down is
+          ;; body text and is left alone.
+          (let ((after-heading (point)))
+            (when (looking-at-p "[ \t]*\\(?:SCHEDULED\\|DEADLINE\\|CLOSED\\):")
+              (forward-line 1))
+            (if (not (looking-at "\\([ \t]*\\):PROPERTIES:[ \t]*$"))
+                (progn (goto-char after-heading)
+                       (insert ":PROPERTIES:\n:ALIASES: " value "\n:END:\n"))
+              (let ((indent (match-string 1))
+                    (end (save-excursion
+                           (and (re-search-forward "^[ \t]*:END:[ \t]*$" nil t)
+                                (match-beginning 0)))))
+                (forward-line 1)
+                (if (and end (save-excursion
+                               (re-search-forward "^[ \t]*:ALIASES:.*$" end t)))
+                    (progn (goto-char (match-beginning 0))
+                           (delete-region (point) (line-end-position))
+                           (insert indent ":ALIASES: " value))
+                  (insert indent ":ALIASES: " value "\n")))))))
       (setq name (plist-get entry :name))))
   (a3madkour-ingredients/lookup name))
 
 (defun a3madkour-ingredients/set-entry-state (name state)
   "Set ingredient NAME to STATE (`have', `low', `out', nil = untracked) and save.
-Return the entry.  The keyword in the heading is rewritten directly: no org
-hooks run and nothing is logged."
+Return the entry.  The state tag on the heading is replaced; its other tags,
+its TODO keyword and its name are left alone."
   (a3madkour-ingredients--editing
     (let ((entry (a3madkour-ingredients--entry-or-error name))
-          (keyword (a3madkour-ingredients--state-keyword state))
-          (case-fold-search nil))
+          (tag (a3madkour-ingredients--state-tag state)))
       (a3madkour-ingredients--goto-line (plist-get entry :line))
-      (when (looking-at "\\*\\* +\\(?:\\(?:HAVE\\|LOW\\|OUT\\)[ \t]+\\)?")
-        (replace-match (concat "** " (if keyword (concat keyword " ") "")) t t))
+      (let* ((line (a3madkour-ingredients--current-line))
+             (others (cl-remove-if #'a3madkour-ingredients--state-tag-p
+                                   (a3madkour-ingredients--heading-tags line)))
+             (tags (if tag (cons tag others) others))
+             (head (string-trim-right
+                    (replace-regexp-in-string
+                     "[ \t]+:[[:alnum:]_@#%:]+:[ \t]*\\'" "" line))))
+        (delete-region (line-beginning-position) (line-end-position))
+        (insert head (if tags (concat " :" (string-join tags ":") ":") "")))
       (setq name (plist-get entry :name))))
   (a3madkour-ingredients/lookup name))
 
@@ -551,7 +647,7 @@ Returns nil anywhere else, so other completion sources are untouched."
 (defun a3madkour-ingredients--prompt-and-add (&optional initial)
   "Prompt for a new ingredient, its name starting as INITIAL, and add it."
   (let* ((name (read-string "Ingredient: " initial))
-         (aisle (completing-read "Aisle: " (a3madkour-ingredients/aisles)))
+         (aisle (completing-read "Aisle (optional): " (a3madkour-ingredients/aisles)))
          (aliases (a3madkour-ingredients--split-aliases
                    (read-string "Other names (comma-separated, optional): ")))
          (unit (read-string "Usual unit (optional): "))
@@ -568,7 +664,9 @@ In a recipe's Ingredients table, the name starts as the item at point."
   (interactive)
   (let ((entry (a3madkour-ingredients--prompt-and-add
                 (a3madkour-ingredients--item-at-point))))
-    (message "Added %s to %s" (plist-get entry :name) (plist-get entry :aisle))))
+    (if (plist-get entry :aisle)
+        (message "Added %s to %s" (plist-get entry :name) (plist-get entry :aisle))
+      (message "Added %s" (plist-get entry :name)))))
 
 (defun a3-ingredient-set-state ()
   "Pick an ingredient and mark it have, low, out or untracked."
@@ -600,8 +698,12 @@ existing one, or skipped."
             (condition-case err
                 (pcase (car (read-multiple-choice
                              (format "\"%s\" is not in the registry" item)
-                             '((?a "add as new") (?l "alias of existing")
-                               (?s "skip") (?q "quit"))))
+                             ;; With nothing in the registry there is nothing
+                             ;; to be another name for.
+                             (if (a3madkour-ingredients/entries)
+                                 '((?a "add as new") (?l "alias of existing")
+                                   (?s "skip") (?q "quit"))
+                               '((?a "add as new") (?s "skip") (?q "quit")))))
                   (?a (a3madkour-ingredients--prompt-and-add item)
                       (cl-incf resolved))
                   (?l (a3madkour-ingredients/add-alias
