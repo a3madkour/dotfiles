@@ -8,6 +8,7 @@
 ;;; Code:
 (require 'cl-lib)
 (require 'org-element)
+(require 'a3madkour-ingredients)
 
 (defvar a3madkour-recipe-lint-enabled t
   "When nil, the recipes handler skips the lint gate (--skip-recipe-check).")
@@ -58,7 +59,13 @@ Reuses the handler's position-robust extraction so a drawer authored after
     (let* ((ast (org-element-parse-buffer))
            (errs '())
            (base (file-name-nondirectory file))
-           (emit (lambda (line msg) (push (format "%s:%d: %s" base line msg) errs))))
+           (emit (lambda (line msg) (push (format "%s:%d: %s" base line msg) errs)))
+           ;; Rule 7 state: nil = no registry configured (rule skipped),
+           ;; `missing' = configured but absent, `ok' = readable.
+           (registry (cond ((null a3madkour-ingredients/file) nil)
+                           ((file-exists-p a3madkour-ingredients/file) 'ok)
+                           (t 'missing)))
+           (misses '()))
       ;; Rule 6: required metadata.
       (unless (a3madkour-recipe-lint--kw ast "TITLE")
         (funcall emit 1 "missing #+TITLE:"))
@@ -99,7 +106,14 @@ Reuses the handler's position-robust extraction so a drawer authored after
                       (when (and qty (not (a3madkour-pub-recipes--coerce-qty qty)))
                         (funcall emit ln (format "ingredient qty %S is not numeric-or-empty" qty)))
                       (unless item
-                        (funcall emit ln "ingredient row missing item")))))))))
+                        (funcall emit ln "ingredient row missing item"))
+                      ;; Rule 7: the item is in the ingredient registry, by
+                      ;; name or alias.  The alt column stays free text.
+                      (when (and item (eq registry 'ok)
+                                 (not (a3madkour-ingredients/lookup item)))
+                        (push (format "%s:%d: ingredient %S is not in the registry"
+                                      base ln (substring-no-properties item))
+                              misses)))))))))
         ;; Rule 4: step timecodes.
         (when steps
           (dolist (item (a3madkour-pub-recipes--top-level-items steps))
@@ -113,7 +127,15 @@ Reuses the handler's position-robust extraction so a drawer authored after
       (let ((vid (a3madkour-recipe-lint--drawer-value ast "VIDEO")))
         (when (and vid (not (string-match-p a3madkour-recipe-lint--video-re (string-trim vid))))
           (funcall emit 1 (format ":video: %S is not an 11-char YouTube id" vid))))
-      (nreverse errs))))
+      ;; Rule 7 output goes after the other rules'.  A registry with its own
+      ;; problems fails every recipe: a duplicate name must not silently decide
+      ;; which ingredient a recipe means.
+      (append
+       (nreverse errs)
+       (pcase registry
+         ('missing (list (format "%s:1: ingredient registry not found: %s"
+                                 base a3madkour-ingredients/file)))
+         ('ok (append (a3madkour-ingredients/problems) (nreverse misses))))))))
 
 (provide 'a3madkour-recipe-lint)
 ;;; a3madkour-recipe-lint.el ends here

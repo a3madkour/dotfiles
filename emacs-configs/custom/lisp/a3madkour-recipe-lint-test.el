@@ -98,3 +98,57 @@ Headnote.
         (should (seq-some (lambda (m) (string-match-p "HUGO_SUMMARY\\|summary" m))
                           (a3madkour-recipe-lint/lint-file f)))
       (delete-file f))))
+
+;;; Rule 7: every item is in the ingredient registry
+
+(defmacro a3madkour-recipe-lint-test--with-registry (text &rest body)
+  "Run BODY with the good recipe written to F (base name BASE) and
+`a3madkour-ingredients/file' bound to a temp registry holding TEXT.
+With TEXT nil the registry path is set but the file does not exist."
+  (declare (indent 1))
+  `(let* ((dir (make-temp-file "ingr" t))
+          (a3madkour-ingredients/file (expand-file-name "ingredients.org" dir))
+          (f (a3madkour-recipe-lint-test--write a3madkour-recipe-lint-test--good))
+          (base (file-name-nondirectory f)))
+     (ignore base)
+     (unwind-protect
+         (progn (when ,text (with-temp-file a3madkour-ingredients/file (insert ,text)))
+                ,@body)
+       (delete-file f)
+       (delete-directory dir t))))
+
+(ert-deftest a3madkour-recipe-lint--registry-hit ()
+  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE oil\n"
+    (should-not (a3madkour-recipe-lint/lint-file f))))
+
+(ert-deftest a3madkour-recipe-lint--registry-alias-hit ()
+  (a3madkour-recipe-lint-test--with-registry
+      "* Pantry\n** HAVE olive oil\n:PROPERTIES:\n:ALIASES: oil\n:END:\n"
+    (should-not (a3madkour-recipe-lint/lint-file f))))
+
+(ert-deftest a3madkour-recipe-lint--registry-miss ()
+  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE salt\n"
+    (should (equal (a3madkour-recipe-lint/lint-file f)
+                   (list (format "%s:9: ingredient \"oil\" is not in the registry" base))))))
+
+(ert-deftest a3madkour-recipe-lint--registry-empty-registry ()
+  (a3madkour-recipe-lint-test--with-registry "#+TITLE: Ingredients\n#+TODO: HAVE LOW OUT |\n"
+    (should (equal (a3madkour-recipe-lint/lint-file f)
+                   (list (format "%s:9: ingredient \"oil\" is not in the registry" base))))))
+
+(ert-deftest a3madkour-recipe-lint--registry-missing ()
+  (a3madkour-recipe-lint-test--with-registry nil
+    (should (equal (a3madkour-recipe-lint/lint-file f)
+                   (list (format "%s:1: ingredient registry not found: %s"
+                                 base a3madkour-ingredients/file))))))
+
+(ert-deftest a3madkour-recipe-lint--registry-problem ()
+  (a3madkour-recipe-lint-test--with-registry "* Pantry\n** HAVE oil\n** OUT Oil\n"
+    (should (equal (a3madkour-recipe-lint/lint-file f)
+                   '("ingredients.org:3: duplicate name \"oil\" (also line 2)")))))
+
+(ert-deftest a3madkour-recipe-lint--registry-unset ()
+  (let ((a3madkour-ingredients/file nil)
+        (f (a3madkour-recipe-lint-test--write a3madkour-recipe-lint-test--good)))
+    (unwind-protect (should-not (a3madkour-recipe-lint/lint-file f))
+      (delete-file f))))
