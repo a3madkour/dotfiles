@@ -5546,6 +5546,13 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 (require 'a3madkour-publish-garden)
 (require 'a3madkour-publish-library)
 (require 'a3madkour-publish-research)
+;; The shared ingredient registry: recipes, and later the pantry and grocery
+;; list, refer to ingredients through it.  Batch runs get the desktop path from
+;; publish-paths.el ("Publishing paths"); this is the platform-aware value
+;; interactive sessions use.
+(require 'a3madkour-ingredients)
+(setq a3madkour-ingredients/file (a3madkour/org-file "recipes/ingredients.org"))
+(add-hook 'org-mode-hook #'a3madkour-ingredients/setup-capf)
 (require 'a3madkour-recipe-lint)
 (require 'a3madkour-publish-recipes)
 (require 'a3madkour-works-lint)
@@ -5590,7 +5597,12 @@ roam tree; games and music pages are notes about a work and stay in it.
       a3madkour-pub-bib/library-path
       (expand-file-name "~/org/notes/ref-notes/library.bib")
       a3madkour-pub-citations/ref-notes-dir (expand-file-name "~/org/notes/ref-notes/")
-      a3madkour-library/notes-dir (expand-file-name "~/org/notes/"))
+      a3madkour-library/notes-dir (expand-file-name "~/org/notes/")
+      ;; The ingredient registry the recipe linter checks items against.  This
+      ;; is the desktop path, for batch publishing; interactive sessions
+      ;; override it through `a3madkour/org-file' (where the publish modules are
+      ;; required) so the phone resolves it under /sdcard/org.
+      a3madkour-ingredients/file (expand-file-name "~/org/recipes/ingredients.org"))
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
@@ -6141,6 +6153,16 @@ _SPC_ cancel    _o_nly this      _d_elete
  "ld" #'langtool-check-done
  "ln" #'langtool-goto-next-error
  "lp" #'langtool-goto-previous-error
+
+ ;; Kitchen: the ingredient registry (lisp/a3madkour-ingredients.el)
+ "k"
+ '(nil :which-key "kitchen")
+ "ka"
+ '(a3-ingredient-add :which-key "Add ingredient")
+ "ks"
+ '(a3-ingredient-set-state :which-key "Set ingredient state")
+ "kr"
+ '(a3-ingredient-resolve-recipe :which-key "Resolve recipe ingredients")
  ) ;; End SPC prefix block
 
 

@@ -18,10 +18,17 @@
 (require 'subr-x)
 (require 'org)
 
-(defvar a3madkour-ingredients/file nil
+(defgroup a3madkour-ingredients nil
+  "The shared ingredient registry."
+  :group 'org)
+
+(defcustom a3madkour-ingredients/file nil
   "Absolute path of the ingredient registry org file, or nil.
 With nil every reader returns nil and the recipe linter skips its registry
-rule.")
+rule.  Like the publisher's folders it names no location itself: config.org
+sets it (see `a3madkour-pub/path-variables')."
+  :type '(choice (const :tag "No registry" nil) file)
+  :group 'a3madkour-ingredients)
 
 (defconst a3madkour-ingredients--states
   '(("HAVE" . have) ("LOW" . low) ("OUT" . out))

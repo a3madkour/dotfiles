@@ -18,7 +18,11 @@
     a3madkour-pub-canonical-asset-root
     a3madkour-pub-bib/library-path
     a3madkour-pub-citations/ref-notes-dir
-    a3madkour-library/notes-dir)
+    a3madkour-library/notes-dir
+    ;; The ingredient registry (a3madkour-ingredients.el), read by the recipe
+    ;; linter.  Unlike the rest it may stay nil: the linter then skips its
+    ;; registry rule.
+    a3madkour-ingredients/file)
   "Every folder or file the publisher reads from the author's config.
 config.org's Publishing paths block must set each one.")
 
