@@ -5554,6 +5554,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 (setq a3madkour-ingredients/file (a3madkour/org-file "recipes/ingredients.org"))
 (add-hook 'org-mode-hook #'a3madkour-ingredients/setup-capf)
 (require 'a3madkour-recipes)
+(require 'a3madkour-groceries)
 (require 'a3madkour-recipe-lint)
 (require 'a3madkour-publish-recipes)
 (require 'a3madkour-works-lint)
@@ -6156,7 +6157,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "lp" #'langtool-goto-previous-error
 
  ;; Kitchen: ingredient registry and recipes (lisp/a3madkour-ingredients.el,
- ;; lisp/a3madkour-recipes.el)
+ ;; lisp/a3madkour-recipes.el) and the grocery list (lisp/a3madkour-groceries.el)
  "k"
  '(nil :which-key "kitchen")
  "ka"
@@ -6169,6 +6170,10 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3-recipe-new :which-key "New recipe")
  "kp"
  '(a3-recipe-toggle-publish :which-key "Publish / unpublish recipe")
+ "kg"
+ '(a3-grocery-list :which-key "Grocery list")
+ "kd"
+ '(a3-grocery-done :which-key "Done shopping")
  ) ;; End SPC prefix block
 
 
