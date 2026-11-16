@@ -114,5 +114,113 @@ Bought at the co-op.
           (a3madkour-ingredients/entries))
         (should (equal said (list (concat "Ingredient registry has a sync conflict copy: " c))))))))
 
+;;; Editing the registry
+
+(defun a3madkour-ingredients-test--file-text ()
+  (with-temp-buffer (insert-file-contents a3madkour-ingredients/file) (buffer-string)))
+
+(ert-deftest a3madkour-ingredients--add-creates-file ()
+  (a3madkour-ingredients-test--with nil
+    (a3madkour-ingredients/add-entry "cumin" "Spices" '("jeera") "tsp" 'low)
+    (should (equal (a3madkour-ingredients-test--file-text)
+                   "#+TITLE: Ingredients\n#+TODO: HAVE LOW | OUT\n#+STARTUP: nologdone\n\n* Spices\n** LOW cumin\n:PROPERTIES:\n:ALIASES: jeera\n:UNIT: tsp\n:END:\n"))))
+
+(ert-deftest a3madkour-ingredients--add-into-existing-aisle ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (a3madkour-ingredients/add-entry "sesame oil" "oils &  VINEGAR" nil nil nil)
+    (should (equal (mapcar (lambda (e) (plist-get e :name)) (a3madkour-ingredients/entries))
+                   '("olive oil" "rice vinegar" "sesame oil" "crème fraîche" "water")))
+    (should (equal (plist-get (a3madkour-ingredients/lookup "sesame oil") :aisle) "Oils & vinegar"))
+    (should-not (plist-get (a3madkour-ingredients/lookup "sesame oil") :state))
+    (should-not (a3madkour-ingredients/problems))))
+
+(ert-deftest a3madkour-ingredients--add-refuses-clash ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (should (equal (cadr (should-error (a3madkour-ingredients/add-entry "EVOO" "Dairy") :type 'user-error))
+                   "\"EVOO\" is already in the registry as \"olive oil\" (Oils & vinegar)"))
+    (should-error (a3madkour-ingredients/add-entry "ghee" "Dairy" '("water")) :type 'user-error)
+    (should-not (a3madkour-ingredients/lookup "ghee"))))
+
+(ert-deftest a3madkour-ingredients--add-alias ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (a3madkour-ingredients/add-alias "rice vinegar" "rice wine vinegar")
+    (a3madkour-ingredients/add-alias "evoo" "good olive oil")
+    (should (equal (plist-get (a3madkour-ingredients/lookup "rice wine vinegar") :name) "rice vinegar"))
+    (should (equal (plist-get (a3madkour-ingredients/lookup "olive oil") :aliases)
+                   '("extra-virgin olive oil" "EVOO" "good olive oil")))
+    (should-error (a3madkour-ingredients/add-alias "saffron" "x") :type 'user-error)
+    (should-error (a3madkour-ingredients/add-alias "rice vinegar" "water") :type 'user-error)
+    (should-not (a3madkour-ingredients/problems))))
+
+(ert-deftest a3madkour-ingredients--set-state ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (a3madkour-ingredients/set-entry-state "EVOO" 'out)
+    (a3madkour-ingredients/set-entry-state "water" 'have)
+    (a3madkour-ingredients/set-entry-state "rice vinegar" nil)
+    (should (equal (mapcar (lambda (e) (plist-get e :state)) (a3madkour-ingredients/entries))
+                   '(out nil low have)))
+    (let ((text (a3madkour-ingredients-test--file-text)))
+      (should (string-match-p "^\\*\\* OUT olive oil +:staple:$" text))
+      (should-not (string-match-p "CLOSED" text)))
+    (should (equal (cadr (should-error (a3madkour-ingredients/set-entry-state "saffron" 'out)
+                                       :type 'user-error))
+                   "No ingredient \"saffron\" in the registry"))))
+
+(ert-deftest a3madkour-ingredients--header-flips-without-a-closed-stamp ()
+  "The header the module writes gives the in-file org keys exactly the three
+states, and flipping to any of them never stamps CLOSED, even with done-logging
+on globally.  (Org always makes the last keyword a done state; a trailing `|'
+does not prevent that, so the header turns logging off for the file.)"
+  (let ((org-log-done 'time))
+    (with-temp-buffer
+      (insert a3madkour-ingredients--header "* A\n** HAVE x\n")
+      (org-mode)
+      (should (equal org-todo-keywords-1 '("HAVE" "LOW" "OUT")))
+      (goto-char (point-max)) (forward-line -1)
+      (org-todo "OUT")
+      (should (string-match-p "^\\*\\* OUT x$" (buffer-string)))
+      (org-todo "LOW")
+      (org-todo "OUT")
+      (should-not (string-match-p "CLOSED" (buffer-string))))))
+
+(ert-deftest a3madkour-ingredients--commands-need-a-file ()
+  (let ((a3madkour-ingredients/file nil))
+    (should (equal (cadr (should-error (a3madkour-ingredients/add-entry "x" "A") :type 'user-error))
+                   "a3madkour-ingredients/file is not set"))
+    (should-error (a3madkour-ingredients/add-alias "x" "y") :type 'user-error)
+    (should-error (a3madkour-ingredients/set-entry-state "x" 'out) :type 'user-error)))
+
+(ert-deftest a3madkour-ingredients--edit-sees-a-file-changed-under-an-open-buffer ()
+  "The registry changed on disk (a sync) while an unmodified buffer visits it."
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (find-file-noselect a3madkour-ingredients/file)
+    (with-temp-file a3madkour-ingredients/file
+      (insert "* Spices\n** OUT sumac\n" a3madkour-ingredients-test--registry))
+    (set-file-times a3madkour-ingredients/file (time-add (current-time) 7))
+    (a3madkour-ingredients/set-entry-state "rice vinegar" 'have)
+    (should (eq (plist-get (a3madkour-ingredients/lookup "sumac") :state) 'out))
+    (should (eq (plist-get (a3madkour-ingredients/lookup "rice vinegar") :state) 'have))
+    (should (eq (plist-get (a3madkour-ingredients/lookup "olive oil") :state) 'have))))
+
+(ert-deftest a3madkour-ingredients--add-command ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (let ((answers '("ghee" "clarified butter, " "tbsp")))
+      (cl-letf (((symbol-function 'read-string) (lambda (&rest _) (pop answers)))
+                ((symbol-function 'completing-read)
+                 (lambda (prompt &rest _) (if (string-match-p "[Aa]isle" prompt) "Dairy" "have"))))
+        (call-interactively #'a3-ingredient-add)))
+    (let ((e (a3madkour-ingredients/lookup "clarified butter")))
+      (should (equal (plist-get e :name) "ghee"))
+      (should (equal (plist-get e :aisle) "Dairy"))
+      (should (equal (plist-get e :unit) "tbsp"))
+      (should (eq (plist-get e :state) 'have)))))
+
+(ert-deftest a3madkour-ingredients--set-state-command ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (cl-letf (((symbol-function 'completing-read) (lambda (&rest _) "rice vinegar"))
+              ((symbol-function 'read-multiple-choice) (lambda (_p cs &rest _) (assq ?l cs))))
+      (call-interactively #'a3-ingredient-set-state))
+    (should (eq (plist-get (a3madkour-ingredients/lookup "rice vinegar") :state) 'low))))
+
 (provide 'a3madkour-ingredients-test)
 ;;; a3madkour-ingredients-test.el ends here

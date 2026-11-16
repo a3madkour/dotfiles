@@ -190,5 +190,190 @@ Nil when it is clean, unset or missing."
                     (match-string 1 name)))))))
     (nreverse out)))
 
+;;; Editing the registry
+
+(defconst a3madkour-ingredients--header
+  "#+TITLE: Ingredients\n#+TODO: HAVE LOW | OUT\n#+STARTUP: nologdone\n\n"
+  "What a new registry file starts with.
+Org always treats the last keyword of a sequence as a done state (a trailing
+`|' does not prevent it), so OUT is written as one and `nologdone' keeps the
+in-file keyword keys from stamping CLOSED when an ingredient runs out.")
+
+(defun a3madkour-ingredients--state-keyword (state)
+  "The keyword for STATE (`have', `low', `out'), or nil for untracked."
+  (car (rassq state a3madkour-ingredients--states)))
+
+(defmacro a3madkour-ingredients--editing (&rest body)
+  "Run BODY in the registry's buffer, widened, then save it.
+The buffer is the one visiting the file, so an open registry stays current.  If
+the file changed on disk under an unmodified buffer (a sync), the buffer is
+reverted first, so BODY never edits stale text."
+  (declare (indent 0))
+  `(let ((file (or a3madkour-ingredients/file
+                   (user-error "a3madkour-ingredients/file is not set"))))
+     (make-directory (file-name-directory file) t)
+     ;; `find-file-noselect' would ask "reread from disk?" about a buffer whose
+     ;; file changed underneath it; take the existing buffer and decide here.
+     (with-current-buffer (or (get-file-buffer file) (find-file-noselect file))
+       (when (and (not (buffer-modified-p))
+                  (file-exists-p file)
+                  (not (verify-visited-file-modtime (current-buffer))))
+         (revert-buffer t t t))
+       (prog1 (save-excursion (save-restriction (widen) ,@body))
+         (save-buffer)))))
+
+(defun a3madkour-ingredients--refuse-if-known (string)
+  "Signal a `user-error' when STRING is already a name or alias."
+  (let ((e (a3madkour-ingredients/lookup string)))
+    (when e
+      (user-error "\"%s\" is already in the registry as \"%s\" (%s)"
+                  string (plist-get e :name) (plist-get e :aisle)))))
+
+(defun a3madkour-ingredients--entry-or-error (name)
+  "The entry for NAME, or a `user-error'."
+  (or (a3madkour-ingredients/lookup name)
+      (user-error "No ingredient \"%s\" in the registry" name)))
+
+(defun a3madkour-ingredients--goto-line (line)
+  (goto-char (point-min))
+  (forward-line (1- line)))
+
+(defun a3madkour-ingredients--end-of-aisle (aisle)
+  "Move point to where a new ingredient of AISLE goes, creating AISLE if new."
+  (let ((want (a3madkour-ingredients/normalize aisle))
+        (case-fold-search nil)
+        (found nil))
+    (goto-char (point-min))
+    (while (and (not found) (re-search-forward "^\\* +\\(.*\\)$" nil t))
+      (when (string= want (a3madkour-ingredients/normalize
+                           (a3madkour-ingredients--strip-tags (match-string 1))))
+        (setq found t)))
+    (if found
+        (if (re-search-forward "^\\* " nil t)
+            (goto-char (match-beginning 0))
+          (goto-char (point-max)))
+      (goto-char (point-max))
+      (unless (or (bobp) (bolp)) (insert "\n"))
+      (insert "* " (string-trim aisle) "\n"))
+    (unless (or (bobp) (bolp)) (insert "\n"))))
+
+(defun a3madkour-ingredients/add-entry (name aisle &optional aliases unit state)
+  "Add ingredient NAME under AISLE and save the registry.  Return its entry.
+ALIASES is a list of strings, UNIT a string, STATE `have', `low', `out' or nil
+\(untracked).  Creates the registry, and AISLE, when they do not exist.  Refuses
+a NAME or alias that the registry already knows."
+  (a3madkour-ingredients--editing
+    (let* ((name (string-trim (or name "")))
+           (aisle (string-trim (or aisle "")))
+           (unit (string-trim (or unit "")))
+           (aliases (cl-remove-duplicates
+                     (cl-remove-if
+                      (lambda (a) (or (string-empty-p a)
+                                      (string= (a3madkour-ingredients/normalize a)
+                                               (a3madkour-ingredients/normalize name))))
+                      (mapcar #'string-trim aliases))
+                     :test (lambda (a b) (string= (a3madkour-ingredients/normalize a)
+                                                  (a3madkour-ingredients/normalize b)))
+                     :from-end t))
+           (keyword (a3madkour-ingredients--state-keyword state)))
+      (when (string-empty-p name) (user-error "Ingredient name is empty"))
+      (when (string-empty-p aisle) (user-error "Aisle is empty"))
+      (mapc #'a3madkour-ingredients--refuse-if-known (cons name aliases))
+      (when (= (point-min) (point-max))
+        (insert a3madkour-ingredients--header))
+      (a3madkour-ingredients--end-of-aisle aisle)
+      (insert "** " (if keyword (concat keyword " ") "") name "\n")
+      (when (or aliases (not (string-empty-p unit)))
+        (insert ":PROPERTIES:\n")
+        (when aliases (insert ":ALIASES: " (string-join aliases ", ") "\n"))
+        (unless (string-empty-p unit) (insert ":UNIT: " unit "\n"))
+        (insert ":END:\n"))
+      name))
+  (a3madkour-ingredients/lookup name))
+
+(defun a3madkour-ingredients/add-alias (name alias)
+  "Record ALIAS as another name for ingredient NAME and save.  Return the entry.
+NAME may itself be an alias.  Refuses an ALIAS another ingredient already has."
+  (a3madkour-ingredients--editing
+    (let* ((entry (a3madkour-ingredients--entry-or-error name))
+           (alias (string-trim (or alias "")))
+           (holder (a3madkour-ingredients/lookup alias)))
+      (when (string-empty-p alias) (user-error "Alias is empty"))
+      (unless (and holder (= (plist-get holder :line) (plist-get entry :line)))
+        (a3madkour-ingredients--refuse-if-known alias)
+        (let ((value (string-join (append (plist-get entry :aliases) (list alias)) ", "))
+              (case-fold-search t)
+              (limit nil))
+          (a3madkour-ingredients--goto-line (plist-get entry :line))
+          (forward-line 1)
+          (setq limit (save-excursion
+                        (if (re-search-forward "^\\*+ " nil t) (match-beginning 0) (point-max))))
+          (cond
+           ((save-excursion
+              (re-search-forward "^[ \t]*:ALIASES:.*$" limit t))
+            (goto-char (match-beginning 0))
+            (delete-region (point) (line-end-position))
+            (insert ":ALIASES: " value))
+           ((save-excursion
+              (re-search-forward "^[ \t]*:PROPERTIES:[ \t]*\n" limit t))
+            (goto-char (match-end 0))
+            (insert ":ALIASES: " value "\n"))
+           (t
+            (insert ":PROPERTIES:\n:ALIASES: " value "\n:END:\n")))))
+      (setq name (plist-get entry :name))))
+  (a3madkour-ingredients/lookup name))
+
+(defun a3madkour-ingredients/set-entry-state (name state)
+  "Set ingredient NAME to STATE (`have', `low', `out', nil = untracked) and save.
+Return the entry.  The keyword in the heading is rewritten directly: no org
+hooks run and nothing is logged."
+  (a3madkour-ingredients--editing
+    (let ((entry (a3madkour-ingredients--entry-or-error name))
+          (keyword (a3madkour-ingredients--state-keyword state))
+          (case-fold-search nil))
+      (a3madkour-ingredients--goto-line (plist-get entry :line))
+      (when (looking-at "\\*\\* +\\(?:\\(?:HAVE\\|LOW\\|OUT\\)[ \t]+\\)?")
+        (replace-match (concat "** " (if keyword (concat keyword " ") "")) t t))
+      (setq name (plist-get entry :name))))
+  (a3madkour-ingredients/lookup name))
+
+;;; Commands
+
+(defconst a3madkour-ingredients--state-names
+  '(("out" . out) ("have" . have) ("low" . low) ("untracked" . nil))
+  "What the state prompt offers, in order; \"out\" is the default.")
+
+(defun a3madkour-ingredients--prompt-and-add (&optional initial)
+  "Prompt for a new ingredient, its name starting as INITIAL, and add it."
+  (let* ((name (read-string "Ingredient: " initial))
+         (aisle (completing-read "Aisle: " (a3madkour-ingredients/aisles)))
+         (aliases (a3madkour-ingredients--split-aliases
+                   (read-string "Other names (comma-separated, optional): ")))
+         (unit (read-string "Usual unit (optional): "))
+         (state (completing-read "State (default out): "
+                                 (mapcar #'car a3madkour-ingredients--state-names)
+                                 nil t nil nil "out")))
+    (a3madkour-ingredients/add-entry
+     name aisle aliases unit
+     (cdr (assoc state a3madkour-ingredients--state-names)))))
+
+(defun a3-ingredient-add ()
+  "Add an ingredient to the registry."
+  (interactive)
+  (let ((entry (a3madkour-ingredients--prompt-and-add)))
+    (message "Added %s to %s" (plist-get entry :name) (plist-get entry :aisle))))
+
+(defun a3-ingredient-set-state ()
+  "Pick an ingredient and mark it have, low, out or untracked."
+  (interactive)
+  (let* ((names (mapcar (lambda (e) (plist-get e :name)) (a3madkour-ingredients/entries)))
+         (name (completing-read "Ingredient: " names nil t))
+         (choice (read-multiple-choice
+                  (format "%s is" name)
+                  '((?h "have") (?l "low") (?o "out") (?u "untracked"))))
+         (state (cdr (assoc (cadr choice) a3madkour-ingredients--state-names))))
+    (a3madkour-ingredients/set-entry-state name state)
+    (message "%s: %s" name (cadr choice))))
+
 (provide 'a3madkour-ingredients)
 ;;; a3madkour-ingredients.el ends here
