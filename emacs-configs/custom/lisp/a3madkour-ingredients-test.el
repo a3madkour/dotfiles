@@ -316,8 +316,13 @@ question with CHOICES (a list of characters) in turn."
               "** Ingredients\n| qty | unit | Item | group | note | alt |\n|---+---+---+---+---+---|\n| 2 | tbsp | oli@ | | | |\n" "@")))
       (should r)
       (should (= (- (nth 1 r) (nth 0 r)) 3))
-      (should (member "olive oil" (nth 2 r)))
-      (should (member "EVOO" (nth 2 r)))
+      (should (member "olive oil" (all-completions "" (nth 2 r))))
+      (should (member "EVOO" (all-completions "" (nth 2 r))))
+      ;; Case does not matter, and the cell is ours: nothing falls through to
+      ;; other sources just because the typed text is not an exact-case prefix.
+      (should (equal (all-completions "evoo" (nth 2 r)) '("EVOO")))
+      (should (equal (all-completions "Olive" (nth 2 r)) '("olive oil")))
+      (should-not (plist-member (nthcdr 3 r) :exclusive))
       (should (equal (funcall (plist-get (nthcdr 3 r) :annotation-function) "EVOO")
                      "  Oils & vinegar")))
     ;; An empty cell, and one under a #+NAME: line, complete too.
@@ -360,6 +365,53 @@ question with CHOICES (a list of characters) in turn."
           (call-interactively #'a3-ingredient-add))
         (should (equal (car (last initials)) "Smoked Paprika"))
         (should (a3madkour-ingredients/lookup "smoked paprika"))))))
+
+;;; Review fixes: the editor never writes what the reader rejects
+
+(ert-deftest a3madkour-ingredients--add-alias-on-a-last-line-without-newline ()
+  (a3madkour-ingredients-test--with "* B\n** pepper"
+    (a3madkour-ingredients/add-alias "pepper" "black pepper")
+    (should (equal (a3madkour-ingredients-test--file-text)
+                   "* B\n** pepper\n:PROPERTIES:\n:ALIASES: black pepper\n:END:\n"))
+    (should (equal (plist-get (a3madkour-ingredients/lookup "black pepper") :name) "pepper"))))
+
+(ert-deftest a3madkour-ingredients--alias-with-a-comma-is-refused ()
+  (a3madkour-ingredients-test--with "* Veg\n** tomato\n:PROPERTIES:\n:ALIASES: tomatoes\n:END:\n"
+    (let ((before (a3madkour-ingredients-test--file-text)))
+      (should (equal (cadr (should-error (a3madkour-ingredients/add-alias "tomato" "tomatoes, crushed")
+                                         :type 'user-error))
+                     "An alias cannot contain a comma: \"tomatoes, crushed\""))
+      (should-error (a3madkour-ingredients/add-entry "passata" "Veg" '("sieved, tomatoes"))
+                    :type 'user-error)
+      (should (equal (a3madkour-ingredients-test--file-text) before))
+      (should-not (a3madkour-ingredients/problems)))
+    ;; A name may contain one: it is a heading, not a list.
+    (a3madkour-ingredients/add-entry "tomatoes, crushed" "Veg")
+    (should (a3madkour-ingredients/lookup "Tomatoes, Crushed"))))
+
+(ert-deftest a3madkour-ingredients--capitalised-names-are-not-states ()
+  (a3madkour-ingredients-test--with "* Sauces\n** HAVE MSG powder\n"
+    (a3madkour-ingredients/add-entry "BBQ sauce" "Sauces" nil nil 'out)
+    (should (a3madkour-ingredients/lookup "bbq sauce"))
+    (should-not (a3madkour-ingredients/problems))))
+
+(ert-deftest a3madkour-ingredients--names-the-reader-would-misread-are-refused ()
+  (a3madkour-ingredients-test--with "* Dairy\n** HAVE butter\n"
+    (let ((before (a3madkour-ingredients-test--file-text)))
+      (dolist (name '("LOW fat milk" "TODO cream" "stock :homemade:" "two\nlines" "  "))
+        (should-error (a3madkour-ingredients/add-entry name "Dairy") :type 'user-error))
+      (should-error (a3madkour-ingredients/add-alias "butter" "two\nlines") :type 'user-error)
+      (should (equal (a3madkour-ingredients-test--file-text) before)))
+    (a3madkour-ingredients/add-entry "low fat milk" "Dairy")
+    (should-not (plist-get (a3madkour-ingredients/lookup "low fat milk") :state))))
+
+(ert-deftest a3madkour-ingredients--a-new-registry-buffer-knows-its-states ()
+  "After the first add creates the file, the in-file keyword keys cycle
+HAVE/LOW/OUT at once, not the session's TODO keywords."
+  (a3madkour-ingredients-test--with nil
+    (a3madkour-ingredients/add-entry "cumin" "Spices" nil nil 'low)
+    (with-current-buffer (get-file-buffer a3madkour-ingredients/file)
+      (should (equal org-todo-keywords-1 '("HAVE" "LOW" "OUT"))))))
 
 (provide 'a3madkour-ingredients-test)
 ;;; a3madkour-ingredients-test.el ends here

@@ -34,6 +34,20 @@ sets it (see `a3madkour-pub/path-variables')."
   '(("HAVE" . have) ("LOW" . low) ("OUT" . out))
   "State keyword → state symbol.")
 
+(defconst a3madkour-ingredients--foreign-keywords
+  '("TODO" "NEXT" "WAIT" "DONE" "DROP")
+  "Org keywords that are not ingredient states.
+An ingredient heading that starts with one was given the wrong keyword.")
+
+(defun a3madkour-ingredients--leading-keyword (name)
+  "The keyword NAME starts with, when more text follows it, or nil.
+Case-sensitive, and only real keywords count: \"BBQ sauce\" has none."
+  (let ((case-fold-search nil))
+    (when (string-match "\\`\\([^ \t]+\\)[ \t]+[^ \t]" name)
+      (car (member (match-string 1 name)
+                   (append (mapcar #'car a3madkour-ingredients--states)
+                           a3madkour-ingredients--foreign-keywords))))))
+
 (defvar a3madkour-ingredients--cache nil
   "(KEY . PARSED) for the last registry read; see `a3madkour-ingredients--parsed'.")
 
@@ -191,10 +205,9 @@ Nil when it is clean, unset or missing."
               (if first
                   (emit "duplicate name %S (also line %d)" norm first)
                 (puthash norm line seen))))
-          (let ((case-fold-search nil))
-            (when (string-match "\\`\\([[:upper:]]\\{2,\\}\\)[ \t]+[^ \t]" name)
-              (emit "%S is not a state (use HAVE, LOW or OUT)"
-                    (match-string 1 name)))))))
+          (let ((keyword (a3madkour-ingredients--leading-keyword name)))
+            (when keyword
+              (emit "%S is not a state (use HAVE, LOW or OUT)" keyword))))))
     (nreverse out)))
 
 ;;; Editing the registry
@@ -235,6 +248,27 @@ reverted first, so BODY never edits stale text."
     (when e
       (user-error "\"%s\" is already in the registry as \"%s\" (%s)"
                   string (plist-get e :name) (plist-get e :aisle)))))
+
+(defun a3madkour-ingredients--check-name (name)
+  "Signal a `user-error' when NAME would not read back as written."
+  (cond
+   ((string-empty-p name) (user-error "Ingredient name is empty"))
+   ((string-match-p "\n" name)
+    (user-error "An ingredient name cannot span lines: %S" name))
+   ((not (string= name (a3madkour-ingredients--strip-tags name)))
+    (user-error "\"%s\" ends in what org would read as a tag" name))
+   ((a3madkour-ingredients--leading-keyword name)
+    (user-error "\"%s\" starts with the keyword %s; write it in lower case"
+                name (a3madkour-ingredients--leading-keyword name)))))
+
+(defun a3madkour-ingredients--check-alias (alias)
+  "Signal a `user-error' when ALIAS could not be stored in :ALIASES:."
+  (cond
+   ((string-empty-p alias) (user-error "Alias is empty"))
+   ((string-match-p "," alias)
+    (user-error "An alias cannot contain a comma: \"%s\"" alias))
+   ((string-match-p "\n" alias)
+    (user-error "An alias cannot span lines: %S" alias))))
 
 (defun a3madkour-ingredients--entry-or-error (name)
   "The entry for NAME, or a `user-error'."
@@ -283,11 +317,16 @@ a NAME or alias that the registry already knows."
                                                   (a3madkour-ingredients/normalize b)))
                      :from-end t))
            (keyword (a3madkour-ingredients--state-keyword state)))
-      (when (string-empty-p name) (user-error "Ingredient name is empty"))
+      (a3madkour-ingredients--check-name name)
+      (mapc #'a3madkour-ingredients--check-alias aliases)
       (when (string-empty-p aisle) (user-error "Aisle is empty"))
       (mapc #'a3madkour-ingredients--refuse-if-known (cons name aliases))
       (when (= (point-min) (point-max))
-        (insert a3madkour-ingredients--header))
+        (insert a3madkour-ingredients--header)
+        ;; The buffer was set up before it had a #+TODO: line; teach it the
+        ;; three states now so the in-file keyword keys work straight away.
+        (when (derived-mode-p 'org-mode)
+          (org-set-regexps-and-options)))
       (a3madkour-ingredients--end-of-aisle aisle)
       (insert "** " (if keyword (concat keyword " ") "") name "\n")
       (when (or aliases (not (string-empty-p unit)))
@@ -305,7 +344,7 @@ NAME may itself be an alias.  Refuses an ALIAS another ingredient already has."
     (let* ((entry (a3madkour-ingredients--entry-or-error name))
            (alias (string-trim (or alias "")))
            (holder (a3madkour-ingredients/lookup alias)))
-      (when (string-empty-p alias) (user-error "Alias is empty"))
+      (a3madkour-ingredients--check-alias alias)
       (unless (and holder (= (plist-get holder :line) (plist-get entry :line)))
         (a3madkour-ingredients--refuse-if-known alias)
         (let ((value (string-join (append (plist-get entry :aliases) (list alias)) ", "))
@@ -313,6 +352,8 @@ NAME may itself be an alias.  Refuses an ALIAS another ingredient already has."
               (limit nil))
           (a3madkour-ingredients--goto-line (plist-get entry :line))
           (forward-line 1)
+          ;; The heading may be the file's last line, with no newline after it.
+          (unless (bolp) (insert "\n"))
           (setq limit (save-excursion
                         (if (re-search-forward "^\\*+ " nil t) (match-beginning 0) (point-max))))
           (cond
@@ -487,12 +528,15 @@ Returns nil anywhere else, so other completion sources are untouched."
           (dolist (e (a3madkour-ingredients/entries))
             (dolist (n (cons (plist-get e :name) (plist-get e :aliases)))
               (puthash n (plist-get e :aisle) aisle-of)))
-          (list start end (hash-table-keys aisle-of)
+          ;; Case-insensitive, and exclusive: in an item cell the registry is
+          ;; the only sensible source, so a miss must not fall through to
+          ;; dabbrev and friends.
+          (list start end
+                (completion-table-case-fold (hash-table-keys aisle-of))
                 :annotation-function
                 (lambda (candidate)
                   (let ((aisle (gethash candidate aisle-of)))
-                    (and aisle (concat "  " aisle))))
-                :exclusive 'no))))))
+                    (and aisle (concat "  " aisle))))))))))
 
 (defun a3madkour-ingredients/setup-capf ()
   "Offer ingredient completion in this buffer.  For `org-mode-hook'."
