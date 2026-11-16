@@ -222,5 +222,84 @@ does not prevent that, so the header turns logging off for the file.)"
       (call-interactively #'a3-ingredient-set-state))
     (should (eq (plist-get (a3madkour-ingredients/lookup "rice vinegar") :state) 'low))))
 
+;;; Resolving a recipe
+
+(defconst a3madkour-ingredients-test--recipe "#+TITLE: X
+** ingredients
+| qty | unit | item           | group | note | alt |
+|-----+------+----------------+-------+------+-----|
+| 2   | tbsp | EVOO           |       |      |     |
+| 1   | tsp  | Smoked Paprika |       |      |     |
+|     |      |                |       |      |     |
+| 1   |      | smoked paprika |       |      |     |
+| 1   |      | rice wine vinegar |    |      |     |
+** Steps
+1. Cook.
+")
+
+(ert-deftest a3madkour-ingredients--recipe-items-and-unknown ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (with-temp-buffer
+      (insert a3madkour-ingredients-test--recipe) (org-mode)
+      (should (equal (a3madkour-ingredients/recipe-items)
+                     '("EVOO" "Smoked Paprika" "smoked paprika" "rice wine vinegar")))
+      (should (equal (a3madkour-ingredients/unknown-items)
+                     '("Smoked Paprika" "rice wine vinegar"))))))
+
+(ert-deftest a3madkour-ingredients--recipe-items-degenerate ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (dolist (text '("" "#+TITLE: X\n** Steps\n1. Cook.\n" "** Ingredients\nNo table here.\n"
+                    "** Ingredients\n| qty | unit |\n| 1 | g |\n"
+                    "** Ingredients\n** Steps\n| qty | item |\n| 1 | saffron |\n"))
+      (with-temp-buffer
+        (insert text) (org-mode)
+        (should-not (a3madkour-ingredients/recipe-items))
+        (should-not (a3madkour-ingredients/unknown-items))
+        (let ((said nil))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args) (setq said (apply #'format fmt args)))))
+            (a3-ingredient-resolve-recipe))
+          (should (equal said "All ingredients are in the registry")))))))
+
+(defmacro a3madkour-ingredients-test--resolving (choices &rest body)
+  "Run BODY in a buffer holding the test recipe, answering the per-item
+question with CHOICES (a list of characters) in turn."
+  (declare (indent 1))
+  `(with-temp-buffer
+     (insert a3madkour-ingredients-test--recipe) (org-mode)
+     (let ((choices ,choices) (said nil))
+       (ignore said)
+       (cl-letf (((symbol-function 'read-multiple-choice)
+                  (lambda (_prompt cs &rest _) (assq (pop choices) cs)))
+                 ((symbol-function 'completing-read)
+                  (lambda (prompt &rest _)
+                    (cond ((string-match-p "[Aa]isle" prompt) "Spices")
+                          ((string-match-p "[Ss]tate" prompt) "out")
+                          (t "rice vinegar"))))
+                 ((symbol-function 'read-string)
+                  (lambda (_prompt &optional initial &rest _) (or initial "")))
+                 ((symbol-function 'message)
+                  (lambda (fmt &rest args) (setq said (apply #'format fmt args)))))
+         ,@body))))
+
+(ert-deftest a3madkour-ingredients--resolve-recipe ()
+  "First unknown is added as new, second becomes an alias."
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (a3madkour-ingredients-test--resolving '(?a ?l)
+      (a3-ingredient-resolve-recipe)
+      (should (equal said "Resolved 2 of 2 ingredients"))
+      (should (equal (plist-get (a3madkour-ingredients/lookup "smoked paprika") :aisle) "Spices"))
+      (should (eq (plist-get (a3madkour-ingredients/lookup "smoked paprika") :state) 'out))
+      (should (equal (plist-get (a3madkour-ingredients/lookup "rice wine vinegar") :name) "rice vinegar"))
+      (should-not (a3madkour-ingredients/unknown-items)))))
+
+(ert-deftest a3madkour-ingredients--resolve-recipe-skip-and-quit ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (a3madkour-ingredients-test--resolving '(?s ?q)
+      (a3-ingredient-resolve-recipe)
+      (should (equal said "Resolved 0 of 2 ingredients"))
+      (should (equal (a3madkour-ingredients/unknown-items)
+                     '("Smoked Paprika" "rice wine vinegar"))))))
+
 (provide 'a3madkour-ingredients-test)
 ;;; a3madkour-ingredients-test.el ends here

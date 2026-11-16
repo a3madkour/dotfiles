@@ -337,6 +337,79 @@ hooks run and nothing is logged."
       (setq name (plist-get entry :name))))
   (a3madkour-ingredients/lookup name))
 
+;;; Reading a recipe's ingredient table
+
+;; The module reads the table itself, line by line, so that it depends on
+;; nothing from the publish pipeline.
+
+(defun a3madkour-ingredients--rule-line-p (line)
+  "Non-nil when LINE is a table rule (|---+---|)."
+  (string-match-p "\\`[ \t]*|[-+]" line))
+
+(defun a3madkour-ingredients--row-cells (line)
+  "The trimmed cells of table row LINE."
+  (let ((s (string-trim line)))
+    (setq s (string-remove-suffix "|" (string-remove-prefix "|" s)))
+    (mapcar #'string-trim (split-string s "|"))))
+
+(defun a3madkour-ingredients--ingredients-heading-p (line)
+  "Non-nil when LINE is a heading titled Ingredients (any level, any case)."
+  (and (string-match "\\`\\*+ +\\(.*\\)\\'" line)
+       (string= "ingredients"
+                (a3madkour-ingredients/normalize
+                 (a3madkour-ingredients--strip-tags (match-string 1 line))))))
+
+(defun a3madkour-ingredients--current-line ()
+  (buffer-substring-no-properties (line-beginning-position) (line-end-position)))
+
+(defun a3madkour-ingredients--recipe-rows (&optional buffer)
+  "Cell lists of the first table under BUFFER's Ingredients heading, rules
+dropped, header row first.  Nil when there is no such heading or table."
+  (with-current-buffer (or buffer (current-buffer))
+    (save-excursion
+      (save-restriction
+        (widen)
+        (goto-char (point-min))
+        (while (and (not (eobp))
+                    (not (a3madkour-ingredients--ingredients-heading-p
+                          (a3madkour-ingredients--current-line))))
+          (forward-line 1))
+        (unless (eobp)
+          (forward-line 1)
+          (while (and (not (eobp))
+                      (not (looking-at "\\*+ "))
+                      (not (looking-at "[ \t]*|")))
+            (forward-line 1))
+          (let ((rows '()))
+            (while (and (not (eobp)) (looking-at "[ \t]*|"))
+              (let ((line (a3madkour-ingredients--current-line)))
+                (unless (a3madkour-ingredients--rule-line-p line)
+                  (push (a3madkour-ingredients--row-cells line) rows)))
+              (forward-line 1))
+            (nreverse rows)))))))
+
+(defun a3madkour-ingredients/recipe-items (&optional buffer)
+  "The non-empty `item' cells of BUFFER's Ingredients table, in row order.
+Nil when the recipe has no Ingredients heading, table or item column."
+  (let* ((rows (a3madkour-ingredients--recipe-rows buffer))
+         (index (cl-position "item" (mapcar #'downcase (car rows)) :test #'string=)))
+    (when index
+      (cl-loop for row in (cdr rows)
+               for cell = (nth index row)
+               when (and cell (not (string-empty-p cell)))
+               collect cell))))
+
+(defun a3madkour-ingredients/unknown-items (&optional buffer)
+  "The items of BUFFER's recipe that are not in the registry.
+Each appears once, in its first spelling."
+  (let ((seen '()) (out '()))
+    (dolist (item (a3madkour-ingredients/recipe-items buffer))
+      (let ((norm (a3madkour-ingredients/normalize item)))
+        (unless (or (member norm seen) (a3madkour-ingredients/lookup item))
+          (push norm seen)
+          (push item out))))
+    (nreverse out)))
+
 ;;; Commands
 
 (defconst a3madkour-ingredients--state-names
@@ -374,6 +447,42 @@ hooks run and nothing is logged."
          (state (cdr (assoc (cadr choice) a3madkour-ingredients--state-names))))
     (a3madkour-ingredients/set-entry-state name state)
     (message "%s: %s" name (cadr choice))))
+
+(defun a3-ingredient-resolve-recipe ()
+  "Walk this recipe's ingredients that are not in the registry.
+Each can be added as a new ingredient, recorded as another name for an
+existing one, or skipped."
+  (interactive)
+  (let* ((unknown (a3madkour-ingredients/unknown-items))
+         (total (length unknown))
+         (resolved 0))
+    (if (null unknown)
+        (message "All ingredients are in the registry")
+      (catch 'quit
+        (dolist (item unknown)
+          ;; An earlier answer may have covered this one (as an alias).
+          (if (a3madkour-ingredients/lookup item)
+              (cl-incf resolved)
+            (condition-case err
+                (pcase (car (read-multiple-choice
+                             (format "\"%s\" is not in the registry" item)
+                             '((?a "add as new") (?l "alias of existing")
+                               (?s "skip") (?q "quit"))))
+                  (?a (a3madkour-ingredients--prompt-and-add item)
+                      (cl-incf resolved))
+                  (?l (a3madkour-ingredients/add-alias
+                       (completing-read
+                        "Alias of: "
+                        (mapcar (lambda (e) (plist-get e :name))
+                                (a3madkour-ingredients/entries))
+                        nil t)
+                       item)
+                      (cl-incf resolved))
+                  (?q (throw 'quit nil)))
+              ;; A refused name (say, a clash) skips that one item only.
+              (user-error (message "%s" (error-message-string err))
+                          (sit-for 1.5))))))
+      (message "Resolved %d of %d ingredients" resolved total))))
 
 (provide 'a3madkour-ingredients)
 ;;; a3madkour-ingredients.el ends here
