@@ -123,8 +123,22 @@ The result is cached until the file (or that buffer) changes."
                                  (buffer-substring-no-properties (point-min) (point-max))))
                            (with-temp-buffer
                              (insert-file-contents file)
-                             (buffer-string)))))))
+                             (buffer-string))))))
+            ;; Said once per re-read.  The copy itself is never touched.
+            (let ((copies (a3madkour-ingredients/conflict-files)))
+              (when copies
+                (message "Ingredient registry has a sync conflict copy: %s"
+                         (car copies)))))
           (cdr a3madkour-ingredients--cache))))))
+
+(defun a3madkour-ingredients/conflict-files ()
+  "Sync-conflict copies sitting beside the registry, as absolute paths.
+They are only ever listed: never read, merged or deleted."
+  (let ((file a3madkour-ingredients/file))
+    (when (and file (file-directory-p (file-name-directory file)))
+      (directory-files
+       (file-name-directory file) t
+       (concat "\\`" (regexp-quote (file-name-base file)) "\\.sync-conflict-")))))
 
 (defun a3madkour-ingredients/entries ()
   "Every ingredient in the registry, in file order.
@@ -147,6 +161,34 @@ Matching is case-insensitive and ignores padding and repeated whitespace."
              (cl-some (lambda (a) (string= want (a3madkour-ingredients/normalize a)))
                       (plist-get e :aliases))))
        (a3madkour-ingredients/entries)))))
+
+;;; Problems in the registry itself
+
+(defun a3madkour-ingredients/problems ()
+  "Problems in the registry, as \"FILE:LINE: message\" strings in file order.
+Nil when it is clean, unset or missing."
+  (let ((base (and a3madkour-ingredients/file
+                   (file-name-nondirectory a3madkour-ingredients/file)))
+        (seen (make-hash-table :test #'equal))
+        (out '()))
+    (dolist (e (a3madkour-ingredients/entries))
+      (let ((line (plist-get e :line))
+            (name (plist-get e :name)))
+        (cl-flet ((emit (fmt &rest args)
+                    (push (format "%s:%d: %s" base line (apply #'format fmt args)) out)))
+          (unless (plist-get e :aisle)
+            (emit "ingredient %S is outside any aisle" name))
+          (dolist (n (cons name (plist-get e :aliases)))
+            (let* ((norm (a3madkour-ingredients/normalize n))
+                   (first (gethash norm seen)))
+              (if first
+                  (emit "duplicate name %S (also line %d)" norm first)
+                (puthash norm line seen))))
+          (let ((case-fold-search nil))
+            (when (string-match "\\`\\([[:upper:]]\\{2,\\}\\)[ \t]+[^ \t]" name)
+              (emit "%S is not a state (use HAVE, LOW or OUT)"
+                    (match-string 1 name)))))))
+    (nreverse out)))
 
 (provide 'a3madkour-ingredients)
 ;;; a3madkour-ingredients.el ends here

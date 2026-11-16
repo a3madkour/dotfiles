@@ -74,5 +74,45 @@ Bought at the co-op.
       (goto-char (point-max)) (insert "** OUT sumac\n")
       (should (a3madkour-ingredients/lookup "sumac")))))
 
+;;; Problems and sync-conflict copies
+
+(ert-deftest a3madkour-ingredients--problems-clean ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (should-not (a3madkour-ingredients/problems))))
+
+(ert-deftest a3madkour-ingredients--problems-found ()
+  (a3madkour-ingredients-test--with "** HAVE stray
+* Spices
+** HAVE cumin
+:PROPERTIES:
+:ALIASES: jeera
+:END:
+** OUT Jeera
+** TODO paprika
+"
+    (should (equal (a3madkour-ingredients/problems)
+                   '("ingredients.org:1: ingredient \"stray\" is outside any aisle"
+                     "ingredients.org:7: duplicate name \"jeera\" (also line 3)"
+                     "ingredients.org:8: \"TODO\" is not a state (use HAVE, LOW or OUT)")))))
+
+(ert-deftest a3madkour-ingredients--conflict-files ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (should-not (a3madkour-ingredients/conflict-files))
+    (let ((c (expand-file-name "ingredients.sync-conflict-20261115-101010-ABCDEFG.org"
+                               (file-name-directory a3madkour-ingredients/file))))
+      (with-temp-file c (insert "x"))
+      (should (equal (a3madkour-ingredients/conflict-files) (list c)))
+      ;; The conflict copy is never read: the registry still answers from the main file.
+      (should (equal (length (a3madkour-ingredients/entries)) 4))
+      (should (equal (with-temp-buffer (insert-file-contents c) (buffer-string)) "x"))
+      ;; A re-read says so, once.
+      (set-file-times a3madkour-ingredients/file (time-add (current-time) 9))
+      (let ((said '()))
+        (cl-letf (((symbol-function 'message)
+                   (lambda (fmt &rest args) (push (apply #'format fmt args) said))))
+          (a3madkour-ingredients/entries)
+          (a3madkour-ingredients/entries))
+        (should (equal said (list (concat "Ingredient registry has a sync conflict copy: " c))))))))
+
 (provide 'a3madkour-ingredients-test)
 ;;; a3madkour-ingredients-test.el ends here
