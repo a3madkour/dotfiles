@@ -410,6 +410,87 @@ Each appears once, in its first spelling."
           (push item out))))
     (nreverse out)))
 
+;;; The item cell at point, and completion in it
+
+(defun a3madkour-ingredients--item-cell ()
+  "The `item' cell point is in, as (START . END), or nil.
+Non-nil only in a data row (not the header, not a rule) of a table whose
+nearest heading above is Ingredients, and only in the column whose header is
+`item'.  START is just after the cell's opening bar, END just before its
+closing bar or at end of line."
+  (save-excursion
+    (let* ((pt (point))
+           (bol (line-beginning-position))
+           (eol (line-end-position))
+           (line (a3madkour-ingredients--current-line))
+           (bars 0) (cell-start nil) (first-row nil) (header-pos nil))
+      (when (and (string-match-p "\\`[ \t]*|" line)
+                 (not (a3madkour-ingredients--rule-line-p line)))
+        (goto-char bol)
+        (while (search-forward "|" pt t)
+          (cl-incf bars)
+          (setq cell-start (point)))
+        (when cell-start
+          ;; Top of this table, then its header (the first row that is not a rule).
+          (goto-char bol)
+          (setq first-row bol)
+          (while (and (= 0 (forward-line -1)) (looking-at "[ \t]*|"))
+            (setq first-row (point)))
+          (goto-char first-row)
+          (while (and (< (point) bol)
+                      (a3madkour-ingredients--rule-line-p
+                       (a3madkour-ingredients--current-line)))
+            (forward-line 1))
+          (setq header-pos (point))
+          (when (and (< header-pos bol)
+                     (string= "item"
+                              (downcase
+                               (or (nth (1- bars)
+                                        (a3madkour-ingredients--row-cells
+                                         (a3madkour-ingredients--current-line)))
+                                   ""))))
+            ;; The nearest heading above the table.
+            (goto-char first-row)
+            (while (and (= 0 (forward-line -1)) (not (looking-at "\\*+ "))))
+            (when (a3madkour-ingredients--ingredients-heading-p
+                   (a3madkour-ingredients--current-line))
+              (goto-char pt)
+              (cons cell-start
+                    (if (search-forward "|" eol t) (1- (point)) eol)))))))))
+
+(defun a3madkour-ingredients--item-at-point ()
+  "The text of the recipe `item' cell at point, or nil."
+  (let ((cell (a3madkour-ingredients--item-cell)))
+    (when cell
+      (let ((text (string-trim (buffer-substring-no-properties (car cell) (cdr cell)))))
+        (unless (string-empty-p text) text)))))
+
+(defun a3madkour-ingredients/capf ()
+  "Complete registry names and aliases in a recipe table's `item' column.
+Returns nil anywhere else, so other completion sources are untouched."
+  (when a3madkour-ingredients/file
+    (let ((cell (a3madkour-ingredients--item-cell)))
+      (when cell
+        (let* ((end (point))
+               (start (save-excursion
+                        (goto-char (car cell))
+                        (skip-chars-forward " \t" end)
+                        (point)))
+               (aisle-of (make-hash-table :test #'equal)))
+          (dolist (e (a3madkour-ingredients/entries))
+            (dolist (n (cons (plist-get e :name) (plist-get e :aliases)))
+              (puthash n (plist-get e :aisle) aisle-of)))
+          (list start end (hash-table-keys aisle-of)
+                :annotation-function
+                (lambda (candidate)
+                  (let ((aisle (gethash candidate aisle-of)))
+                    (and aisle (concat "  " aisle))))
+                :exclusive 'no))))))
+
+(defun a3madkour-ingredients/setup-capf ()
+  "Offer ingredient completion in this buffer.  For `org-mode-hook'."
+  (add-hook 'completion-at-point-functions #'a3madkour-ingredients/capf nil t))
+
 ;;; Commands
 
 (defconst a3madkour-ingredients--state-names
@@ -431,9 +512,11 @@ Each appears once, in its first spelling."
      (cdr (assoc state a3madkour-ingredients--state-names)))))
 
 (defun a3-ingredient-add ()
-  "Add an ingredient to the registry."
+  "Add an ingredient to the registry.
+In a recipe's Ingredients table, the name starts as the item at point."
   (interactive)
-  (let ((entry (a3madkour-ingredients--prompt-and-add)))
+  (let ((entry (a3madkour-ingredients--prompt-and-add
+                (a3madkour-ingredients--item-at-point))))
     (message "Added %s to %s" (plist-get entry :name) (plist-get entry :aisle))))
 
 (defun a3-ingredient-set-state ()

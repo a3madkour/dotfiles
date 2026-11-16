@@ -301,5 +301,65 @@ question with CHOICES (a list of characters) in turn."
       (should (equal (a3madkour-ingredients/unknown-items)
                      '("Smoked Paprika" "rice wine vinegar"))))))
 
+;;; Completion in the item column
+
+(defun a3madkour-ingredients-test--capf-at (text marker)
+  "Insert TEXT, put point where MARKER was, return the capf result."
+  (with-temp-buffer
+    (insert text) (org-mode)
+    (goto-char (point-min)) (search-forward marker) (replace-match "")
+    (a3madkour-ingredients/capf)))
+
+(ert-deftest a3madkour-ingredients--capf-in-item-cell ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (let ((r (a3madkour-ingredients-test--capf-at
+              "** Ingredients\n| qty | unit | Item | group | note | alt |\n|---+---+---+---+---+---|\n| 2 | tbsp | oli@ | | | |\n" "@")))
+      (should r)
+      (should (= (- (nth 1 r) (nth 0 r)) 3))
+      (should (member "olive oil" (nth 2 r)))
+      (should (member "EVOO" (nth 2 r)))
+      (should (equal (funcall (plist-get (nthcdr 3 r) :annotation-function) "EVOO")
+                     "  Oils & vinegar")))
+    ;; An empty cell, and one under a #+NAME: line, complete too.
+    (should (a3madkour-ingredients-test--capf-at
+             "* Ingredients\n#+NAME: ingredients\n| qty | unit | item |\n| 2 | tbsp | @ |\n" "@"))))
+
+(ert-deftest a3madkour-ingredients--capf-elsewhere-is-nil ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (dolist (text '("** Ingredients\n| qty | unit | item |\n| 2 | tb@ | oil |\n"      ; other column
+                    "** Ingredients\n| qty | unit | it@ |\n| 2 | tbsp | oil |\n"      ; header row
+                    "** Ingredients\n| qty | unit | item |\n|---+---+--@-|\n"         ; rule line
+                    "** Ingredients\n| qty | unit | item |\n| 2 | tbsp | oil | @\n"   ; past the last bar
+                    "** Ingredients\n| qty | unit | item |\n@| 2 | tbsp | oil |\n"    ; before the first bar
+                    "** Steps\n| qty | unit | item |\n| 2 | tbsp | ol@ |\n"          ; other heading
+                    "| qty | unit | item |\n| 2 | tbsp | ol@ |\n"                     ; no heading
+                    "** Ingredients\nplain te@xt\n"                                   ; no table
+                    "@"))                                                             ; empty buffer
+      (should-not (a3madkour-ingredients-test--capf-at text "@"))))
+  (let ((a3madkour-ingredients/file nil))
+    (should-not (a3madkour-ingredients-test--capf-at
+                 "** Ingredients\n| qty | unit | item |\n| 2 | tbsp | ol@ |\n" "@"))))
+
+(ert-deftest a3madkour-ingredients--setup-capf-is-buffer-local ()
+  (with-temp-buffer
+    (a3madkour-ingredients/setup-capf)
+    (should (eq (car completion-at-point-functions) #'a3madkour-ingredients/capf))
+    (should (local-variable-p 'completion-at-point-functions)))
+  (should-not (memq #'a3madkour-ingredients/capf (default-value 'completion-at-point-functions))))
+
+(ert-deftest a3madkour-ingredients--add-command-starts-from-the-item-at-point ()
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (with-temp-buffer
+      (insert "** Ingredients\n| qty | unit | item |\n| 1 | tsp | Smoked Paprika |\n") (org-mode)
+      (goto-char (point-min)) (search-forward "Smoked")
+      (let ((initials '()))
+        (cl-letf (((symbol-function 'read-string)
+                   (lambda (_p &optional initial &rest _) (push initial initials) (or initial "")))
+                  ((symbol-function 'completing-read)
+                   (lambda (prompt &rest _) (if (string-match-p "[Aa]isle" prompt) "Spices" "out"))))
+          (call-interactively #'a3-ingredient-add))
+        (should (equal (car (last initials)) "Smoked Paprika"))
+        (should (a3madkour-ingredients/lookup "smoked paprika"))))))
+
 (provide 'a3madkour-ingredients-test)
 ;;; a3madkour-ingredients-test.el ends here
