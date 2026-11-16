@@ -218,5 +218,146 @@ a note
     (a3madkour-groceries/refresh)
     (should (string-match-p "^- \\[X\\] rice$" (a3madkour-groceries-test--text file)))))
 
+;;; Recipes on the list
+
+(defconst a3madkour-groceries-test--toast "#+TITLE: Toast
+#+HUGO_SECTION: recipes
+** Ingredients
+| qty | unit | item   | group | note | alt |
+|-----+------+--------+-------+------+-----|
+| 2   | tbsp | EVOO   |       |      |     |
+| 1   |      | Leeks  |       |      |     |
+| 200 | g    | milk   |       |      |     |
+| 1   | tsp  | salt   |       |      |     |
+| 3   | cloves | Garlic |     |      |     |
+|     |      |        |       |      |     |
+")
+
+(defconst a3madkour-groceries-test--soup "#+TITLE: Soup
+#+HUGO_SECTION: recipes
+#+HUGO_PUBLISH: nil
+** Ingredients
+| qty | unit   | item      | group | note | alt |
+| 1   | Tablespoon | olive oil |   |      |     |
+| 3   | tsp    | olive oil |       |      |     |
+| 2   | cloves | garlic    |       |      |     |
+|     | pinch  | salt      |       |      |     |
+")
+
+(defconst a3madkour-groceries-test--planned "#+TITLE: Groceries
+
+* Produce
+- [ ] leeks (1: Toast)
+- [ ] lemons
+* Oils vinegar
+- [ ] olive oil (low) (4 tbsp: Toast, Soup)
+* Other
+- [ ] rice
+- [ ] salt (1 tsp: Toast, Soup)
+- [ ] Garlic (5 cloves: Toast, Soup)
+* Extra
+* Recipes
+- [[file:toast.org][Toast]]
+- [[file:soup.org][an old title]]
+")
+
+(defmacro a3madkour-groceries-test--with-recipes (list &rest body)
+  (declare (indent 1))
+  `(a3madkour-groceries-test--with a3madkour-groceries-test--registry ,list
+     (with-temp-file (expand-file-name "toast.org" dir)
+       (insert a3madkour-groceries-test--toast))
+     (with-temp-file (expand-file-name "soup.org" dir)
+       (insert a3madkour-groceries-test--soup))
+     (with-temp-file (expand-file-name "note.org" dir) (insert "#+TITLE: Not a recipe\n"))
+     ,@body))
+
+(ert-deftest a3madkour-groceries--recipes-are-found-and-read ()
+  (a3madkour-groceries-test--with-recipes nil
+    (should (equal (a3madkour-recipes/files)
+                   (list (cons "Soup" (expand-file-name "soup.org" dir))
+                         (cons "Toast" (expand-file-name "toast.org" dir)))))
+    (should (equal (a3madkour-recipes/rows (expand-file-name "soup.org" dir))
+                   '((:item "olive oil" :qty "1" :unit "Tablespoon")
+                     (:item "olive oil" :qty "3" :unit "tsp")
+                     (:item "garlic" :qty "2" :unit "cloves")
+                     (:item "salt" :qty nil :unit "pinch"))))
+    (should-not (a3madkour-recipes/title (expand-file-name "note.org" dir)))))
+
+(ert-deftest a3madkour-groceries--planned-recipes-add-what-is-not-had ()
+  "Amounts are summed; what the pantry has (milk) is left off; an untracked
+ingredient (salt) and one the registry does not know (garlic) are needed."
+  (a3madkour-groceries-test--with-recipes
+      "* Recipes\n- [[file:toast.org][Toast]]\n- [[file:soup.org][an old title]]\n- [[file:gone.org][Gone]]\nplain line\n"
+    (should (equal (a3madkour-groceries/refresh) '(:to-buy 6 :ticked 0)))
+    (should (equal (a3madkour-groceries-test--text file)
+                   (concat a3madkour-groceries-test--planned
+                           "- [[file:gone.org][Gone]]\nplain line\n")))
+    ;; Stable under a second refresh, annotations and all.
+    (a3madkour-groceries/refresh)
+    (should (equal (a3madkour-groceries-test--text file)
+                   (concat a3madkour-groceries-test--planned
+                           "- [[file:gone.org][Gone]]\nplain line\n")))))
+
+(ert-deftest a3madkour-groceries--the-registry-unit-is-the-one-shown ()
+  (a3madkour-groceries-test--with
+      "* olive oil :out:\n:PROPERTIES:\n:UNIT: ml\n:END:\n"
+      "* Recipes\n- [[file:soup.org][Soup]]\n"
+    (with-temp-file (expand-file-name "soup.org" dir)
+      (insert "#+TITLE: Soup\n#+HUGO_SECTION: recipes\n** Ingredients\n| qty | unit | item |\n| 2 | tbsp | olive oil |\n"))
+    (a3madkour-groceries/refresh)
+    (should (string-match-p "^- \\[ \\] olive oil (29\\.57 ml: Soup)$"
+                            (a3madkour-groceries-test--text file)))))
+
+(ert-deftest a3madkour-groceries--toggle-recipe ()
+  (a3madkour-groceries-test--with-recipes nil
+    (should (a3madkour-groceries/toggle-recipe (expand-file-name "toast.org" dir)))
+    (should (a3madkour-groceries/toggle-recipe (expand-file-name "soup.org" dir)))
+    (should (equal (a3madkour-groceries-test--text file)
+                   (replace-regexp-in-string "an old title" "Soup"
+                                             a3madkour-groceries-test--planned)))
+    (should-not (a3madkour-groceries/toggle-recipe (expand-file-name "toast.org" dir)))
+    (should-not (a3madkour-groceries/toggle-recipe (expand-file-name "soup.org" dir)))
+    (should (equal (a3madkour-groceries-test--text file) a3madkour-groceries-test--fresh))
+    (should-error (a3madkour-groceries/toggle-recipe (expand-file-name "note.org" dir))
+                  :type 'user-error)))
+
+(ert-deftest a3madkour-groceries--plan-command-defaults-to-the-recipe-at-hand ()
+  (a3madkour-groceries-test--with-recipes nil
+    (find-file (expand-file-name "toast.org" dir))
+    (let ((default nil))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_p _c &optional _pred _req _init _hist def &rest _)
+                   (setq default def))))
+        (call-interactively #'a3-grocery-plan-recipe)
+        (should (equal default "Toast"))
+        (should (equal said "Shopping for Toast: 6 to buy"))
+        (call-interactively #'a3-grocery-plan-recipe)
+        (should (equal said "No longer shopping for Toast"))))))
+
+(ert-deftest a3madkour-groceries--done-with-recipe-items ()
+  (a3madkour-groceries-test--with-recipes
+      (replace-regexp-in-string
+       "\\[ \\] \\(leeks\\|salt\\|Garlic\\)" "[X] \\1"
+       a3madkour-groceries-test--planned)
+    (cl-letf (((symbol-function 'y-or-n-p) (lambda (_) t)))
+      (a3-grocery-done))
+    (should (equal said "Marked 3 as have; 3 still to buy"))
+    ;; Garlic was not in the registry: buying it put it there.
+    (should (equal (mapcar #'a3madkour-groceries-test--state '("leeks" "salt" "garlic" "olive oil"))
+                   '(have have have low)))
+    (should (equal (a3madkour-groceries-test--text file) "#+TITLE: Groceries
+
+* Produce
+- [ ] lemons
+* Oils vinegar
+- [ ] olive oil (low) (4 tbsp: Toast, Soup)
+* Other
+- [ ] rice
+* Extra
+* Recipes
+- [[file:toast.org][Toast]]
+- [[file:soup.org][an old title]]
+"))))
+
 (provide 'a3madkour-groceries-test)
 ;;; a3madkour-groceries-test.el ends here

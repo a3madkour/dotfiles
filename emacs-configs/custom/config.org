@@ -5555,6 +5555,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 (add-hook 'org-mode-hook #'a3madkour-ingredients/setup-capf)
 (require 'a3madkour-recipes)
 (require 'a3madkour-groceries)
+(require 'a3madkour-recipe-import)
 (require 'a3madkour-recipe-lint)
 (require 'a3madkour-publish-recipes)
 (require 'a3madkour-works-lint)
@@ -6116,7 +6117,7 @@ _SPC_ cancel    _o_nly this      _d_elete
  "ir"
  '(consult-register :which-key "Register")
  "ic"
- '(org-chef-insert-recipe :which-key "Org Chef Insert Recipe")
+ '(a3-recipe-import :which-key "Import recipe from URL")
  "is"
  '(yas-insert-snippet :which-key "Snippet")
  "iu"
@@ -6157,7 +6158,9 @@ _SPC_ cancel    _o_nly this      _d_elete
  "lp" #'langtool-goto-previous-error
 
  ;; Kitchen: ingredient registry and recipes (lisp/a3madkour-ingredients.el,
- ;; lisp/a3madkour-recipes.el) and the grocery list (lisp/a3madkour-groceries.el)
+ ;; lisp/a3madkour-recipes.el),
+ ;; the grocery list (lisp/a3madkour-groceries.el) and recipe import
+ ;; (lisp/a3madkour-recipe-import.el)
  "k"
  '(nil :which-key "kitchen")
  "ka"
@@ -6174,6 +6177,12 @@ _SPC_ cancel    _o_nly this      _d_elete
  '(a3-grocery-list :which-key "Grocery list")
  "kd"
  '(a3-grocery-done :which-key "Done shopping")
+ "kc"
+ '(a3-grocery-plan-recipe :which-key "Shop for a recipe (toggle)")
+ "ki"
+ '(a3-recipe-import :which-key "Import recipe from URL")
+ "ko"
+ '(a3-recipe-import-org-chef :which-key "Convert org-chef recipe at point")
  ) ;; End SPC prefix block
 
 
