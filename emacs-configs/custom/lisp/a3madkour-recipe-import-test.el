@@ -17,6 +17,7 @@
                   ("4 cloves garlic, minced" "4" "cloves" "garlic" "minced")
                   ("1 (14.5-oz.) can diced tomatoes" "1" "can" "diced tomatoes" "14.5-oz.")
                   ("200 g of feta" "200" "g" "feta" nil)
+                  ("1 Tbsp coconut oil ((or olive oil // if oil-free, sub water))" "1" "tbsp" "coconut oil" "or olive oil // if oil-free, sub water")
                   ("1 Tbsp coconut sugar ( optional )" "1" "tbsp" "coconut sugar" "optional")
                   ("1 (15-oz.) can chickpeas, drained and rinsed (1 can yields ~1 ½ cups)" "1" "can" "chickpeas" "drained and rinsed; 15-oz.; 1 can yields ~1 ½ cups")
                   ("3 eggs" "3" nil "eggs" nil)

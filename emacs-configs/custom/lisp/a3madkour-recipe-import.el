@@ -88,6 +88,9 @@ Each is a string or nil.  :qty is a plain number the publisher accepts; a
 range becomes its upper end and is kept verbatim in the note."
   (let ((s (a3madkour-recipe-import--clean line))
         (qty nil) (unit nil) (notes '()) (looking t))
+    ;; Some sites double their brackets: "oil ((or butter))".
+    (setq s (replace-regexp-in-string "(\\s-*(+" "(" s))
+    (setq s (replace-regexp-in-string ")\\s-*)+" ")" s))
     (when (string-match a3madkour-recipe-import--qty-re s)
       ;; Take everything from the match before parsing clobbers it.
       (let* ((whole (string-trim (match-string 0 s)))
