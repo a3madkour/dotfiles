@@ -219,12 +219,17 @@ are listed in *Recipe problems* and nothing changes."
         (require 'a3madkour-recipe-lint))
       (let ((problems (a3madkour-recipe-lint/lint-file (buffer-file-name))))
         (when problems
+          ;; A throwaway window along the bottom, as tall as the list;
+          ;; `q' in it puts it away.
           (with-current-buffer (get-buffer-create "*Recipe problems*")
+            (special-mode)
             (let ((inhibit-read-only t))
               (erase-buffer)
               (insert (string-join problems "\n") "\n"))
             (goto-char (point-min))
-            (display-buffer (current-buffer)))
+            (display-buffer (current-buffer)
+                            '((display-buffer-reuse-window display-buffer-at-bottom)
+                              (window-height . fit-window-to-buffer))))
           (user-error "Not marked for publishing: %d problem%s (see *Recipe problems*)"
                       (length problems) (if (= 1 (length problems)) "" "s"))))
       (a3madkour-recipes--set-keyword "HUGO_PUBLISH" "t" "HUGO_SECTION")

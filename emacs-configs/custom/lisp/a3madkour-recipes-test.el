@@ -122,7 +122,11 @@ Buffers visiting files in that dir are killed afterwards."
         (should (string-match-p "typed but not saved" (a3madkour-recipes-test--text file)))
         (should (string-match-p "^#\\+HUGO_PUBLISH: nil$" (a3madkour-recipes-test--text file)))
         (should (equal (with-current-buffer "*Recipe problems*" (buffer-string))
-                       "toast.org:1: missing or non-positive :servings:\ntoast.org:16: ** Sources has no list items\n"))))))
+                       "toast.org:1: missing or non-positive :servings:\ntoast.org:16: ** Sources has no list items\n"))
+        ;; A throwaway buffer: read-only, and `q' puts its window away.
+        (with-current-buffer "*Recipe problems*"
+          (should (derived-mode-p 'special-mode))
+          (should buffer-read-only))))))
 
 (ert-deftest a3madkour-recipes--toggle-adds-a-missing-publish-line ()
   (a3madkour-recipes-test--with
@@ -153,8 +157,16 @@ Buffers visiting files in that dir are killed afterwards."
   (a3madkour-recipes-test--with
     (with-temp-file a3madkour-ingredients/file (insert "* oil :have:\n"))
     (let ((file (a3-recipe-new "Toast")))
-      ;; Untouched, it is not publishable: the blanks are named.
-      (should (a3madkour-recipe-lint/lint-file file))
+      ;; Untouched, it is not publishable: every blank is named.
+      (should (equal (sort (mapcar (lambda (m)
+                                     (replace-regexp-in-string "\\`[^:]*:[0-9]+: " "" m))
+                                   (a3madkour-recipe-lint/lint-file file))
+                           #'string<)
+                     '("** Sources has no list items"
+                       "** Steps has no steps"
+                       "empty #+HUGO_SUMMARY:"
+                       "ingredient row missing item"
+                       "missing or non-positive :servings:")))
       (dolist (edit '((":servings:" . ":servings: 2")
                       ("#+HUGO_SUMMARY:" . "#+HUGO_SUMMARY: Bread, heated.")
                       ("|     |      |      |       |      |     |" . "| 1 | tbsp | oil | | | |")

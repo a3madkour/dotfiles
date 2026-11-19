@@ -394,6 +394,20 @@ question with CHOICES (a list of characters) in turn."
     (should (a3madkour-ingredients-test--capf-at
              "* Ingredients\n#+NAME: ingredients\n| qty | unit | item |\n| 2 | tbsp | @ |\n" "@"))))
 
+(ert-deftest a3madkour-ingredients--capf-pops-up-from-the-first-letter ()
+  "Corfu's automatic popup waits for three letters unless the capf says otherwise."
+  (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
+    (cl-flet ((len (cell)
+                (plist-get (nthcdr 3 (a3madkour-ingredients-test--capf-at
+                                      (concat "** Ingredients\n| qty | unit | item |\n| 2 | tbsp | "
+                                              cell " |\n")
+                                      "@"))
+                           :company-prefix-length)))
+      (should (eq (len "o@") t))
+      (should (eq (len "ol@") t))
+      ;; Nothing typed yet: no popup just for moving into the cell.
+      (should-not (len "@")))))
+
 (ert-deftest a3madkour-ingredients--capf-elsewhere-is-nil ()
   (a3madkour-ingredients-test--with a3madkour-ingredients-test--registry
     (dolist (text '("** Ingredients\n| qty | unit | item |\n| 2 | tb@ | oil |\n"      ; other column

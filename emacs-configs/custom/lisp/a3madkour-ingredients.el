@@ -629,6 +629,9 @@ Returns nil anywhere else, so other completion sources are untouched."
           ;; dabbrev and friends.
           (list start end
                 (completion-table-case-fold (hash-table-keys aisle-of))
+                ;; Corfu's automatic popup waits for `corfu-auto-prefix'
+                ;; (three) letters; here one is enough.
+                :company-prefix-length (> end start)
                 :annotation-function
                 (lambda (candidate)
                   (let ((aisle (gethash candidate aisle-of)))

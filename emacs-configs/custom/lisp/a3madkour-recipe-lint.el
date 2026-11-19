@@ -50,6 +50,12 @@ Reuses the handler's position-robust extraction so a drawer authored after
 (declare-function a3madkour-pub-recipes--coerce-qty "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--cell "a3madkour-publish-recipes")
 
+(defun a3madkour-recipe-lint--filled-items (headline)
+  "The top-level list items under HEADLINE that have text in them."
+  (cl-remove-if (lambda (item)
+                  (string-blank-p (a3madkour-pub-recipes--item-text item)))
+                (a3madkour-pub-recipes--top-level-items headline)))
+
 (defun a3madkour-recipe-lint/lint-file (file)
   "Lint recipe FILE.  Return a list of \"FILE:LINE: message\" strings (empty = clean)."
   (require 'a3madkour-publish-recipes)
@@ -69,8 +75,9 @@ Reuses the handler's position-robust extraction so a drawer authored after
       ;; Rule 6: required metadata.
       (unless (a3madkour-recipe-lint--kw ast "TITLE")
         (funcall emit 1 "missing #+TITLE:"))
-      (unless (a3madkour-recipe-lint--kw ast "HUGO_SUMMARY")
-        (funcall emit 1 "missing #+HUGO_SUMMARY:"))
+      (let ((summary (a3madkour-recipe-lint--kw ast "HUGO_SUMMARY")))
+        (cond ((null summary) (funcall emit 1 "missing #+HUGO_SUMMARY:"))
+              ((string-blank-p summary) (funcall emit 1 "empty #+HUGO_SUMMARY:"))))
       (let ((sv (a3madkour-recipe-lint--drawer-value ast "SERVINGS")))
         (unless (and sv (string-match-p "\\`[0-9]+\\'" (string-trim sv))
                      (> (string-to-number sv) 0))
@@ -80,10 +87,16 @@ Reuses the handler's position-robust extraction so a drawer authored after
             (steps (a3madkour-pub-recipes--find-heading-named ast "steps"))
             (sources (a3madkour-pub-recipes--find-heading-named ast "sources")))
         (unless ing (funcall emit 1 "missing ** Ingredients heading"))
-        (unless steps (funcall emit 1 "missing ** Steps heading"))
+        ;; A bare "1." or "-" is an item with nothing in it: not a step, not
+        ;; a source.
+        (if (not steps)
+            (funcall emit 1 "missing ** Steps heading")
+          (unless (a3madkour-recipe-lint--filled-items steps)
+            (funcall emit (a3madkour-recipe-lint--line-of steps)
+                     "** Steps has no steps")))
         (if (not sources)
             (funcall emit 1 "missing ** Sources heading")
-          (unless (a3madkour-pub-recipes--top-level-items sources)
+          (unless (a3madkour-recipe-lint--filled-items sources)
             (funcall emit (a3madkour-recipe-lint--line-of sources)
                      "** Sources has no list items")))
         ;; Rules 2-3: ingredient table + rows.

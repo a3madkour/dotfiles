@@ -152,3 +152,30 @@ With TEXT nil the registry path is set but the file does not exist."
         (f (a3madkour-recipe-lint-test--write a3madkour-recipe-lint-test--good)))
     (unwind-protect (should-not (a3madkour-recipe-lint/lint-file f))
       (delete-file f))))
+
+;; A recipe written by `a3-recipe-new' has the keyword, the headings and the
+;; list bullets but nothing in them; none of that is publishable.
+(defun a3madkour-recipe-lint-test--messages (from to)
+  "Lint the good recipe with FROM replaced by TO, no registry.
+Return the messages without their file:line prefix."
+  (let ((f (a3madkour-recipe-lint-test--write
+            (string-replace from to a3madkour-recipe-lint-test--good)))
+        (a3madkour-ingredients/file nil))
+    (unwind-protect
+        (mapcar (lambda (m) (replace-regexp-in-string "\\`[^:]*:[0-9]+: " "" m))
+                (a3madkour-recipe-lint/lint-file f))
+      (delete-file f))))
+
+(ert-deftest a3madkour-recipe-lint--blank-summary ()
+  (should (equal (a3madkour-recipe-lint-test--messages " A dish." "")
+                 '("empty #+HUGO_SUMMARY:"))))
+
+(ert-deftest a3madkour-recipe-lint--blank-steps ()
+  (dolist (steps '("1.\n" "1. \n2.\n" ""))
+    (should (equal (a3madkour-recipe-lint-test--messages
+                    "1. [02:30] Add tomatoes.\n" steps)
+                   '("** Steps has no steps")))))
+
+(ert-deftest a3madkour-recipe-lint--blank-sources ()
+  (should (equal (a3madkour-recipe-lint-test--messages "- A book\n" "-\n")
+                 '("** Sources has no list items"))))
