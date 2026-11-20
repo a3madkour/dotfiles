@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Wrap `emacs --batch` with the straight.el bootstrap + a3madkour-publish
+# Wrap Emacs in batch mode with the straight.el bootstrap + a3madkour-publish
 # already loaded.  Use for ad-hoc CLI invocations of the publish library
 # from outside an interactive emacs session.
 #
-# Any arguments are passed through to emacs --batch AFTER the library is
+# Any arguments are passed through to Emacs AFTER the library is
 # loaded — typically one or more --eval forms.
 #
 # Examples:
@@ -30,9 +30,107 @@ if [ ! -f "$PATHS_FILE" ]; then
   exit 2
 fi
 
-# Every `emacs --batch' below sets `load-prefer-newer': the publish modules sit
-# beside untracked .elc files, and `require' otherwise loads a stale .elc over
-# an edited .el — a fix that is silently not what publishes (S1 row 4).
+# The custom directory reaches Emacs through the environment, read with
+# `getenv', so a path holding a `"' or `\' cannot break (or inject into) the
+# --eval that sets `user-emacs-directory'.
+A3_PUB_CUSTOM_DIR="$CUSTOM_DIR"
+export A3_PUB_CUSTOM_DIR
+
+# Which publish modules each mode loads.  Some modules act when loaded, not
+# only when called: multi-filter adds an org-export hook that rewrites
+# `#+multi_export: t' documents, and with bib + citations loaded
+# `begin-publish' parses the bibliography.  So a module is added to a mode on
+# purpose, never just to make the lists uniform.  Each mode's list is a
+# composition of these groups, in load (dependency) order.
+A3_PUB_GROUP_CORE=(
+  a3madkour-publish
+  a3madkour-publish-registry
+  a3madkour-publish-rewrite
+  a3madkour-publish-assets
+  a3madkour-publish-unpublish
+)
+A3_PUB_GROUP_HISTORY=(
+  a3madkour-publish-history
+)
+A3_PUB_GROUP_SECTIONS=(
+  a3madkour-publish-export
+  a3madkour-publish-frontmatter
+  a3madkour-sections
+  a3madkour-publish-living
+  a3madkour-publish-deliberate
+  a3madkour-publish-garden
+  a3madkour-publish-library
+  a3madkour-library-items
+  a3madkour-publish-library-notes
+  a3madkour-publish-research
+  a3madkour-recipe-lint
+  a3madkour-publish-recipes
+  a3madkour-works-lint
+  a3madkour-publish-works
+)
+A3_PUB_GROUP_DELIBERATE=(
+  a3madkour-publish-essays
+  a3madkour-publish-poetry
+)
+A3_PUB_GROUP_CITATIONS=(
+  a3madkour-publish-bib
+  a3madkour-publish-citations
+)
+A3_PUB_GROUP_MULTI=(
+  a3madkour-publish-multi-filter
+  a3madkour-publish-multi-pdf
+  a3madkour-publish-multi-word
+  a3madkour-publish-multi
+)
+A3_PUB_MODULES_CHECK_ORPHANS=("${A3_PUB_GROUP_CORE[@]}")
+A3_PUB_MODULES_LIVING=("${A3_PUB_GROUP_CORE[@]}" "${A3_PUB_GROUP_SECTIONS[@]}"
+                       "${A3_PUB_GROUP_CITATIONS[@]}")
+A3_PUB_MODULES_DELIBERATE=("${A3_PUB_GROUP_CORE[@]}" "${A3_PUB_GROUP_SECTIONS[@]}"
+                           "${A3_PUB_GROUP_DELIBERATE[@]}" "${A3_PUB_GROUP_CITATIONS[@]}"
+                           "${A3_PUB_GROUP_MULTI[@]}")
+A3_PUB_MODULES_SYNC_CITATIONS=("${A3_PUB_GROUP_CORE[@]}" "${A3_PUB_GROUP_HISTORY[@]}"
+                               "${A3_PUB_GROUP_CITATIONS[@]}")
+# The pass-through (--eval) mode loads every group.
+A3_PUB_MODULES_DEFAULT=("${A3_PUB_GROUP_CORE[@]}" "${A3_PUB_GROUP_HISTORY[@]}"
+                        "${A3_PUB_GROUP_SECTIONS[@]}" "${A3_PUB_GROUP_DELIBERATE[@]}"
+                        "${A3_PUB_GROUP_CITATIONS[@]}" "${A3_PUB_GROUP_MULTI[@]}")
+
+# The one Emacs bootstrap: settings, straight.el, the straight build dirs on
+# `load-path', the paths file, then the modules.  Usage:
+#   a3_pub_emacs MODULE... -- MODE-ARG...
+# Each MODULE is loaded with `-l' in order; the MODE-ARGs are appended after.
+# It `exec's, so the script's exit status is Emacs's; --publish-deliberate
+# runs it with `&', where the exec replaces that background subshell and `$!'
+# is Emacs's pid.
+#
+# It sets `load-prefer-newer': the publish modules sit beside untracked .elc
+# files, and `require' otherwise loads a stale .elc over an edited .el — a fix
+# that is silently not what publishes (S1 row 4).
+a3_pub_emacs() {
+  local module_args=()
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+    module_args+=(-l "$1")
+    shift
+  done
+  if [ $# -eq 0 ] || [ "${#module_args[@]}" -eq 0 ]; then
+    echo "a3-pub.sh: internal error: a3_pub_emacs needs MODULE... -- ARG..." >&2
+    exit 2
+  fi
+  shift
+  exec emacs --batch \
+    --eval "(setq native-comp-enable-subr-trampolines nil)" \
+    --eval "(setq load-prefer-newer t)" \
+    --eval "(setq user-emacs-directory (file-name-as-directory (getenv \"A3_PUB_CUSTOM_DIR\")))" \
+    --eval "(setq straight-base-dir user-emacs-directory)" \
+    -l "$STRAIGHT_BOOTSTRAP" \
+    --eval "(straight-use-package 'org-roam)" \
+    --eval "(straight-use-package 'yaml)" \
+    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
+    -L "$LISP_DIR" \
+    -l "$PATHS_FILE" \
+    "${module_args[@]}" \
+    "$@"
+}
 
 # Resolve the Hugo site `data/' directory used for url-history.yaml.
 # Cascade:
@@ -146,6 +244,39 @@ a3_pub_check_math() {
   return 0
 }
 
+# C: the configured notes folder (`a3madkour-pub/org-notes-dir' as the paths
+# file sets it), expanded, without a trailing slash.  Read by a bare
+# `emacs -Q' that loads only the paths file (plain setqs), so it needs no
+# straight.el; only `a3_pub_check_math_in' calls it, and only when the math
+# check runs.  Returns 2 when the paths file sets no notes folder.
+a3_pub_notes_dir() {
+  local dir
+  dir="$(emacs -Q --batch -l "$PATHS_FILE" \
+           --eval '(let ((d (bound-and-true-p a3madkour-pub/org-notes-dir))) (when (and (stringp d) (> (length d) 0)) (princ (directory-file-name (expand-file-name d)))))')" || dir=
+  if [ -z "$dir" ]; then
+    echo "a3-pub.sh: $PATHS_FILE sets no a3madkour-pub/org-notes-dir; cannot find the notes to math-check." >&2
+    echo "  Set it in config.org's Publishing paths block, or rerun with --skip-math-check." >&2
+    return 2
+  fi
+  printf '%s\n' "$dir"
+}
+
+# C: `a3_pub_check_math' over the configured notes folder (`notes') or its
+# parent (`org').  Skipped, without reading the paths file, under
+# A3_PUB_SKIP_MATH_CHECK=1.
+a3_pub_check_math_in() {
+  if [ "$A3_PUB_SKIP_MATH_CHECK" = "1" ]; then
+    return 0
+  fi
+  local notes
+  notes="$(a3_pub_notes_dir)" || return $?
+  if [ "$1" = "org" ]; then
+    a3_pub_check_math "$(dirname "$notes")"
+  else
+    a3_pub_check_math "$notes"
+  fi
+}
+
 # C: parse --skip-math-check anywhere in the arg list.  Done as a
 # pre-pass so the rest of the intercept logic (positional <path>
 # arguments, --eval pass-throughs) is unaffected.
@@ -179,22 +310,7 @@ if [ "${1:-}" = "--check-orphans" ]; then
     echo "a3-pub.sh: cannot find straight bootstrap at $STRAIGHT_BOOTSTRAP" >&2
     exit 2
   fi
-  exec emacs --batch \
-    --eval "(setq native-comp-enable-subr-trampolines nil)" \
-    --eval "(setq load-prefer-newer t)" \
-    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
-    --eval "(setq straight-base-dir user-emacs-directory)" \
-    -l "$STRAIGHT_BOOTSTRAP" \
-    --eval "(straight-use-package 'org-roam)" \
-    --eval "(straight-use-package 'yaml)" \
-    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
-    -L "$LISP_DIR" \
-    -l "$PATHS_FILE" \
-    -l a3madkour-publish \
-    -l a3madkour-publish-registry \
-    -l a3madkour-publish-rewrite \
-    -l a3madkour-publish-assets \
-    -l a3madkour-publish-unpublish \
+  a3_pub_emacs "${A3_PUB_MODULES_CHECK_ORPHANS[@]}" -- \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(a3madkour-pub/begin-publish)" \
     --eval "(let ((result (a3madkour-pub/check-orphans)))
@@ -238,39 +354,8 @@ if [ "${1:-}" = "--publish-living" ]; then
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
   export SITE_DATA_DIR
   # C: source-side math validation before invoking emacs.
-  a3_pub_check_math "$HOME/org/notes" || exit $?
-  exec emacs --batch \
-    --eval "(setq native-comp-enable-subr-trampolines nil)" \
-    --eval "(setq load-prefer-newer t)" \
-    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
-    --eval "(setq straight-base-dir user-emacs-directory)" \
-    -l "$STRAIGHT_BOOTSTRAP" \
-    --eval "(straight-use-package 'org-roam)" \
-    --eval "(straight-use-package 'yaml)" \
-    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
-    -L "$LISP_DIR" \
-    -l "$PATHS_FILE" \
-    -l a3madkour-publish \
-    -l a3madkour-publish-registry \
-    -l a3madkour-publish-rewrite \
-    -l a3madkour-publish-assets \
-    -l a3madkour-publish-unpublish \
-    -l a3madkour-publish-export \
-    -l a3madkour-publish-frontmatter \
-    -l a3madkour-sections \
-    -l a3madkour-publish-living \
-    -l a3madkour-publish-deliberate \
-    -l a3madkour-publish-garden \
-    -l a3madkour-publish-library \
-    -l a3madkour-library-items \
-    -l a3madkour-publish-library-notes \
-    -l a3madkour-publish-research \
-    -l a3madkour-recipe-lint \
-    -l a3madkour-publish-recipes \
-    -l a3madkour-works-lint \
-    -l a3madkour-publish-works \
-    -l a3madkour-publish-bib \
-    -l a3madkour-publish-citations \
+  a3_pub_check_math_in notes || exit $?
+  a3_pub_emacs "${A3_PUB_MODULES_LIVING[@]}" -- \
     --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
@@ -319,50 +404,13 @@ if [ "${1:-}" = "--publish-deliberate" ]; then
   if [ -f "$A3_PUB_TARGET_PATH" ]; then
     a3_pub_check_math "$A3_PUB_TARGET_PATH" || exit $?
   else
-    a3_pub_check_math "$HOME/org" || exit $?
+    a3_pub_check_math_in org || exit $?
   fi
   # Task 26: propagate SIGTERM/SIGINT to the emacs child so its
   # `kill-emacs-hook' runs (a3-pub-async--on-kill cleans tmp-dirs).
   emacs_pid=
   trap 'if [ -n "$emacs_pid" ]; then kill -TERM "$emacs_pid" 2>/dev/null; fi' TERM INT
-  emacs --batch \
-    --eval "(setq native-comp-enable-subr-trampolines nil)" \
-    --eval "(setq load-prefer-newer t)" \
-    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
-    --eval "(setq straight-base-dir user-emacs-directory)" \
-    -l "$STRAIGHT_BOOTSTRAP" \
-    --eval "(straight-use-package 'org-roam)" \
-    --eval "(straight-use-package 'yaml)" \
-    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
-    -L "$LISP_DIR" \
-    -l "$PATHS_FILE" \
-    -l a3madkour-publish \
-    -l a3madkour-publish-registry \
-    -l a3madkour-publish-rewrite \
-    -l a3madkour-publish-assets \
-    -l a3madkour-publish-unpublish \
-    -l a3madkour-publish-export \
-    -l a3madkour-publish-frontmatter \
-    -l a3madkour-sections \
-    -l a3madkour-publish-living \
-    -l a3madkour-publish-deliberate \
-    -l a3madkour-publish-garden \
-    -l a3madkour-publish-library \
-    -l a3madkour-library-items \
-    -l a3madkour-publish-library-notes \
-    -l a3madkour-publish-research \
-    -l a3madkour-recipe-lint \
-    -l a3madkour-publish-recipes \
-    -l a3madkour-works-lint \
-    -l a3madkour-publish-works \
-    -l a3madkour-publish-essays \
-    -l a3madkour-publish-poetry \
-    -l a3madkour-publish-bib \
-    -l a3madkour-publish-citations \
-    -l a3madkour-publish-multi-filter \
-    -l a3madkour-publish-multi-pdf \
-    -l a3madkour-publish-multi-word \
-    -l a3madkour-publish-multi \
+  a3_pub_emacs "${A3_PUB_MODULES_DELIBERATE[@]}" -- \
     --eval "(setq a3madkour-recipe-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_RECIPE_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-works-lint-enabled (not (equal (getenv \"A3_PUB_SKIP_WORKS_CHECK\") \"1\")))" \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
@@ -395,26 +443,8 @@ if [ "${1:-}" = "--sync-citations" ]; then
   SITE_DATA_DIR="$(a3_pub_resolve_site_data_dir)" || exit 1
   export SITE_DATA_DIR
   # C: source-side math validation across all org dirs (sync walks the whole corpus).
-  a3_pub_check_math "$HOME/org" || exit $?
-  exec emacs --batch \
-    --eval "(setq native-comp-enable-subr-trampolines nil)" \
-    --eval "(setq load-prefer-newer t)" \
-    --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
-    --eval "(setq straight-base-dir user-emacs-directory)" \
-    -l "$STRAIGHT_BOOTSTRAP" \
-    --eval "(straight-use-package 'org-roam)" \
-    --eval "(straight-use-package 'yaml)" \
-    --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
-    -L "$LISP_DIR" \
-    -l "$PATHS_FILE" \
-    -l a3madkour-publish \
-    -l a3madkour-publish-registry \
-    -l a3madkour-publish-rewrite \
-    -l a3madkour-publish-assets \
-    -l a3madkour-publish-unpublish \
-    -l a3madkour-publish-history \
-    -l a3madkour-publish-bib \
-    -l a3madkour-publish-citations \
+  a3_pub_check_math_in org || exit $?
+  a3_pub_emacs "${A3_PUB_MODULES_SYNC_CITATIONS[@]}" -- \
     --eval "(setq a3madkour-pub/site-data-dir (getenv \"SITE_DATA_DIR\"))" \
     --eval "(when (getenv \"A3_PUB_BIB_PATH\") (setq a3madkour-pub-bib/library-path (getenv \"A3_PUB_BIB_PATH\")))" \
     --eval "(a3madkour-pub/begin-publish)" \
@@ -430,39 +460,7 @@ if [ ! -f "$STRAIGHT_BOOTSTRAP" ]; then
   exit 2
 fi
 
-exec emacs --batch \
-    --eval "(setq native-comp-enable-subr-trampolines nil)" \
-  --eval "(setq load-prefer-newer t)" \
-  --eval "(setq user-emacs-directory \"$CUSTOM_DIR/\")" \
-  --eval "(setq straight-base-dir user-emacs-directory)" \
-  -l "$STRAIGHT_BOOTSTRAP" \
-  --eval "(straight-use-package 'org-roam)" \
-  --eval "(straight-use-package 'yaml)" \
-  --eval "(dolist (dir (directory-files (expand-file-name \"straight/build/\" user-emacs-directory) t \"^[^.]\")) (when (file-directory-p dir) (add-to-list 'load-path dir)))" \
-  -L "$LISP_DIR" \
-  -l "$PATHS_FILE" \
-  -l a3madkour-publish \
-  -l a3madkour-publish-registry \
-  -l a3madkour-publish-rewrite \
-  -l a3madkour-publish-assets \
-  -l a3madkour-publish-unpublish \
-  -l a3madkour-publish-export \
-  -l a3madkour-publish-frontmatter \
-  -l a3madkour-sections \
-  -l a3madkour-publish-living \
-  -l a3madkour-publish-deliberate \
-  -l a3madkour-publish-garden \
-  -l a3madkour-publish-library \
-  -l a3madkour-publish-research \
-  -l a3madkour-recipe-lint \
-  -l a3madkour-publish-recipes \
-  -l a3madkour-works-lint \
-  -l a3madkour-publish-works \
-  -l a3madkour-publish-essays \
-  -l a3madkour-publish-multi-filter \
-  -l a3madkour-publish-multi-pdf \
-  -l a3madkour-publish-multi-word \
-  -l a3madkour-publish-multi \
+a3_pub_emacs "${A3_PUB_MODULES_DEFAULT[@]}" -- \
   `# Both lint gates run INSIDE the emacs batch process, so each --skip-*` \
   `# flag has to be translated into a setq on EVERY path that can publish.` \
   `# The recipe line was missing here, which meant --skip-recipe-check did` \

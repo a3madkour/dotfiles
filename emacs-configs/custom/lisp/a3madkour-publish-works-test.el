@@ -684,28 +684,27 @@ write the org source.  `slug-path' must be bound by BODY's caller via
 ;; only works on a path that translates it into a `setq'.  The default
 ;; ready-path block loaded `a3madkour-recipe-lint' but never set
 ;; `a3madkour-recipe-lint-enabled', so `--skip-recipe-check' was parsed,
-;; exported and then never read — it silently did nothing there.  A per-block
-;; assertion rather than a total count, because a count passes as soon as the
-;; two numbers match for any reason.
+;; exported and then never read — it silently did nothing there.  Asserted per
+;; publishing path on the arguments the script actually passes to emacs
+;; (recorded by the fake emacs of `a3-pub-argv-test'), rather than as a total
+;; count, because a count passes as soon as the two numbers match for any
+;; reason.
+
+(require 'a3-pub-argv-test)
 
 (ert-deftest a3madkour-pub-works--a3-pub-sh-wires-each-lint-flag-on-each-path ()
-  (let* ((script (expand-file-name
-                  "a3-pub.sh"
-                  (file-name-directory (locate-library "a3madkour-publish-works"))))
-         (text (with-temp-buffer (insert-file-contents script) (buffer-string)))
-         ;; One `emacs --batch' invocation per publish path.
-         (blocks (cdr (split-string text "emacs --batch")))
-         (checked 0))
-    (should (file-exists-p script))
-    (should (> (length blocks) 2))
-    (dolist (spec '(("-l a3madkour-recipe-lint" . "a3madkour-recipe-lint-enabled")
-                    ("-l a3madkour-works-lint"  . "a3madkour-works-lint-enabled")))
-      (dolist (b blocks)
-        (when (string-match-p (regexp-quote (car spec)) b)
-          (setq checked (1+ checked))
-          (should (string-match-p (regexp-quote (cdr spec)) b)))))
-    ;; Not vacuous: three publish paths load each of the two lint modules.
-    (should (= checked 6))))
+  (skip-unless (a3-pub-argv-test--straight-p))
+  (dolist (mode '("publish-living" "publish-deliberate" "default"))
+    (let ((r (a3-pub-argv-test--run-mode mode)))
+      (should (= (car r) 0))
+      (dolist (spec '(("a3madkour-recipe-lint" "a3madkour-recipe-lint-enabled"
+                       "A3_PUB_SKIP_RECIPE_CHECK")
+                      ("a3madkour-works-lint" "a3madkour-works-lint-enabled"
+                       "A3_PUB_SKIP_WORKS_CHECK")))
+        (should (member (nth 0 spec) (cdr r)))
+        (should (member (format "(setq %s (not (equal (getenv \"%s\") \"1\")))"
+                                (nth 1 spec) (nth 2 spec))
+                        (cdr r)))))))
 
 (provide 'a3madkour-publish-works-test)
 
