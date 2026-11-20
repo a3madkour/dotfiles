@@ -109,5 +109,14 @@ it on disk as \"new\" with a later mtime, then call FN with (FILE BUFFER)."
       (when (buffer-live-p buf) (kill-buffer buf))
       (delete-directory dir t))))
 
+(ert-deftest a3madkour-org-test-bracket-link-re ()
+  (let ((re a3madkour-org-bracket-link-re))
+    (should (string-match re "a [[file:x.png]] b"))
+    (should (equal (match-string 1 "a [[file:x.png]] b") "file:x.png"))
+    (should (null (match-string 2 "a [[file:x.png]] b")))
+    (should (string-match re "[[id:u][the text]]"))
+    (should (equal (match-string 2 "[[id:u][the text]]") "the text"))
+    (should-not (string-match re "[[a][b [c]]]"))))
+
 (provide 'a3madkour-org-test)
 ;;; a3madkour-org-test.el ends here

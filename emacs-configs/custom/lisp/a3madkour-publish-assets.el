@@ -12,6 +12,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'a3madkour-org)
 (require 'a3madkour-publish-paths)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-rewrite)         ; for --html-escape
@@ -216,7 +217,7 @@ A `::search' suffix (`[[file:paper.pdf::5]]') is split off first with
       (insert-file-contents org-file)
       (goto-char (point-min))
       (while (re-search-forward
-              "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
+              a3madkour-org-bracket-link-re
               nil t)
         (let* ((raw-path (car (a3madkour-pub-rewrite--split-search
                                (match-string 1))))       ; drop `::search'
@@ -381,7 +382,7 @@ asset move and the link rewrite in `git status' after the publish."
       (goto-char (point-min))
       (let ((case-fold-search nil))
         (while (re-search-forward
-                "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
+                a3madkour-org-bracket-link-re
                 nil t)
           (let* ((split (a3madkour-pub-rewrite--split-search (match-string 1)))
                  (path (replace-regexp-in-string "\\`file:" "" (car split)))

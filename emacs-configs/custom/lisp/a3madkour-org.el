@@ -137,6 +137,12 @@ safely: signal a `user-error' naming what and change nothing."
         (revert-buffer t t t)))
     buf))
 
+(defconst a3madkour-org-bracket-link-re
+  "\\[\\[\\([^][]+\\)\\(?:\\]\\[\\([^][]+\\)\\)?\\]\\]"
+  "Regex matching an org bracket link `[[path]]' or `[[path][text]]'.
+Group 1 is the path, group 2 the description or unmatched.  Brackets are
+not allowed inside either part.")
+
 (provide 'a3madkour-org)
 
 ;;; a3madkour-org.el ends here

@@ -7,6 +7,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'a3madkour-org)
 (require 'subr-x)
 (require 'a3madkour-publish-paths)
 (require 'org)
@@ -221,10 +222,6 @@ safe to treat as publishable."
                                (buffer-substring-no-properties (car r) (cdr r))))))
           (and (not (string-empty-p s)) s))))))
 
-(defconst a3madkour-library--link-re
-  "\\[\\[\\([^][]+\\)\\(\\]\\[[^][]+\\)?\\]\\]"
-  "An org bracket link: group 1 the path, group 2 the `][desc' part.")
-
 (defun a3madkour-library--absolute-link-path (path dir)
   "PATH made absolute against DIR when it is a relative file path, else PATH.
 A `file:' path and a scheme-less path that is `./'/`../'-relative or
@@ -317,16 +314,16 @@ Signals an error when FILE has no usable `:site:' section."
       (with-temp-file tmp
         (insert (apply #'concat (nreverse head)) "\n" body "\n")
         (goto-char (point-min))
-        (while (re-search-forward a3madkour-library--link-re nil t)
+        (while (re-search-forward a3madkour-org-bracket-link-re nil t)
           ;; The path test runs `string-match', so take the bounds first.
           (let ((beg (match-beginning 0))
                 (end (match-end 0))
                 (path (match-string 1))
-                (desc (or (match-string 2) "")))
+                (desc (match-string 2)))
             (delete-region beg end)
             (goto-char beg)
             (insert "[[" (a3madkour-library--absolute-link-path path dir)
-                    desc "]]"))))
+                    (if desc (concat "][" desc) "") "]]"))))
       tmp)))
 
 (defun a3madkour-library/preview (file)

@@ -17,6 +17,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'a3madkour-org)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-id)
 
@@ -396,13 +397,6 @@ See parent spec §6 for the per-link-type rules."
       (error "rewrite-link: scheme %S not yet handled (this branch lands in a later task)"
              scheme)))))
 
-(defconst a3madkour-pub-rewrite--bracket-link-re
-  "\\[\\[\\([^][]+\\)\\(?:\\]\\[\\([^][]+\\)\\)?\\]\\]"
-  "Regex matching an org bracket-link form `[[path]]' or `[[path][text]]'.
-Group 1 = path, group 2 = optional display text.  Rejects nested
-brackets (`[^][]+') — org's bracket-link syntax does not permit them in
-either path or text, so this is sufficient for our scan.")
-
 (defun a3madkour-pub-rewrite/rewrite-buffer-links (source-note-id &optional source-file)
   "Scan the current buffer for org bracket-link forms; rewrite each in place.
 
@@ -427,7 +421,7 @@ would never resolve against B's hyphen-slug bundle paths."
   (let ((warnings nil))
     (save-excursion
       (goto-char (point-min))
-      (while (re-search-forward a3madkour-pub-rewrite--bracket-link-re nil t)
+      (while (re-search-forward a3madkour-org-bracket-link-re nil t)
         ;; Capture bounds and text NOW, before any string-match call clobbers
         ;; the global match data.
         (let* ((match-beg (match-beginning 0))
