@@ -28,6 +28,9 @@
 (require 'a3madkour-publish-paths)
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
+(require 'a3madkour-org)              ; for bracket-link-re
+(require 'a3madkour-publish-rewrite)   ; for --split-search
+(require 'a3madkour-publish-assets)    ; for --asset-normalize-link-path
 
 (defcustom a3madkour-pub-site-content-dir nil
   "Root of the Hugo `content/' tree for the site repo, or nil to derive.
@@ -512,69 +515,104 @@ If `git mv' fails (git not installed, not a git repo), falls through to
       (rename-file (directory-file-name old-dir) (directory-file-name new-dir))
       :renamed-mv))))
 
+(defun a3madkour-pub--unpublish-migrate-link-path (path org-file old-slug new-slug)
+  "PATH with its `page/OLD-SLUG/' segment renamed to NEW-SLUG, or nil.
+
+PATH is a link path with any `file:' prefix and `::search' suffix already
+set aside.  It qualifies when it resolves (via
+`a3madkour-pub--asset-normalize-link-path' against ORG-FILE) to a path
+under `<asset-root>/page/<OLD-SLUG>/'; the files themselves need not exist
+(the directory has already been renamed when this runs).  Only the one
+`page/OLD-SLUG/' segment is replaced, the rest of PATH kept as written.
+The candidate segment is chosen so that the rewritten PATH resolves to the
+same file under `page/NEW-SLUG/'; returns nil when PATH does not qualify
+or no single segment substitution achieves that.  Match data is
+preserved, so a caller may `replace-match' afterwards."
+  (save-match-data
+    (let* ((root (file-name-as-directory
+                  (expand-file-name
+                   (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root))))
+           (old-dir (concat root "page/" old-slug "/"))
+           (abs (a3madkour-pub--asset-normalize-link-path path org-file)))
+      (when (string-prefix-p old-dir abs)
+        (let ((want (concat root "page/" new-slug "/"
+                            (substring abs (length old-dir))))
+              (re (concat "\\(?:\\`\\|/\\)\\(page/" (regexp-quote old-slug) "/\\)"))
+              (old-seg (concat "page/" old-slug "/"))
+              (case-fold-search nil)
+              (start 0)
+              candidates)
+          ;; Every `page/OLD-SLUG/' that begins a path segment, last first.
+          (while (string-match re path start)
+            (push (match-beginning 1) candidates)
+            (setq start (1+ (match-beginning 1))))
+          (cl-some (lambda (pos)
+                     (let ((cand (concat (substring path 0 pos)
+                                         "page/" new-slug "/"
+                                         (substring path (+ pos (length old-seg))))))
+                       (and (equal (a3madkour-pub--asset-normalize-link-path
+                                    cand org-file)
+                                   want)
+                            cand)))
+                   candidates))))))
+
 (defun a3madkour-pub--unpublish-bulk-rewrite-source-links (old-slug new-slug &optional org-notes-dir)
-  "Walk ORG-NOTES-DIR for .org files; substitute `page/<OLD-SLUG>/' →
-`page/<NEW-SLUG>/' across three link forms:
+  "Point links to `<asset-root>/page/<OLD-SLUG>/' at `page/<NEW-SLUG>/'.
 
-  ./assets/page/<old>/...         → ./assets/page/<new>/...
-  <root>/page/<old>/... (as ~/...) → <root>/page/<new>/...
-  <root>/page/<old>/... (expanded) → <root>/page/<new>/...
-
-where <root> is `a3madkour-pub-canonical-asset-root'.
-
-ORG-NOTES-DIR defaults to `a3madkour-pub/org-notes-dir'.
+Visits every bracket link in every file of
+`a3madkour-pub-registry-living-files' or, when ORG-NOTES-DIR is given,
+every `.org' file under it.  A link qualifies when its path, with a
+leading `file:' and a `::search' suffix set aside, resolves to a path
+under `<asset-root>/page/<OLD-SLUG>/' (`a3madkour-pub-canonical-asset-root';
+`./assets/' is its alias, other relative paths resolve against the
+file's directory).  Matching is by path, not by file existence: the
+asset directory has already been renamed when this runs.  Only the
+`OLD-SLUG' path segment changes; spelling, `file:' prefix, `::search'
+and description stay as written (see
+`a3madkour-pub--unpublish-migrate-link-path').
 
 Returns a plist:
-  :modified  ((file . substitution-count) ...)
+  :modified  ((file . rewritten-link-count) ...)
   :warnings  (\"WARN: failed to write back FILE: REASON\" ...)
 
-Idempotent: re-runs after a successful pass produce zero modifications
-(the substitution regex doesn't match the new slug)."
-  ;; Same slug: nothing to rewrite (and a rescan could never finish).
+A file is written only when at least one link changed.  Idempotent:
+after a successful pass no link resolves under the old slug's directory."
+  ;; Same slug: nothing to rewrite.
   (if (equal old-slug new-slug)
       (list :modified nil :warnings nil)
-    (let* ((dir (or org-notes-dir (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)))
-           (root (file-name-as-directory
-                  (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)))
-           (patterns (cons
-                      (cons (format "\\./assets/page/%s/" (regexp-quote old-slug))
-                            (format "./assets/page/%s/" new-slug))
-                      ;; The root as the author may have typed it: abbreviated
-                      ;; (`~/...') and expanded.
-                      (mapcar (lambda (r)
-                                (cons (format "%spage/%s/" (regexp-quote r)
-                                              (regexp-quote old-slug))
-                                      (format "%spage/%s/" r new-slug)))
-                              (delete-dups
-                               (list (abbreviate-file-name root) root)))))
-           modified warnings)
-      (dolist (file (directory-files-recursively dir "\\.org\\'"))
-        (let* ((orig (with-temp-buffer
-                       (insert-file-contents file)
-                       (buffer-string)))
-               (new orig)
-               (count 0))
-          ;; One left-to-right pass per pattern: replaced text is never
-          ;; rescanned, so a NEW-SLUG that contains OLD-SLUG cannot loop.
-          (dolist (p patterns)
-            (let ((replacement (cdr p)))
-              (setq new (replace-regexp-in-string
-                         (car p)
-                         (lambda (_match)
-                           (setq count (1+ count))
-                           replacement)
-                         new t t))))
-          (when (> count 0)
-            (condition-case err
-                (progn
-                  (with-temp-buffer
-                    (insert new)
-                    (write-region (point-min) (point-max) file nil 'silent))
-                  (push (cons file count) modified))
-              (error
-               (push (format "WARN: failed to write back %s: %s"
-                             file (error-message-string err))
-                     warnings))))))
+    (let ((files (if org-notes-dir
+                     (directory-files-recursively org-notes-dir "\\.org\\'")
+                   (a3madkour-pub-registry-living-files)))
+          modified warnings)
+      (dolist (file files)
+        (with-temp-buffer
+          (insert-file-contents file)
+          (goto-char (point-min))
+          (let ((case-fold-search nil)
+                (count 0))
+            ;; Point moves past each replacement, so replaced text is never
+            ;; rescanned and a NEW-SLUG containing OLD-SLUG cannot loop.
+            (while (re-search-forward a3madkour-org-bracket-link-re nil t)
+              (let* ((split (a3madkour-pub-rewrite--split-search (match-string 1)))
+                     (prefix (if (string-prefix-p "file:" (car split)) "file:" ""))
+                     (path (substring (car split) (length prefix)))
+                     (search (cdr split))
+                     (new-path (a3madkour-pub--unpublish-migrate-link-path
+                                path file old-slug new-slug)))
+                (when new-path
+                  (setq count (1+ count))
+                  (replace-match (concat prefix new-path
+                                         (and search (concat "::" search)))
+                                 t t nil 1))))
+            (when (> count 0)
+              (condition-case err
+                  (progn
+                    (write-region (point-min) (point-max) file nil 'silent)
+                    (push (cons file count) modified))
+                (error
+                 (push (format "WARN: failed to write back %s: %s"
+                               file (error-message-string err))
+                       warnings)))))))
       (list :modified (nreverse modified)
             :warnings (nreverse warnings)))))
 

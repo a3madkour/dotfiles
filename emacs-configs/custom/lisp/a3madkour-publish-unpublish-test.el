@@ -1579,6 +1579,51 @@ the sweep skips it and the manifest never advances."
         (should (equal (a3-pub-unpublish-test--read-file note)
                        "[[./assets/page/foo-bar/a.png]] [[./assets/page/foo-bar/b.png]]"))))))
 
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-covers-recipes-folder ()
+  "With no directory given, every living folder is walked, recipes too."
+  (let* ((top (make-temp-file "a3-pub-living-" t))
+         (notes (expand-file-name "notes" top))
+         (recipes (expand-file-name "recipes" top))
+         (toast (expand-file-name "toast.org" recipes))
+         (a3madkour-pub/org-notes-dir notes)
+         (a3madkour-pub-recipes-dir recipes)
+         (a3madkour-pub-canonical-asset-root (expand-file-name "assets" notes)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (a3-pub-unpublish-test--write-org
+           recipes "toast.org" "[[file:../notes/assets/page/old/x.png][pic]]")
+          (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new")))
+            (should (equal (plist-get r :modified) (list (cons toast 1))))
+            (should (equal (a3-pub-unpublish-test--read-file toast)
+                           "[[file:../notes/assets/page/new/x.png][pic]]"))))
+      (delete-directory top t))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-keeps-spelling-and-search ()
+  "Only the slug segment changes; spelling, `::search' and siblings stay.
+The asset root is a `~/' string that is never created: only its spelling
+matters here."
+  (let* ((notes (make-temp-file "a3-pub-notes-" t))
+         (a (expand-file-name "a.org" notes))
+         (a3madkour-pub/org-notes-dir notes)
+         (a3madkour-pub-recipes-dir nil)
+         (abbrev-root "~/a3-pub-test-assets")
+         (a3madkour-pub-canonical-asset-root abbrev-root))
+    (unwind-protect
+        (progn
+          (a3-pub-unpublish-test--write-org
+           notes "a.org"
+           (format "[[./assets/page/old/p.pdf::5]] [[%s/page/old/y.png]] [[./assets/page/older/z.png]]"
+                   abbrev-root))
+          (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new")))
+            (should (equal (cdar (plist-get r :modified)) 2))
+            (let ((text (a3-pub-unpublish-test--read-file a)))
+              (should (string-match-p (regexp-quote "[[./assets/page/new/p.pdf::5]]") text))
+              (should (string-match-p (regexp-quote (format "[[%s/page/new/y.png]]" abbrev-root))
+                                      text))
+              (should (string-match-p (regexp-quote "[[./assets/page/older/z.png]]") text)))))
+      (delete-directory notes t))))
+
 (defun a3-pub-unpublish-test--finish-publish-moving (old-url new-url)
   "Run finish-publish for one note moving OLD-URL -> NEW-URL.
 Return (RENAME-CALLS REWRITE-CALLS OLD-BUNDLE-EXISTS-P)."
