@@ -134,7 +134,7 @@ know), :amounts ((QTY . UNIT) ...) and :recipes (titles)."
           table)))
 
 (defun a3madkour-groceries--strip-note (text)
-  "TEXT without its last top-level bracketed group and the space before it.
+  "TEXT without its last top-level parenthesised group and the space before it.
 Nil when trimmed TEXT does not end in a balanced \"(...)\" group."
   (let* ((text (string-trim-right text))
          (i (1- (length text))) (depth 0) (start nil))
@@ -157,12 +157,12 @@ still matches."
     (while (not done)
       (let* ((entry (a3madkour-ingredients/lookup candidate))
              (key (a3madkour-ingredients/normalize
-                   (if entry (plist-get entry :name) candidate))))
+                   (if entry (plist-get entry :name) candidate)))
+             (stripped (a3madkour-groceries--strip-note candidate)))
         (cond
          ((or entry (and table (gethash key table)))
           (setq found (cons key entry) done t))
-         ((a3madkour-groceries--strip-note candidate)
-          (setq candidate (a3madkour-groceries--strip-note candidate)))
+         (stripped (setq candidate stripped))
          (t (setq done t)))))
     found))
 
@@ -215,12 +215,12 @@ for, not typed by the owner.  Notes in brackets are dropped as in
       (dolist (row (a3madkour-recipes/rows (cdr recipe)))
         (puthash (a3madkour-ingredients/normalize (plist-get row :item)) t names)))
     (while (not done)
-      (cond
-       ((gethash (a3madkour-ingredients/normalize candidate) names)
-        (setq found t done t))
-       ((a3madkour-groceries--strip-note candidate)
-        (setq candidate (a3madkour-groceries--strip-note candidate)))
-       (t (setq done t))))
+      (let ((stripped (a3madkour-groceries--strip-note candidate)))
+        (cond
+         ((gethash (a3madkour-ingredients/normalize candidate) names)
+          (setq found t done t))
+         (stripped (setq candidate stripped))
+         (t (setq done t)))))
     found))
 
 (defun a3madkour-groceries--render (parts)

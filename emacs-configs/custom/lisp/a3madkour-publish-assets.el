@@ -340,23 +340,6 @@ responsible for creating DEST's directory if needed."
       src dest dry-run (lambda (r) (setq result r))))
     result))
 
-(defun a3madkour-pub--asset-rewrite-source-link (org-file old-link new-link)
-  "In ORG-FILE, replace every occurrence of OLD-LINK with NEW-LINK.
-
-OLD-LINK and NEW-LINK are the full `[[...]]' bracket forms.  Match is
-literal (case-sensitive, no regex interpretation); replacement is literal.
-File is saved to disk after rewriting.
-
-This is the visible side effect of auto-remediation — author sees both the
-asset move and the link rewrite in `git status' after the publish."
-  (with-temp-buffer
-    (insert-file-contents org-file)
-    (goto-char (point-min))
-    (let ((case-fold-search nil))
-      (while (search-forward old-link nil t)
-        (replace-match new-link t t)))
-    (write-region (point-min) (point-max) org-file nil 'silent)))
-
 (defun a3madkour-pub--asset-rewrite-source-links-to
     (org-file abs-target new-path &optional count-only)
   "Point every bracket link in ORG-FILE that resolves to ABS-TARGET at NEW-PATH.

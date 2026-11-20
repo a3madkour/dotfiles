@@ -318,50 +318,6 @@
             (should (string-match-p "would move" (plist-get result :info))))
         (when (file-exists-p src) (delete-file src))))))
 
-;; -- --asset-rewrite-source-link --
-
-(ert-deftest a3madkour-pub-assets-test/rewrite-source-link-basic ()
-  "Find OLD link form in org buffer, replace with NEW."
-  (a3-pub-assets-test--with-tmp-root root
-    (let* ((org-file (expand-file-name "note.org" root))
-           (old "[[/home/u/Downloads/x.png]]")
-           (new "[[./assets/page/foo/x.png]]"))
-      (with-temp-file org-file
-        (insert "Some text.\nHere is " old " in the doc.\n"))
-      (a3madkour-pub--asset-rewrite-source-link org-file old new)
-      (with-temp-buffer
-        (insert-file-contents org-file)
-        (should-not (search-forward old nil t))
-        (goto-char (point-min))
-        (should (search-forward new nil t))))))
-
-(ert-deftest a3madkour-pub-assets-test/rewrite-source-link-with-display-text ()
-  "[[OLD-PATH][TEXT]] gets path rewritten; text preserved."
-  (a3-pub-assets-test--with-tmp-root root
-    (let* ((org-file (expand-file-name "note.org" root))
-           (old "[[/home/u/x.png][My pic]]")
-           (new "[[./assets/page/foo/x.png][My pic]]"))
-      (with-temp-file org-file (insert "Doc with " old "."))
-      (a3madkour-pub--asset-rewrite-source-link org-file old new)
-      (with-temp-buffer
-        (insert-file-contents org-file)
-        (should (search-forward new nil t))))))
-
-(ert-deftest a3madkour-pub-assets-test/rewrite-source-link-multiple-occurrences ()
-  "All occurrences of OLD get rewritten."
-  (a3-pub-assets-test--with-tmp-root root
-    (let* ((org-file (expand-file-name "note.org" root))
-           (old "[[/x.png]]")
-           (new "[[./y.png]]"))
-      (with-temp-file org-file
-        (insert old "\nmid\n" old "\nend\n" old))
-      (a3madkour-pub--asset-rewrite-source-link org-file old new)
-      (with-temp-buffer
-        (insert-file-contents org-file)
-        (let ((count 0))
-          (while (search-forward new nil t) (cl-incf count))
-          (should (= 3 count)))))))
-
 ;; -- rewrite-asset-link: full dispatch --
 
 (ert-deftest a3madkour-pub-assets-test/rewrite-asset-page-image ()
