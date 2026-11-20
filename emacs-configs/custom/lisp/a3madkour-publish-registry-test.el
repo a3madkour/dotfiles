@@ -88,6 +88,50 @@ and pulls in no handler or dispatch module."
                   "--eval" "(kill-emacs (if (or (featurep 'a3madkour-publish-garden) (featurep 'a3madkour-publish-deliberate) (featurep 'a3madkour-publish-essays) (featurep 'a3madkour-publish)) 3 0))")))
     (should (equal status 0))))
 
+;; -- the folders living publish walks --
+
+(ert-deftest a3madkour-pub-registry-test-living-folders-include-recipes ()
+  (let* ((root (make-temp-file "a3-registry-folders-" t))
+         (notes (expand-file-name "notes" root))
+         (recipes (expand-file-name "recipes" root)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (make-directory recipes t)
+          (let ((a3madkour-pub/org-notes-dir notes)
+                (a3madkour-pub-recipes-dir recipes))
+            (should (equal (a3madkour-pub-registry-living-folders)
+                           (list (file-name-as-directory notes)
+                                 (file-name-as-directory recipes))))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-registry-test-living-folders-skip-unset-recipes ()
+  (let* ((root (make-temp-file "a3-registry-folders-" t))
+         (notes (expand-file-name "notes" root)))
+    (unwind-protect
+        (let ((a3madkour-pub/org-notes-dir notes)
+              (a3madkour-pub-recipes-dir nil))
+          (should (equal (a3madkour-pub-registry-living-folders)
+                         (list (file-name-as-directory notes)))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-registry-test-living-folders-skip-missing-recipes-dir ()
+  (let* ((root (make-temp-file "a3-registry-folders-" t))
+         (notes (expand-file-name "notes" root)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (let ((a3madkour-pub/org-notes-dir notes)
+                (a3madkour-pub-recipes-dir (expand-file-name "no-such-recipes" root)))
+            (should (equal (a3madkour-pub-registry-living-folders)
+                           (list (file-name-as-directory notes))))
+            (should (listp (a3madkour-pub-registry-living-files)))))
+      (delete-directory root t))))
+
+(ert-deftest a3madkour-pub-registry-test-recipes-folder-is-registered ()
+  (should (eq (a3madkour-pub-registry/get "recipes" :folder)
+              'a3madkour-pub-recipes-dir)))
+
 (provide 'a3madkour-publish-registry-test)
 
 ;;; a3madkour-publish-registry-test.el ends here

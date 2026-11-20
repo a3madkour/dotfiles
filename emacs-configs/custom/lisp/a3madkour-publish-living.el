@@ -28,13 +28,13 @@
 
 (defun a3madkour-pub-living--collect-triples ()
   "Return (section file handler) triples for every living-section file
-under `a3madkour-pub/org-notes-dir'.
+under the living folders (`a3madkour-pub-registry-living-folders': the
+notes tree, and the recipes folder when it is set).
 
-Walks the notes tree exactly once.  HANDLER is the registry's symbol; it
+Walks each folder exactly once.  HANDLER is the registry's symbol; it
 is not checked here (see `a3madkour-pub-living--dispatch')."
   (let ((triples nil))
-    (dolist (file (directory-files-recursively
-                   (a3madkour-pub/path 'a3madkour-pub/org-notes-dir) "\\.org\\'"))
+    (dolist (file (a3madkour-pub-registry-living-files))
       (let ((section (a3madkour-pub/note-section file)))
         (when section
           (let ((handler (a3madkour-pub-registry/handler section 'living)))

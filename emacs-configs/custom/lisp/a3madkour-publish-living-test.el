@@ -311,6 +311,32 @@ handler-less (streams) sections are skipped."
                           'a3madkour-pub-garden/publish-garden-file)))))
       (delete-directory dir t))))
 
+(ert-deftest a3madkour-pub-living-test-collects-a-marked-recipe ()
+  "A recipe marked to publish, in the recipes folder, yields a triple;
+an unmarked recipe and the keyword-less ingredient registry do not."
+  (let* ((root (make-temp-file "a3-living-recipes" t))
+         (notes (expand-file-name "notes" root))
+         (recipes (expand-file-name "recipes" root))
+         (toast (expand-file-name "toast.org" recipes)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (make-directory recipes t)
+          (with-temp-file toast
+            (insert "#+TITLE: Toast\n#+HUGO_SECTION: recipes\n#+HUGO_PUBLISH: t\n"))
+          (with-temp-file (expand-file-name "plain.org" recipes)
+            (insert "#+TITLE: Plain\n#+HUGO_SECTION: recipes\n"))
+          (with-temp-file (expand-file-name "ingredients.org" recipes)
+            (insert "* Bread\n"))
+          (let ((a3madkour-pub/org-notes-dir notes)
+                (a3madkour-pub-recipes-dir recipes))
+            (a3madkour-pub--reset-metadata-cache)
+            (should (equal (a3madkour-pub-living--collect-triples)
+                           `(("recipes" ,toast
+                              a3madkour-pub-recipes/publish-recipe-file))))))
+      (a3madkour-pub--reset-metadata-cache)
+      (delete-directory root t))))
+
 (ert-deftest a3madkour-pub-living-test/unloaded-handler-is-a-loud-per-file-error ()
   "A registered handler that is not `fboundp' reports `err' for its file
 and logs a `handler-missing' step naming the function; the other files

@@ -21,6 +21,8 @@
 
 ;;; Code:
 
+(require 'a3madkour-publish-paths)
+
 (defconst a3madkour-pub-registry
   '(("essays"             :mode deliberate
      :folder a3madkour-pub/essays-dir
@@ -57,6 +59,7 @@
      :data-file "watching.yaml"  :default-medium "film")
     ("streams"            :mode nil :handler nil)
     ("recipes"            :mode living
+     :folder a3madkour-pub-recipes-dir
      :handler a3madkour-pub-recipes/publish-recipe-file)
     ("about"              :mode nil :handler nil))
   "Every publishable section, keyed by its `#+HUGO_SECTION:' slash form.
@@ -114,6 +117,42 @@ note's `#+HUGO_SECTION:', which `a3madkour-pub/valid-section-p' guards."
     (and entry
          (eq (plist-get entry :mode) mode)
          (plist-get entry :handler))))
+
+(defun a3madkour-pub-registry-living-folders ()
+  "The folders living publish walks, as absolute directory names.
+One per distinct `:folder' variable of the living sections, in registry
+order, without duplicates.  `a3madkour-pub/org-notes-dir' is resolved with
+`a3madkour-pub/path', so an unset notes folder signals.  Any other
+folder variable is included only when it is a non-empty string naming
+an existing directory; an unset (nil) or missing folder, such as an
+unset `a3madkour-pub-recipes-dir', is skipped."
+  (let (out)
+    (dolist (section (a3madkour-pub-registry/sections-with-mode 'living))
+      (let* ((var (a3madkour-pub-registry/get section :folder))
+             (value (and var (boundp var) (symbol-value var)))
+             (dir (cond
+                   ((eq var 'a3madkour-pub/org-notes-dir)
+                    (a3madkour-pub/path var))
+                   ((and (stringp value) (not (string-empty-p value))
+                         (file-directory-p (expand-file-name value)))
+                    (expand-file-name value)))))
+        (when dir
+          (let ((dir (file-name-as-directory dir)))
+            (unless (member dir out)
+              (push dir out))))))
+    (nreverse out)))
+
+(defun a3madkour-pub-registry-living-files ()
+  "Every `.org' file under `a3madkour-pub-registry-living-folders'.
+Recursive, without duplicates, folder by folder in registry order."
+  (let ((seen (make-hash-table :test 'equal))
+        out)
+    (dolist (dir (a3madkour-pub-registry-living-folders))
+      (dolist (file (directory-files-recursively dir "\\.org\\'"))
+        (unless (gethash file seen)
+          (puthash file t seen)
+          (push file out))))
+    (nreverse out)))
 
 (defun a3madkour-pub-section/symbol (section)
   "The hyphen-form symbol of slash-form SECTION.

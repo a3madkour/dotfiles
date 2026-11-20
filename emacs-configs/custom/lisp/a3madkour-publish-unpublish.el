@@ -26,6 +26,7 @@
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-history)
 (require 'a3madkour-publish-paths)
+(require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
 
 (defcustom a3madkour-pub-site-content-dir nil
@@ -144,8 +145,9 @@ because the URL also changed).  Step B (in `finish-publish') consumes
           :slug-shifted (nreverse slug-shifted))))
 
 (defun a3madkour-pub/walk-published-source-set ()
-  "Walk `a3madkour-pub/org-notes-dir' recursively, return hash table of the
-new published set.
+  "Walk the living folders recursively, return hash table of the new
+published set.  The folders are `a3madkour-pub-registry-living-folders':
+the notes tree, and the recipes folder when it is set.
 
 Returns id → (url . state) where state is `live' or `draft'.
 
@@ -160,8 +162,7 @@ This walk takes a fresh per-call snapshot of the source tree; it does NOT
 hit the metadata cache populated by `note-metadata' (which is per-file
 keyed, not per-walk).  Repeated calls are independent."
   (let ((set (make-hash-table :test 'equal)))
-    (dolist (file (directory-files-recursively (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)
-                                                "\\.org\\'"))
+    (dolist (file (a3madkour-pub-registry-living-files))
       (let* ((parsed (a3madkour-pub--parse-file file))
              (state (plist-get parsed :state))
              (id (plist-get parsed :id))

@@ -22,9 +22,22 @@
     ;; The ingredient registry (a3madkour-ingredients.el), read by the recipe
     ;; linter.  Unlike the rest it may stay nil: the linter then skips its
     ;; registry rule.
-    a3madkour-ingredients/file)
+    a3madkour-ingredients/file
+    ;; The folder recipe files live in, walked by living publish beside the
+    ;; notes tree.  It too may stay nil: living publish then walks no
+    ;; recipes folder.
+    a3madkour-pub-recipes-dir)
   "Every folder or file the publisher reads from the author's config.
 config.org's Publishing paths block must set each one.")
+
+(defcustom a3madkour-pub-recipes-dir nil
+  "Root directory of the author's recipe org files, or nil.
+Living publish walks it beside `a3madkour-pub/org-notes-dir' (see
+`a3madkour-pub-registry-living-folders'); with nil, or a folder that
+does not exist, it walks no recipes folder.  Set in config.org's
+Publishing paths block."
+  :type '(choice (const :tag "Not set" nil) directory)
+  :group 'a3madkour-pub)
 
 (defun a3madkour-pub/path (var)
   "Return VAR's value expanded, or signal a `user-error' naming VAR.

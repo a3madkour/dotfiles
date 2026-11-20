@@ -160,6 +160,18 @@ The asset root is bound under it too, so nothing resolves a real folder."
     (let ((result (a3madkour-pub/walk-published-source-set)))
       (should (= 0 (hash-table-count result))))))
 
+(ert-deftest a3madkour-pub-unpublish-test-walk-includes-recipes-folder ()
+  "A published recipe in the recipes folder is in the live set."
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((recipes (make-temp-file "a3-pub-walk-recipes-" t)))
+      (unwind-protect
+          (let ((a3madkour-pub-recipes-dir recipes))
+            (a3-pub-unpublish-test--write-org recipes "toast.org"
+              ":PROPERTIES:\n:ID: R1\n:END:\n#+TITLE: Toast\n#+HUGO_PUBLISH: t\n#+HUGO_SECTION: recipes\nbody\n")
+            (should (equal (gethash "R1" (a3madkour-pub/walk-published-source-set))
+                           '("/recipes/toast/" . live))))
+        (delete-directory recipes t)))))
+
 ;; -- unpublish--delete-bundle helper --
 
 (ert-deftest a3madkour-pub-unpublish-test/delete-bundle-happy ()

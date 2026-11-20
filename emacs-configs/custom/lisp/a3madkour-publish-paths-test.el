@@ -42,6 +42,9 @@
     (should (custom-variable-p var))
     (should (null (eval (car (get var 'standard-value)) t)))))
 
+(ert-deftest a3madkour-pub-paths-test-recipes-dir-is-a-path-variable ()
+  (should (memq 'a3madkour-pub-recipes-dir a3madkour-pub/path-variables)))
+
 (ert-deftest a3madkour-pub-paths-test/path-errors-naming-the-variable ()
   (a3madkour-pub-paths-test--unset a3madkour-pub/poetry-dir
     (a3madkour-pub/path 'a3madkour-pub/poetry-dir))

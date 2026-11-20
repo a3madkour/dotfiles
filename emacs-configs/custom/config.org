@@ -5552,6 +5552,7 @@ load-path before `a3madkour-publish-id' triggers `(require 'org-roam)'.
 ;; interactive sessions use.
 (require 'a3madkour-ingredients)
 (setq a3madkour-ingredients/file (a3madkour/org-file "recipes/ingredients.org"))
+(setq a3madkour-pub-recipes-dir (a3madkour/org-file "recipes/"))
 (add-hook 'org-mode-hook #'a3madkour-ingredients/setup-capf)
 (require 'a3madkour-recipes)
 (require 'a3madkour-groceries)
@@ -5605,7 +5606,8 @@ roam tree; games and music pages are notes about a work and stay in it.
       ;; is the desktop path, for batch publishing; interactive sessions
       ;; override it through `a3madkour/org-file' (where the publish modules are
       ;; required) so the phone resolves it under /sdcard/org.
-      a3madkour-ingredients/file (expand-file-name "~/org/recipes/ingredients.org"))
+      a3madkour-ingredients/file (expand-file-name "~/org/recipes/ingredients.org")
+      a3madkour-pub-recipes-dir (expand-file-name "~/org/recipes/"))
 #+end_src
 * Keybindings
 #+begin_src emacs-lisp
