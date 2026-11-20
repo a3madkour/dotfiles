@@ -359,5 +359,34 @@ ingredient (salt) and one the registry does not know (garlic) are needed."
 - [[file:soup.org][an old title]]
 "))))
 
+(ert-deftest a3madkour-groceries-test-strip-note ()
+  (should (equal (a3madkour-groceries--strip-note "lentils (1 cup: Soup (Indian-Inspired))")
+                 "lentils"))
+  (should (equal (a3madkour-groceries--strip-note "lentils (low) (2 tbsp: Toast)") "lentils (low)"))
+  (should (equal (a3madkour-groceries--strip-note "lentils (low)") "lentils"))
+  (should (null (a3madkour-groceries--strip-note "lentils")))
+  (should (null (a3madkour-groceries--strip-note "lentils (low")))
+  (should (null (a3madkour-groceries--strip-note "lentils low)"))))
+
+(ert-deftest a3madkour-groceries-test-refresh-is-stable-for-a-title-with-parentheses ()
+  (a3madkour-groceries-test--with "* lentils :out:\n"
+      "* Recipes\n- [[file:soup.org][Soup]]\n"
+    (with-temp-file (expand-file-name "soup.org" dir)
+      (insert "#+TITLE: Instant Pot Curried Lentil Soup (Indian-Inspired)\n#+HUGO_SECTION: recipes\n** Ingredients\n| qty | unit | item |\n| 1 | cup | lentils |\n"))
+    (a3madkour-groceries/refresh)
+    (let ((first (a3madkour-groceries-test--text file)))
+      (with-temp-file file
+        (insert (replace-regexp-in-string "- \\[ \\] lentils" "- [X] lentils" first)))
+      (a3madkour-groceries/refresh)
+      (let ((second (a3madkour-groceries-test--text file)))
+        (a3madkour-groceries/refresh)
+        (let ((third (a3madkour-groceries-test--text file)))
+          (should (string-match-p
+                   "^- \\[X\\] lentils (1 cup: Instant Pot Curried Lentil Soup (Indian-Inspired))$"
+                   second))
+          (should (equal second third))
+          (should (= 1 (length (seq-filter (lambda (l) (string-match-p "lentils" l))
+                                           (split-string second "\n"))))))))))
+
 (provide 'a3madkour-groceries-test)
 ;;; a3madkour-groceries-test.el ends here

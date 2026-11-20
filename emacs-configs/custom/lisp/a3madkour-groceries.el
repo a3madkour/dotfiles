@@ -132,6 +132,20 @@ know), :amounts ((QTY . UNIT) ...) and :recipes (titles)."
            (mapcar (lambda (key) (gethash key table)) (nreverse unknown)))
           table)))
 
+(defun a3madkour-groceries--strip-note (text)
+  "TEXT without its last top-level bracketed group and the space before it.
+Nil when trimmed TEXT does not end in a balanced \"(...)\" group."
+  (let* ((text (string-trim-right text))
+         (i (1- (length text))) (depth 0) (start nil))
+    (when (and (>= i 0) (eq (aref text i) ?\)))
+      (while (and (>= i 0) (not start))
+        (pcase (aref text i)
+          (?\) (setq depth (1+ depth)))
+          (?\( (setq depth (1- depth))
+               (when (zerop depth) (setq start i))))
+        (setq i (1- i)))
+      (and start (string-trim-right (substring text 0 start))))))
+
 (defun a3madkour-groceries--resolve (text table)
   "What checkbox TEXT names, as (KEY . ENTRY), or nil.
 KEY is in TABLE (a need) or ENTRY is a registry entry, or both.  TEXT may end
@@ -146,8 +160,8 @@ still matches."
         (cond
          ((or entry (and table (gethash key table)))
           (setq found (cons key entry) done t))
-         ((string-match "\\`\\(.*?\\)[ \t]*([^()]*)\\'" candidate)
-          (setq candidate (match-string 1 candidate)))
+         ((a3madkour-groceries--strip-note candidate)
+          (setq candidate (a3madkour-groceries--strip-note candidate)))
          (t (setq done t)))))
     found))
 
@@ -203,8 +217,8 @@ for, not typed by the owner.  Notes in brackets are dropped as in
       (cond
        ((gethash (a3madkour-ingredients/normalize candidate) names)
         (setq found t done t))
-       ((string-match "\\`\\(.*?\\)[ \t]*([^()]*)\\'" candidate)
-        (setq candidate (match-string 1 candidate)))
+       ((a3madkour-groceries--strip-note candidate)
+        (setq candidate (a3madkour-groceries--strip-note candidate)))
        (t (setq done t))))
     found))
 
