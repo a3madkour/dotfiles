@@ -88,9 +88,10 @@ text properties."
 (defun a3madkour-org-table-rows-under (heading-p &optional buffer)
   "Cell lists of the first table under the first heading HEADING-P accepts.
 HEADING-P is called with each line of BUFFER (default current), in order,
-until it returns non-nil; it must itself test for the leading stars.  The table is the first one
-that follows it before the next heading; rule lines are dropped and the
-header row comes first.  Nil when there is no such heading or no table.
+until it returns non-nil; it must itself test for the leading stars.
+The table is the first one that follows it before the next heading; rule
+lines are dropped and the header row comes first.  Nil when there is no
+such heading or no table.
 Reads the whole buffer regardless of narrowing; point and restriction are
 left as they were."
   (with-current-buffer (or buffer (current-buffer))
