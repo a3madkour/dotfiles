@@ -1624,6 +1624,53 @@ matters here."
               (should (string-match-p (regexp-quote "[[./assets/page/older/z.png]]") text)))))
       (delete-directory notes t))))
 
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-still-migrates-non-link-text ()
+  "Old-folder paths outside bracket links (keywords, drawers) still migrate,
+each occurrence counted once.  The asset root is a `~/' string that is
+never created, so both its abbreviated and expanded spellings exist."
+  (let* ((notes (make-temp-file "a3-pub-notes-" t))
+         (a (expand-file-name "a.org" notes))
+         (a3madkour-pub/org-notes-dir notes)
+         (a3madkour-pub-recipes-dir nil)
+         (a3madkour-pub-canonical-asset-root "~/a3-pub-test-assets")
+         (expanded (expand-file-name "~/a3-pub-test-assets")))
+    (unwind-protect
+        (progn
+          (a3-pub-unpublish-test--write-org
+           notes "a.org"
+           (concat "#+HERO: ./assets/page/old/hero.svg\n"
+                   ":PROPERTIES:\n"
+                   (format ":IMAGE: %s/page/old/x.png\n" expanded)
+                   ":THUMB: ~/a3-pub-test-assets/page/old/t.png\n"
+                   ":END:\n"
+                   "[[./assets/page/old/a.png]]\n"
+                   "#+OTHER: ./assets/page/older/z.png\n"))
+          (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new")))
+            (should (equal (plist-get r :modified) (list (cons a 4))))
+            (should (equal (a3-pub-unpublish-test--read-file a)
+                           (concat "#+HERO: ./assets/page/new/hero.svg\n"
+                                   ":PROPERTIES:\n"
+                                   (format ":IMAGE: %s/page/new/x.png\n" expanded)
+                                   ":THUMB: ~/a3-pub-test-assets/page/new/t.png\n"
+                                   ":END:\n"
+                                   "[[./assets/page/new/a.png]]\n"
+                                   "#+OTHER: ./assets/page/older/z.png\n")))))
+      (delete-directory notes t))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-warns-on-unfixable-link ()
+  "A link into the old folder that one segment swap cannot fix is warned
+about and left as written."
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((note (expand-file-name "note.org" d))
+          (before "[[./assets/page/old/../old/x.png]]\n"))
+      (a3-pub-unpublish-test--write-org d "note.org" before)
+      (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new" d)))
+        (should (null (plist-get r :modified)))
+        (should (equal (plist-get r :warnings)
+                       (list (format "WARN: cannot migrate link in %s: %s"
+                                     note "./assets/page/old/../old/x.png"))))
+        (should (equal before (a3-pub-unpublish-test--read-file note)))))))
+
 (defun a3-pub-unpublish-test--finish-publish-moving (old-url new-url)
   "Run finish-publish for one note moving OLD-URL -> NEW-URL.
 Return (RENAME-CALLS REWRITE-CALLS OLD-BUNDLE-EXISTS-P)."
