@@ -12,6 +12,7 @@
 
 (require 'cl-lib)
 (require 'org-element)
+(require 'a3madkour-org)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
@@ -60,27 +61,6 @@ positions stay valid."
            nil t)
       (replace-match ""))
     (buffer-substring-no-properties (point-min) (point-max))))
-
-(defun a3madkour-pub-recipes--find-table-under (headline)
-  "First table element under HEADLINE (one level into its section), or nil."
-  (let ((section (cl-loop for child in (org-element-contents headline)
-                          when (eq (org-element-type child) 'section) return child)))
-    (when section
-      (cl-loop for child in (org-element-contents section)
-               when (eq (org-element-type child) 'table) return child))))
-
-(defun a3madkour-pub-recipes--table-rows (table)
-  "TABLE's standard rows as list-of-list-of-cell-strings (hlines skipped)."
-  (cl-loop for row in (org-element-map table 'table-row #'identity)
-           when (eq (org-element-property :type row) 'standard)
-           collect (mapcar (lambda (cell)
-                             (let ((c (car (org-element-contents cell))))
-                               (cond ((stringp c) (string-trim c))
-                                     ((null c) "")
-                                     (t (string-trim
-                                         (substring-no-properties
-                                          (org-element-interpret-data c)))))))
-                           (org-element-contents row))))
 
 (defun a3madkour-pub-recipes--top-level-items (headline)
   "Direct `item' elements of the first plain-list under HEADLINE, in order."
@@ -131,11 +111,11 @@ Supports integers, decimals, and `a/b' fractions."
 WARNs on heading-without-table."
   (let ((heading (a3madkour-pub-recipes--find-heading-named ast "ingredients")))
     (unless heading (cl-return-from a3madkour-pub-recipes--parse-ingredients nil))
-    (let ((table (a3madkour-pub-recipes--find-table-under heading)))
+    (let ((table (a3madkour-org-ast-table-under heading)))
       (unless table
         (a3madkour-pub-recipes--warn file "ingredients heading present but no table")
         (cl-return-from a3madkour-pub-recipes--parse-ingredients nil))
-      (let* ((rows (a3madkour-pub-recipes--table-rows table))
+      (let* ((rows (a3madkour-org-ast-table-rows table))
              (header (mapcar #'downcase (car rows)))
              (data (cdr rows)))
         (cl-loop for row in data

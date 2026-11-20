@@ -46,6 +46,35 @@ The element's key is upcased before comparing.  Return nil when absent."
         (org-element-property :value kw)))
     nil t))
 
+(defun a3madkour-org-ast-table-under (headline)
+  "Return the first table element in HEADLINE's own section, or nil.
+Org wraps a headline's body in a section element; look one level into that
+section rather than at HEADLINE's direct children."
+  (let ((section (cl-loop for child in (org-element-contents headline)
+                          when (eq (org-element-type child) 'section)
+                          return child)))
+    (when section
+      (cl-loop for child in (org-element-contents section)
+               when (eq (org-element-type child) 'table)
+               return child))))
+
+(defun a3madkour-org-ast-table-rows (table)
+  "Return TABLE's rows as a list of lists of trimmed cell strings.
+Horizontal-rule rows are skipped.  An empty cell is \"\".  A cell whose
+content is not a plain string is its interpreted org text, trimmed, without
+text properties."
+  (cl-loop for row in (org-element-map table 'table-row #'identity)
+           when (eq (org-element-property :type row) 'standard)
+           collect (mapcar (lambda (cell)
+                             (let ((c (car (org-element-contents cell))))
+                               (cond
+                                ((stringp c) (string-trim c))
+                                ((null c) "")
+                                (t (string-trim
+                                    (substring-no-properties
+                                     (org-element-interpret-data c)))))))
+                           (org-element-contents row))))
+
 (provide 'a3madkour-org)
 
 ;;; a3madkour-org.el ends here

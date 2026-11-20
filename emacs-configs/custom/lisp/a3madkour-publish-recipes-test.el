@@ -22,8 +22,8 @@
 1. Do it.
 "))
          (hl (a3madkour-pub-recipes--find-heading-named ast "ingredients"))
-         (table (a3madkour-pub-recipes--find-table-under hl))
-         (rows (a3madkour-pub-recipes--table-rows table)))
+         (table (a3madkour-org-ast-table-under hl))
+         (rows (a3madkour-org-ast-table-rows table)))
     (should hl)
     (should table)
     (should (equal (car rows) '("qty" "item")))

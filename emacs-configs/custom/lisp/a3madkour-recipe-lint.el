@@ -36,8 +36,6 @@ Reuses the handler's position-robust extraction so a drawer authored after
 ;; Re-use the handler's AST helpers.
 (declare-function a3madkour-pub-recipes--drawer-alist "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--find-heading-named "a3madkour-publish-recipes")
-(declare-function a3madkour-pub-recipes--find-table-under "a3madkour-publish-recipes")
-(declare-function a3madkour-pub-recipes--table-rows "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--top-level-items "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--item-text "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--coerce-qty "a3madkour-publish-recipes")
@@ -94,11 +92,11 @@ Reuses the handler's position-robust extraction so a drawer authored after
                      "** Sources has no list items")))
         ;; Rules 2-3: ingredient table + rows.
         (when ing
-          (let ((table (a3madkour-pub-recipes--find-table-under ing)))
+          (let ((table (a3madkour-org-ast-table-under ing)))
             (if (not table)
                 (funcall emit (a3madkour-recipe-lint--line-of ing)
                          "** Ingredients has no table")
-              (let* ((rows (a3madkour-pub-recipes--table-rows table))
+              (let* ((rows (a3madkour-org-ast-table-rows table))
                      (header (mapcar #'downcase (car rows)))
                      (data (cdr rows)))
                 (dolist (col a3madkour-recipe-lint--cols)

@@ -20,6 +20,7 @@
 
 (require 'cl-lib)
 (require 'org-element)
+(require 'a3madkour-org)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
@@ -51,33 +52,6 @@ Returns the headline element or nil."
            when (and raw (string-equal (downcase raw) "outputs"))
            return hl))
 
-(defun a3madkour-pub-research--find-table-under (headline)
-  "Return the first table element under HEADLINE, or nil.
-Org wraps headline body in a section element; we look one level into that
-section rather than iterating HEADLINE's direct children."
-  (let ((section (cl-loop for child in (org-element-contents headline)
-                          when (eq (org-element-type child) 'section)
-                          return child)))
-    (when section
-      (cl-loop for child in (org-element-contents section)
-               when (eq (org-element-type child) 'table)
-               return child))))
-
-(defun a3madkour-pub-research--table-rows (table)
-  "Return TABLE's data rows as list-of-list-of-cell-strings.
-Skips horizontal-rule rows; the header row is the first standard row."
-  (cl-loop for row in (org-element-map table 'table-row #'identity)
-           when (eq (org-element-property :type row) 'standard)
-           collect (mapcar (lambda (cell)
-                             (let ((c (car (org-element-contents cell))))
-                               (cond
-                                ((stringp c) (string-trim c))
-                                ((null c) "")
-                                (t (string-trim
-                                    (substring-no-properties
-                                     (org-element-interpret-data c)))))))
-                           (org-element-contents row))))
-
 (defun a3madkour-pub-research--coerce-year (raw)
   "Coerce year RAW to int.  Float-trip to dodge octal trap on '08'/'09'."
   (when (and raw (stringp raw))
@@ -92,11 +66,11 @@ Row order preserved.  See spec §6 for the table contract."
   (let ((heading (a3madkour-pub-research--find-outputs-heading ast)))
     (unless heading
       (cl-return-from a3madkour-pub-research--parse-outputs-table nil))
-    (let ((table (a3madkour-pub-research--find-table-under heading)))
+    (let ((table (a3madkour-org-ast-table-under heading)))
       (unless table
         (a3madkour-pub-research--warn file "outputs heading present but no table")
         (cl-return-from a3madkour-pub-research--parse-outputs-table nil))
-      (let* ((rows (a3madkour-pub-research--table-rows table))
+      (let* ((rows (a3madkour-org-ast-table-rows table))
              (header (mapcar #'downcase (car rows)))
              (data-rows (cdr rows))
              (col-indices (mapcar (lambda (col)

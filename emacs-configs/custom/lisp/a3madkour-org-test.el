@@ -26,5 +26,19 @@
     (should (equal (a3madkour-org-ast-keyword ast "HUGO_SECTION") "works/games"))
     (should (null (a3madkour-org-ast-keyword ast "MISSING")))))
 
+(ert-deftest a3madkour-org-test-ast-table ()
+  (let* ((ast (with-temp-buffer
+                (insert "* R\n** Ingredients\ntext\n| qty | item |\n|-----+------|\n| 2 | [[id:x][egg]] |\n|   | *salt* |\n*** Sub\n| a |\n** Empty\n")
+                (org-mode) (org-element-parse-buffer)))
+         (hl (lambda (title)
+               (org-element-map ast 'headline
+                 (lambda (h) (and (equal (org-element-property :raw-value h) title) h))
+                 nil t))))
+    (should (equal (a3madkour-org-ast-table-rows
+                    (a3madkour-org-ast-table-under (funcall hl "Ingredients")))
+                   '(("qty" "item") ("2" "[[id:x][egg]]") ("" "*salt*"))))
+    (should (null (a3madkour-org-ast-table-under (funcall hl "Empty"))))
+    (should (null (a3madkour-org-ast-table-under (funcall hl "R"))))))
+
 (provide 'a3madkour-org-test)
 ;;; a3madkour-org-test.el ends here
