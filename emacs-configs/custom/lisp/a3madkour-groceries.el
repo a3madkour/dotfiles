@@ -28,6 +28,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'org)
+(require 'a3madkour-org)
 (require 'a3madkour-ingredients)
 (require 'a3madkour-recipes)
 (require 'a3madkour-units)
@@ -290,17 +291,7 @@ PARTS is what `a3madkour-groceries--sections' returns for the old text."
   "The buffer visiting the grocery list, holding the newest text there is.
 Ticks synced in from the phone under an unmodified buffer are reverted in.
 Unsaved edits plus a newer file cannot both be kept: refuse."
-  (let* ((file (a3madkour-groceries/file))
-         (buf (or (get-file-buffer file)
-                  (progn (make-directory (file-name-directory file) t)
-                         (find-file-noselect file)))))
-    (with-current-buffer buf
-      (when (and (file-exists-p file)
-                 (not (verify-visited-file-modtime buf)))
-        (when (buffer-modified-p)
-          (user-error "The grocery list has unsaved changes and the file changed on disk; save or revert it first"))
-        (revert-buffer t t t)))
-    buf))
+  (a3madkour-org-synced-buffer (a3madkour-groceries/file) "The grocery list"))
 
 (defun a3madkour-groceries--text ()
   "The grocery list's current text."

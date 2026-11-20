@@ -288,15 +288,7 @@ edits as well, neither side can be dropped safely: refuse, and leave both."
   (declare (indent 0))
   `(let ((file (or a3madkour-ingredients/file
                    (user-error "a3madkour-ingredients/file is not set"))))
-     (make-directory (file-name-directory file) t)
-     ;; `find-file-noselect' would ask "reread from disk?" about a buffer whose
-     ;; file changed underneath it; take the existing buffer and decide here.
-     (with-current-buffer (or (get-file-buffer file) (find-file-noselect file))
-       (when (and (file-exists-p file)
-                  (not (verify-visited-file-modtime (current-buffer))))
-         (when (buffer-modified-p)
-           (user-error "The registry buffer has unsaved changes and the file changed on disk; save or revert it first"))
-         (revert-buffer t t t))
+     (with-current-buffer (a3madkour-org-synced-buffer file "The registry buffer")
        (prog1 (save-excursion (save-restriction (widen) ,@body))
          (save-buffer)))))
 

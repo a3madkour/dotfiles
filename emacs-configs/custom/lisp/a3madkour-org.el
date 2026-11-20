@@ -119,6 +119,24 @@ left as they were."
               (forward-line 1))
             (nreverse rows)))))))
 
+(defun a3madkour-org-synced-buffer (file what)
+  "The buffer visiting FILE, holding the newest text there is.
+Reuse an existing buffer, else visit FILE (creating its directory if missing).
+If FILE changed on disk under an unmodified buffer, revert the buffer without
+asking.  If the buffer also has unsaved edits, neither side can be dropped
+safely: signal a `user-error' naming what and change nothing."
+  (make-directory (file-name-directory file) t)
+  ;; `find-file-noselect' would ask "reread from disk?" about a buffer whose
+  ;; file changed underneath it; take the existing buffer and decide here.
+  (let ((buf (or (get-file-buffer file) (find-file-noselect file))))
+    (with-current-buffer buf
+      (when (and (file-exists-p file)
+                 (not (verify-visited-file-modtime buf)))
+        (when (buffer-modified-p)
+          (user-error "%s has unsaved changes and the file changed on disk; save or revert it first" what))
+        (revert-buffer t t t)))
+    buf))
+
 (provide 'a3madkour-org)
 
 ;;; a3madkour-org.el ends here

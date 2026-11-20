@@ -58,5 +58,56 @@
   (should (equal (a3madkour-org-table-row-cells "  | 2 | egg |  ") '("2" "egg")))
   (should (equal (a3madkour-org-table-row-cells "| a |  | b |") '("a" "" "b"))))
 
+(defun a3madkour-org-test--stale-fixture (unsaved fn)
+  "Visit a temp file holding \"old\", optionally add an unsaved edit, rewrite
+it on disk as \"new\" with a later mtime, then call FN with (FILE BUFFER)."
+  (let* ((dir (make-temp-file "a3org-sync" t))
+         (f (expand-file-name "l.org" dir))
+         (buf nil))
+    (unwind-protect
+        (progn
+          (write-region "old" nil f nil 'silent)
+          (setq buf (find-file-noselect f))
+          (when unsaved
+            (with-current-buffer buf (goto-char (point-max)) (insert "edit")))
+          (write-region "new" nil f nil 'silent)
+          (set-file-times f (time-add (current-time) 10))
+          (funcall fn f buf))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf (set-buffer-modified-p nil))
+        (kill-buffer buf))
+      (delete-directory dir t))))
+
+(ert-deftest a3madkour-org-test-synced-buffer-reverts-stale ()
+  (a3madkour-org-test--stale-fixture
+   nil
+   (lambda (f _buf)
+     (should (equal (with-current-buffer (a3madkour-org-synced-buffer f "The list")
+                      (buffer-string))
+                    "new")))))
+
+(ert-deftest a3madkour-org-test-synced-buffer-refuses-unsaved ()
+  (a3madkour-org-test--stale-fixture
+   t
+   (lambda (f buf)
+     (let ((err (should-error (a3madkour-org-synced-buffer f "The list")
+                              :type 'user-error)))
+       (should (equal (cadr err)
+                      "The list has unsaved changes and the file changed on disk; save or revert it first")))
+     (should (string-match-p "edit" (with-current-buffer buf (buffer-string))))
+     (should (equal (with-temp-buffer (insert-file-contents f) (buffer-string))
+                    "new")))))
+
+(ert-deftest a3madkour-org-test-synced-buffer-creates-directory ()
+  (let* ((dir (make-temp-file "a3org-sync" t))
+         (buf nil))
+    (unwind-protect
+        (progn
+          (setq buf (a3madkour-org-synced-buffer (expand-file-name "sub/new.org" dir) "X"))
+          (should (bufferp buf))
+          (should (file-directory-p (expand-file-name "sub" dir))))
+      (when (buffer-live-p buf) (kill-buffer buf))
+      (delete-directory dir t))))
+
 (provide 'a3madkour-org-test)
 ;;; a3madkour-org-test.el ends here
