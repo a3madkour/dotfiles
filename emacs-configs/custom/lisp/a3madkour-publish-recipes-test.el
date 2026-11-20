@@ -204,6 +204,18 @@ Headnote.
     (should (string-match-p "servings: 4" out))
     (should (string-match-p "title: \"Shakshuka\"" out))))
 
+(ert-deftest a3madkour-pub-recipes--render-frontmatter-empty-tags-is-a-list ()
+  "A recipe with no tags publishes `tags: []', not `tags: false'; a false
+`draft' still renders as `false'."
+  (let ((out (a3madkour-pub-recipes--render-frontmatter
+              '((title . "Toast") (draft . nil) (tags . nil)))))
+    (should (string-match-p "^tags: \\[\\]$" out))
+    (should-not (string-match-p "^tags: false" out))
+    (should (string-match-p "^draft: false$" out)))
+  (let ((out (a3madkour-pub-recipes--render-frontmatter
+              '((title . "Toast") (tags . ("bread" "quick"))))))
+    (should (string-match-p "^tags: \\[\"bread\", \"quick\"\\]$" out))))
+
 (ert-deftest a3madkour-pub-recipes--strip-subtrees ()
   (let ((out (a3madkour-pub-recipes--strip-data-subtrees "* R
 Headnote paragraph.

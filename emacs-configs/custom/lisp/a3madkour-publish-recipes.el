@@ -243,8 +243,10 @@ Order: group qty unit item note alt.  qty/unit/item always; others when non-nil.
           (mapconcat (lambda (it) (concat "  - " (funcall render-fn it))) items "\n")))
 
 (defun a3madkour-pub-recipes--key-hook (k v)
-  "render-frontmatter KEY-HOOK for the three structured recipe keys."
+  "render-frontmatter KEY-HOOK for the three structured recipe keys.
+An empty `tags' renders as `[]' (not `false'), as for essays and poems."
   (cond
+   ((eq k 'tags) (a3madkour-pub-yaml/tags-empty-array-hook k v))
    ((eq k 'ingredients)
     (if (and v (listp v)) (a3madkour-pub-recipes--render-block "ingredients" #'a3madkour-pub-recipes--render-ingredient v) :omit))
    ((eq k 'sources)
