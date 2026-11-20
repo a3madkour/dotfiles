@@ -9,6 +9,7 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'a3madkour-org)
+(require 'a3madkour-units)
 (require 'a3madkour-ingredients)
 
 (defvar a3madkour-recipe-lint-enabled t
@@ -38,7 +39,6 @@ Reuses the handler's position-robust extraction so a drawer authored after
 (declare-function a3madkour-pub-recipes--find-heading-named "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--top-level-items "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--item-text "a3madkour-publish-recipes")
-(declare-function a3madkour-pub-recipes--coerce-qty "a3madkour-publish-recipes")
 (declare-function a3madkour-pub-recipes--cell "a3madkour-publish-recipes")
 
 (defun a3madkour-recipe-lint--filled-items (headline)
@@ -107,8 +107,9 @@ Reuses the handler's position-robust extraction so a drawer authored after
                   (dolist (row data)
                     (let ((qty (a3madkour-pub-recipes--cell row header "qty"))
                           (item (a3madkour-pub-recipes--cell row header "item")))
-                      (when (and qty (not (a3madkour-pub-recipes--coerce-qty qty)))
-                        (funcall emit ln (format "ingredient qty %S is not numeric-or-empty" qty)))
+                      (when (and qty (not (a3madkour-units/parse-qty qty)))
+                        (funcall emit ln (format "ingredient qty %S is not numeric-or-empty"
+                                         (substring-no-properties qty))))
                       (unless item
                         (funcall emit ln "ingredient row missing item"))
                       ;; Rule 7: the item is in the ingredient registry, by

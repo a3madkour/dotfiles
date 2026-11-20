@@ -13,6 +13,7 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'a3madkour-org)
+(require 'a3madkour-units)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-yaml)
 (require 'a3madkour-publish-export)
@@ -85,20 +86,6 @@ positions stay valid."
   '("qty" "unit" "item" "group" "note" "alt")
   "Expected ingredient-table columns (header row, any order).")
 
-(defun a3madkour-pub-recipes--coerce-qty (raw)
-  "Coerce a qty cell RAW to a number, or nil for empty/non-numeric.
-Supports integers, decimals, and `a/b' fractions."
-  (when (and raw (stringp raw))
-    (let ((s (string-trim raw)))
-      (cond
-       ((string-empty-p s) nil)
-       ((string-match "\\`\\([0-9]+\\)/\\([0-9]+\\)\\'" s)
-        (/ (float (string-to-number (match-string 1 s)))
-           (string-to-number (match-string 2 s))))
-       ((string-match-p "\\`[0-9]+\\'" s) (string-to-number s))
-       ((string-match-p "\\`[0-9]*\\.[0-9]+\\'" s) (string-to-number s))
-       (t nil)))))
-
 (defun a3madkour-pub-recipes--cell (row header col)
   "Value of column COL in ROW per HEADER, trimmed; nil when blank/absent."
   (let ((i (cl-position col header :test #'string-equal)))
@@ -119,7 +106,7 @@ WARNs on heading-without-table."
              (header (mapcar #'downcase (car rows)))
              (data (cdr rows)))
         (cl-loop for row in data
-                 collect (list :qty   (a3madkour-pub-recipes--coerce-qty
+                 collect (list :qty   (a3madkour-units/parse-qty
                                        (a3madkour-pub-recipes--cell row header "qty"))
                                :unit  (a3madkour-pub-recipes--cell row header "unit")
                                :item  (a3madkour-pub-recipes--cell row header "item")

@@ -64,6 +64,29 @@ Headnote.
                           (a3madkour-recipe-lint/lint-file f)))
       (delete-file f))))
 
+(defun a3madkour-recipe-lint-test--qty-findings (cells)
+  "Lint a recipe whose qty cells are CELLS; return the findings."
+  (let ((f (a3madkour-recipe-lint-test--write
+            (concat "#+TITLE: X\n#+HUGO_SUMMARY: y\n"
+                    ":PROPERTIES:\n:servings: 2\n:END:\n** Ingredients\n"
+                    "#+NAME: ingredients\n"
+                    "| qty | unit | item | group | note | alt |\n"
+                    (mapconcat (lambda (c) (format "| %s |  | x |  |  |  |\n" c))
+                               cells "")
+                    "** Steps\n1. Do it.\n** Sources\n- A\n"))))
+    (unwind-protect (a3madkour-recipe-lint/lint-file f)
+      (delete-file f))))
+
+(ert-deftest a3madkour-recipe-lint-test-accepts-kitchen-quantities ()
+  (let ((findings (a3madkour-recipe-lint-test--qty-findings
+                   '("1 1/2" "½" "2-3"))))
+    (should-not (cl-some (lambda (f) (string-match-p "qty" f)) findings))))
+
+(ert-deftest a3madkour-recipe-lint-test-rejects-non-quantity ()
+  (let ((findings (a3madkour-recipe-lint-test--qty-findings '("a pinch"))))
+    (should (cl-some (lambda (f) (string-match-p "ingredient qty \"a pinch\" is not numeric-or-empty" f))
+                     findings))))
+
 (ert-deftest a3madkour-recipe-lint--bad-timecode ()
   (let ((f (a3madkour-recipe-lint-test--write "#+TITLE: X
 #+HUGO_SUMMARY: y

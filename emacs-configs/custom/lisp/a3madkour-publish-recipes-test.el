@@ -42,13 +42,15 @@
     (should (equal (a3madkour-pub-recipes--item-text (nth 0 items)) "First step."))
     (should (equal (a3madkour-pub-recipes--item-text (nth 1 items)) "[02:30] Second step."))))
 
-(ert-deftest a3madkour-pub-recipes--coerce-qty-forms ()
-  (should (equal (a3madkour-pub-recipes--coerce-qty "2") 2))
-  (should (equal (a3madkour-pub-recipes--coerce-qty "800") 800))
-  (should (equal (a3madkour-pub-recipes--coerce-qty "0.5") 0.5))
-  (should (equal (a3madkour-pub-recipes--coerce-qty "1/2") 0.5))
-  (should (equal (a3madkour-pub-recipes--coerce-qty "") nil))
-  (should (equal (a3madkour-pub-recipes--coerce-qty "  ") nil)))
+(ert-deftest a3madkour-pub-recipes-test-ingredient-quantities ()
+  (let* ((cells '("2" "800" "0.5" ".5" "1/2" "1 1/2" "½" "1½" "2-3" "2 to 3" ""))
+         (ast (a3madkour-pub-recipes-test--parse
+               (concat "* R\n** Ingredients\n#+NAME: ingredients\n"
+                       "| qty | item |\n|-----+------|\n"
+                       (mapconcat (lambda (c) (format "| %s | x |\n" c)) cells ""))))
+         (qtys (mapcar (lambda (i) (plist-get i :qty))
+                       (a3madkour-pub-recipes--parse-ingredients ast "/tmp/x.org"))))
+    (should (equal qtys '(2 800 0.5 0.5 0.5 1.5 0.5 1.5 3 3 nil)))))
 
 (ert-deftest a3madkour-pub-recipes--parse-ingredients-happy ()
   (let* ((ast (a3madkour-pub-recipes-test--parse "
