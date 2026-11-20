@@ -1538,5 +1538,89 @@ the sweep skips it and the manifest never advances."
               (should (equal (alist-get 'state note) "live")))))
       (when (file-exists-p manifest-path) (delete-file manifest-path)))))
 
+(defun a3-pub-unpublish-test--read-file (file)
+  "Return the contents of FILE as a string."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (buffer-string)))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-same-slug-terminates ()
+  "OLD-SLUG equal to NEW-SLUG is a no-op, not an endless rescan."
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((before "See [[./assets/page/foo/x.png][x]]\n")
+          (note (expand-file-name "note.org" d)))
+      (a3-pub-unpublish-test--write-org d "note.org" before)
+      (with-timeout (5 (ert-fail "bulk rewrite did not terminate"))
+        (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links
+                  "foo" "foo" d)))
+          (should (null (plist-get r :modified)))
+          (should (equal before (a3-pub-unpublish-test--read-file note))))))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-counts-each-match-once ()
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((note (expand-file-name "note.org" d)))
+      (a3-pub-unpublish-test--write-org d "note.org"
+        "[[./assets/page/foo/a.png]] [[./assets/page/foo/b.png]]")
+      (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links
+                "foo" "foo-bar" d)))
+        (should (equal (cdar (plist-get r :modified)) 2))
+        (should (equal (a3-pub-unpublish-test--read-file note)
+                       "[[./assets/page/foo-bar/a.png]] [[./assets/page/foo-bar/b.png]]"))))))
+
+(defun a3-pub-unpublish-test--finish-publish-moving (old-url new-url)
+  "Run finish-publish for one note moving OLD-URL -> NEW-URL.
+Return (RENAME-CALLS REWRITE-CALLS OLD-BUNDLE-EXISTS-P)."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (asset-root   (make-temp-file "a3-pub-assets-" t))
+         (notes-dir    (make-temp-file "a3-pub-notes-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (old-parts (a3madkour-pub--unpublish-url-to-section-slug old-url))
+         (old-bundle (expand-file-name (format "%s/%s" (car old-parts) (cdr old-parts))
+                                       content-root))
+         rename-calls rewrite-calls)
+    (unwind-protect
+        (progn
+          (make-directory old-bundle t)
+          (with-temp-file (expand-file-name "index.md" old-bundle) (insert "old"))
+          (let ((a3madkour-pub-site-content-dir content-root)
+                (a3madkour-pub-canonical-asset-root asset-root)
+                (a3madkour-pub/org-notes-dir notes-dir))
+            (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                       (lambda () manifest-path))
+                      ((symbol-function 'vc-backend) (lambda (_) nil))
+                      ((symbol-function 'a3madkour-pub--unpublish-rename-asset-dir)
+                       (lambda (o n) (push (list o n) rename-calls) nil))
+                      ((symbol-function 'a3madkour-pub--unpublish-bulk-rewrite-source-links)
+                       (lambda (o n &rest _) (push (list o n) rewrite-calls) nil)))
+              (a3madkour-pub-history/write-manifest
+               `((notes . [((id . "id-x") (current_url . ,old-url)
+                            (history . []) (state . "live"))])))
+              (clrhash a3madkour-pub--publish-run-accumulator)
+              (puthash "id-x" (cons new-url 'live)
+                       a3madkour-pub--publish-run-accumulator)
+              (a3madkour-pub/finish-publish)))
+          (list (nreverse rename-calls) (nreverse rewrite-calls)
+                (file-exists-p old-bundle)))
+      (delete-directory content-root t)
+      (delete-directory asset-root t)
+      (delete-directory notes-dir t)
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
+(ert-deftest a3madkour-pub-unpublish-test-finish-publish-same-slug-skips-migration ()
+  (pcase-let ((`(,rename-calls ,rewrite-calls ,old-bundle-exists)
+               (a3-pub-unpublish-test--finish-publish-moving
+                "/garden/foo/" "/research/themes/foo/")))
+    (should (null rename-calls))
+    (should (null rewrite-calls))
+    ;; the old bundle content/garden/foo/ is still deleted
+    (should-not old-bundle-exists)))
+
+(ert-deftest a3madkour-pub-unpublish-test-finish-publish-section-and-slug-change-migrates ()
+  (pcase-let ((`(,rename-calls ,rewrite-calls ,_)
+               (a3-pub-unpublish-test--finish-publish-moving
+                "/garden/foo/" "/research/themes/foo-bar/")))
+    (should (equal rename-calls '(("foo" "foo-bar"))))
+    (should (equal rewrite-calls '(("foo" "foo-bar"))))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

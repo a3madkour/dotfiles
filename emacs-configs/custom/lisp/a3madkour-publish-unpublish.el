@@ -413,8 +413,11 @@ Returns:
               (let ((old-slug (cdr old-parts))
                     (new-slug (cdr new-parts)))
                 (unless (or dry-run (not reap))
-                  (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
-                  (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug)
+                  ;; A section-only move keeps the slug, so the asset dir
+                  ;; and the source links have nothing to migrate.
+                  (unless (equal old-slug new-slug)
+                    (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
+                    (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug))
                   ;; Delete the orphan Hugo content bundle at the old slug.
                   ;; The per-section handler already wrote a new bundle at the
                   ;; new slug; without this call the old bundle stays as dead
@@ -512,44 +515,53 @@ Returns a plist:
 
 Idempotent: re-runs after a successful pass produce zero modifications
 (the substitution regex doesn't match the new slug)."
-  (let* ((dir (or org-notes-dir (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)))
-         (root (file-name-as-directory
-                (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)))
-         (patterns (cons
-                    (cons (format "\\./assets/page/%s/" (regexp-quote old-slug))
-                          (format "./assets/page/%s/" new-slug))
-                    ;; The root as the author may have typed it: abbreviated
-                    ;; (`~/...') and expanded.
-                    (mapcar (lambda (r)
-                              (cons (format "%spage/%s/" (regexp-quote r)
-                                            (regexp-quote old-slug))
-                                    (format "%spage/%s/" r new-slug)))
-                            (delete-dups
-                             (list (abbreviate-file-name root) root)))))
-         modified warnings)
-    (dolist (file (directory-files-recursively dir "\\.org\\'"))
-      (let* ((orig (with-temp-buffer
-                     (insert-file-contents file)
-                     (buffer-string)))
-             (new orig)
-             (count 0))
-        (dolist (p patterns)
-          (while (string-match (car p) new)
-            (setq new (replace-match (cdr p) t t new))
-            (setq count (1+ count))))
-        (when (> count 0)
-          (condition-case err
-              (progn
-                (with-temp-buffer
-                  (insert new)
-                  (write-region (point-min) (point-max) file nil 'silent))
-                (push (cons file count) modified))
-            (error
-             (push (format "WARN: failed to write back %s: %s"
-                           file (error-message-string err))
-                   warnings))))))
-    (list :modified (nreverse modified)
-          :warnings (nreverse warnings))))
+  ;; Same slug: nothing to rewrite (and a rescan could never finish).
+  (if (equal old-slug new-slug)
+      (list :modified nil :warnings nil)
+    (let* ((dir (or org-notes-dir (a3madkour-pub/path 'a3madkour-pub/org-notes-dir)))
+           (root (file-name-as-directory
+                  (a3madkour-pub/path 'a3madkour-pub-canonical-asset-root)))
+           (patterns (cons
+                      (cons (format "\\./assets/page/%s/" (regexp-quote old-slug))
+                            (format "./assets/page/%s/" new-slug))
+                      ;; The root as the author may have typed it: abbreviated
+                      ;; (`~/...') and expanded.
+                      (mapcar (lambda (r)
+                                (cons (format "%spage/%s/" (regexp-quote r)
+                                              (regexp-quote old-slug))
+                                      (format "%spage/%s/" r new-slug)))
+                              (delete-dups
+                               (list (abbreviate-file-name root) root)))))
+           modified warnings)
+      (dolist (file (directory-files-recursively dir "\\.org\\'"))
+        (let* ((orig (with-temp-buffer
+                       (insert-file-contents file)
+                       (buffer-string)))
+               (new orig)
+               (count 0))
+          ;; One left-to-right pass per pattern: replaced text is never
+          ;; rescanned, so a NEW-SLUG that contains OLD-SLUG cannot loop.
+          (dolist (p patterns)
+            (let ((replacement (cdr p)))
+              (setq new (replace-regexp-in-string
+                         (car p)
+                         (lambda (_match)
+                           (setq count (1+ count))
+                           replacement)
+                         new t t))))
+          (when (> count 0)
+            (condition-case err
+                (progn
+                  (with-temp-buffer
+                    (insert new)
+                    (write-region (point-min) (point-max) file nil 'silent))
+                  (push (cons file count) modified))
+              (error
+               (push (format "WARN: failed to write back %s: %s"
+                             file (error-message-string err))
+                     warnings))))))
+      (list :modified (nreverse modified)
+            :warnings (nreverse warnings)))))
 
 (defun a3madkour-pub--unpublish-recheck-live-note-links (removed-this-publish-set)
   "For each live manifest entry, scan outgoing [[id:...]] links.
