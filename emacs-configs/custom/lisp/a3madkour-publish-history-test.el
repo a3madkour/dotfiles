@@ -648,21 +648,35 @@ PATH-SYM is bound to the manifest path, which holds
     (should (equal '("/garden/two-old/") (a3madkour-pub-history/aliases-for "id-2")))
     (should (= parses 1))))
 
-(ert-deftest a3madkour-pub-history-test-record-publish-does-not-reparse ()
-  "`record-publish' reads its own last write from the cache, and every
+(ert-deftest a3madkour-pub-history-test-record-publish-reparses-once-per-write ()
+  "A write clears the cache, so the read after it parses once; every
 change still reaches the file."
   (a3-pub-history-test--with-cached-manifest path parses
     (a3madkour-pub-history/read-manifest)
     (should (= parses 1))
+    ;; Reads from the cache, writes, clears the cache.
     (a3madkour-pub-history/record-publish "id-1" "/garden/one-renamed/" 'live)
+    ;; Parses the new file, writes, clears the cache.
     (a3madkour-pub-history/record-publish "id-9" "/garden/nine/" 'live)
-    (should (= parses 1))
+    (should (= parses 2))
     (a3madkour-pub-history--cache-clear)
     (let* ((m (a3madkour-pub-history/read-manifest))
            (notes (alist-get 'notes m)))
       (should (= (length notes) 4))
       (should (equal "/garden/one-renamed/" (alist-get 'current_url (aref notes 0))))
       (should (equal "id-9" (alist-get 'id (aref notes 3)))))))
+
+(ert-deftest a3madkour-pub-history-test-unchanged-record-publish-does-not-write-or-reparse ()
+  "Re-recording what the manifest already holds neither writes nor parses."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (set-file-times path '(0 0))
+    (a3madkour-pub-history/read-manifest)
+    (a3madkour-pub-history/record-publish "id-1" "/garden/one/" 'live)
+    (a3madkour-pub-history/record-publish "id-2" "/garden/two/" 'live)
+    (a3madkour-pub-history/record-publish "id-3" "/garden/three/" 'draft)
+    (should (= parses 1))
+    (should (time-equal-p (file-attribute-modification-time (file-attributes path))
+                          '(0 0)))))
 
 (ert-deftest a3madkour-pub-history-test-read-manifest-sees-external-change ()
   "A file rewritten behind the cache's back (new content, new size) is reparsed."
@@ -706,7 +720,7 @@ change still reaches the file."
     (should (equal (a3madkour-pub-history/read-manifest) '((notes . []))))))
 
 (ert-deftest a3madkour-pub-history-test-cache-matches-a-real-read-after-write ()
-  "What a write leaves in the cache is `equal' to parsing the written file."
+  "After each write, a cached read is `equal' to parsing the written file."
   (a3-pub-history-test--with-cached-manifest path parses
     (dolist (call '(("id-9" "/garden/nine/" live "2026-02-02")      ; new note
                     ("id-1" "/garden/one-renamed/" live nil)        ; url change
@@ -714,6 +728,7 @@ change still reaches the file."
                     ("id-2" nil removed nil)))                      ; removal
       (a3madkour-pub-history/record-publish (nth 0 call) (nth 1 call) (nth 2 call)
                                             :last-modified (nth 3 call))
+      (a3madkour-pub-history/read-manifest) ; the write cleared the cache: parse
       (let* ((before parses)
              (cached (a3madkour-pub-history/read-manifest)))
         ;; The comparison means something only if this read was a cache hit.

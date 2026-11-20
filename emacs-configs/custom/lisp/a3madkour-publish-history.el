@@ -66,11 +66,11 @@ site checkout it runs in."
   "Initial manifest shape: an empty vector under `notes'.")
 
 ;; Parse cache.  `yaml-parse-string' takes ~0.1 s on a 2.7 KB manifest and
-;; a publish run reads the manifest once per note, so the last parse (or
-;; the last write) is kept together with the attributes of the file it
-;; belongs to.  It is used only while the file on disk has exactly those
-;; attributes: any write by anyone else gives the file a new modification
-;; time (and, for an atomic write like ours, a new inode), so a stale
+;; a publish run reads the manifest once per note, so the last parse is
+;; kept together with the attributes of the file it came from.  It is used
+;; only while the file on disk has exactly those attributes: a write by
+;; anyone else gives the file a new modification time (and, for an atomic
+;; write, a new inode), and `write-manifest' clears the cache, so a stale
 ;; manifest is never returned.  The key holds the absolute path, so a test
 ;; that rebinds `a3madkour-pub/site-data-dir' never sees another
 ;; directory's manifest.
@@ -78,10 +78,10 @@ site checkout it runs in."
 ;; Limit: two different writes of the same size, made in place (same
 ;; inode) within one modification-time tick, look identical.  Linux stamps
 ;; files from a coarse clock (a few ms), so a hand edit and a re-read
-;; inside that window could miss the edit; every writer in this library
-;; goes through `write-manifest', which refreshes the cache itself.
+;; inside that window could miss the edit; writes through `write-manifest'
+;; are not affected.
 (defvar a3madkour-pub-history--cache nil
-  "Nil, or (PATH MTIME SIZE INODE MANIFEST) for the last manifest seen.
+  "Nil, or (PATH MTIME SIZE INODE MANIFEST) for the last manifest parsed.
 MANIFEST is private: it is handed out only as a deep copy.")
 
 (defun a3madkour-pub-history--cache-clear ()
@@ -112,18 +112,23 @@ because callers replace entries and fields, never edit a string in place."
          (equal inode c-inode))))
 
 (defun a3madkour-pub-history--cache-store (key manifest)
-  "Cache a private copy of MANIFEST under KEY."
-  (setq a3madkour-pub-history--cache
-        (append key (list (a3madkour-pub-history--copy manifest)))))
+  "Cache MANIFEST, a fresh parse no caller holds, under KEY."
+  (setq a3madkour-pub-history--cache (append key (list manifest))))
 
+;; Known limitation of the on-disk format (yaml.el's round trip): a value
+;; written by `write-manifest' does not always parse back as itself.  The
+;; strings "1" and "true" read back as 1 and t, and even a quoted "1.5"
+;; reads back as 1.5.  A string with a backslash, or a bare "-", is written
+;; in a form yaml.el cannot parse at all.  Key order within an entry is not
+;; kept either.  Real manifest values (UUID ids, "/…/" URLs, states, ISO
+;; dates) are not affected.
 (defun a3madkour-pub-history/read-manifest ()
   "Return the manifest as an alist parsed from `url-history.yaml'.
 If the file is missing or empty, returns the empty shape `((notes . []))'.
-Entry keys come back in canonical order (see `--canonicalize-manifest').
 
-The file is parsed only when it changed since the last read or write
-\(see `a3madkour-pub-history--cache'); the result is always a fresh copy
-the caller may mutate.
+The file is parsed only when it changed since the last parse (see
+`a3madkour-pub-history--cache'); the result is always a fresh copy the
+caller may mutate.
 
 Uses `yaml-parse-string' keyword API (yaml.el's public surface; the dynamic
 vars `yaml--parsing-*' are internal and may not be honoured by callers)."
@@ -140,17 +145,14 @@ vars `yaml--parsing-*' are internal and may not be honoured by callers)."
         (unless (a3madkour-pub-history--cache-hit-p key)
           (a3madkour-pub-history--cache-store
            key
-           ;; Canonical key order, so a parse and the form `write-manifest'
-           ;; caches are `equal' (yaml.el does not keep file order).
-           (a3madkour-pub-history--canonical-read-form
-            (with-temp-buffer
-              (insert-file-contents path)
-              (yaml-parse-string (buffer-string)
-                                 :object-type 'alist
-                                 :object-key-type 'symbol
-                                 :sequence-type 'array
-                                 :null-object nil
-                                 :false-object nil)))))
+           (with-temp-buffer
+             (insert-file-contents path)
+             (yaml-parse-string (buffer-string)
+                                :object-type 'alist
+                                :object-key-type 'symbol
+                                :sequence-type 'array
+                                :null-object nil
+                                :false-object nil))))
         (a3madkour-pub-history--copy
          (nth 4 a3madkour-pub-history--cache))))))
 
@@ -225,76 +227,13 @@ elsewhere in the codebase doesn't silently drop it from the emitted YAML."
               (assq-delete-all 'notes (copy-alist manifest)))
       manifest)))
 
-(defun a3madkour-pub-history--canonical-read-form (parsed)
-  "PARSED (a parsed manifest) with its entries' keys in canonical order.
-A malformed manifest (not an alist, or `notes' holding something other
-than alists) is returned as parsed, as it was before keys were ordered."
-  (let ((notes (and (consp parsed) (alist-get 'notes parsed))))
-    (if (and (vectorp notes) (cl-every #'listp notes))
-        (a3madkour-pub-history--canonicalize-manifest parsed)
-      parsed)))
-
-;; What `write-manifest' may cache without parsing the file back.  yaml.el
-;; re-types some strings on read ("1" → 1, "true" → t, "null" → nil, and
-;; quoting does not stop it), cannot read back some strings it writes (a
-;; backslash, a bare "-"), loses key order (fixed by the canonical read
-;; form, given at most one key outside the canonical orders per alist) and
-;; collapses duplicate keys.  A manifest outside these limits is not cached,
-;; so the next read parses the file.  The real ones (UUID ids, "/…/" URLs,
-;; states, ISO dates) are inside them.
-(defconst a3madkour-pub-history--retyped-string-re
-  (concat "\\`\\(?:"
-          "[-+]?[0-9]+"
-          "\\|0o[0-7]+\\|0x[0-9a-fA-F]+"
-          "\\|[-+]?\\(?:\\.[0-9]+\\|[0-9]+\\(?:\\.[0-9]*\\)?\\)\\(?:[eE][-+]?[0-9]+\\)?"
-          "\\|[-+]?\\.\\(?:inf\\|Inf\\|INF\\|nan\\|NaN\\|NAN\\)"
-          "\\|~\\|null\\|Null\\|NULL\\|true\\|True\\|TRUE\\|false\\|False\\|FALSE"
-          "\\)\\'")
-  "Strings yaml.el reads back as something other than the same string.
-Mirrors the cases of `yaml--resolve-scalar-tag'.")
-
-(defun a3madkour-pub-history--round-trips-p (x)
-  "Non-nil when X is known to parse back `equal' after `yaml-encode'.
-X is a canonicalized manifest or part of one; see the comment above."
-  (cond
-   ((null x) t)
-   ((eq x t) t)
-   ((integerp x) t)
-   ((stringp x)
-    ;; Characters yaml.el encodes and reads back faithfully (a backslash, a
-    ;; leading "-" plain scalar and others do not survive), minus the
-    ;; strings it re-types.
-    (and (string-match-p "\\`[-_./:[:alnum:]]*\\'" x)
-         (not (string-match-p "\\`-+\\'" x))
-         (not (string-match-p a3madkour-pub-history--retyped-string-re x))))
-   ((vectorp x) (cl-every #'a3madkour-pub-history--round-trips-p x))
-   ((consp x)
-    (let ((keys (mapcar #'car-safe x))
-          (known (append '(notes)
-                         a3madkour-pub-history--canonical-key-order
-                         a3madkour-pub-history--history-key-order)))
-      (and (proper-list-p x)
-           (cl-every (lambda (cell)
-                       (and (consp cell)
-                            (symbolp (car cell))
-                            (string-match-p "\\`[a-z][a-z_]*\\'"
-                                            (symbol-name (car cell)))
-                            (not (memq (car cell) '(null true false)))
-                            (a3madkour-pub-history--round-trips-p (cdr cell))))
-                     x)
-           (= (length keys) (length (delete-dups (copy-sequence keys))))
-           (<= (cl-count-if-not (lambda (k) (memq k known)) keys) 1))))
-   (t nil)))
-
 (defun a3madkour-pub-history/write-manifest (manifest)
   "Serialize MANIFEST (an alist) to `url-history.yaml' as block-style YAML.
 Creates the data dir if missing.  Each note entry's keys are pre-ordered
 canonically (id / current_url / history / state) so the emitted file is
 byte-stable across publish runs.
 
-Then caches the canonical form against the written file, so the next
-`read-manifest' does not parse it back; see
-`a3madkour-pub-history--round-trips-p' for when it does not."
+Clears the `read-manifest' cache, so the next read parses the new file."
   (let* ((path (a3madkour-pub-history--manifest-path))
          (canonical (a3madkour-pub-history--canonicalize-manifest manifest))
          (dir (file-name-directory path)))
@@ -312,23 +251,11 @@ Then caches the canonical form against the written file, so the next
             (with-temp-file tmp
               (insert (yaml-encode canonical))
               (unless (eq ?\n (char-before)) (insert "\n")))
-            (let ((tmp-inode (file-attribute-inode-number
-                              (file-attributes tmp 'integer))))
-              ;; Drop the cache first: if the rename fails, the next read
-              ;; parses whatever is on disk.
-              (a3madkour-pub-history--cache-clear)
-              (rename-file tmp path t)
-              (setq tmp nil)
-              ;; Attributes of the final path, after the rename.  Cache only
-              ;; when that path now is the file just written (same inode),
-              ;; and only a form that parses back `equal'.
-              (let ((attrs (file-attributes path 'integer)))
-                (when (and attrs
-                           (equal tmp-inode (file-attribute-inode-number attrs))
-                           (a3madkour-pub-history--round-trips-p canonical))
-                  (a3madkour-pub-history--cache-store
-                   (a3madkour-pub-history--cache-key path attrs)
-                   canonical)))))
+            (rename-file tmp path t)
+            (setq tmp nil)
+            ;; The next read parses what was written: the cache only ever
+            ;; holds a real parse of the file.
+            (a3madkour-pub-history--cache-clear))
         (when (and tmp (file-exists-p tmp)) (ignore-errors (delete-file tmp)))))))
 
 (defun a3madkour-pub-history/normalize-manifest ()
