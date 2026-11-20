@@ -12,11 +12,20 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'a3madkour-org)
 (require 'a3madkour-publish-paths)
 (require 'a3madkour-publish)
 (require 'a3madkour-publish-rewrite)         ; for --html-escape
 (require 'a3madkour-publish-async)           ; for run-process + with-a3-pub-async-sync
+
+(defconst a3madkour-pub-assets-link-re
+  "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
+  "Regex matching an org bracket link `[[path]]' or `[[path][text]]'.
+Group 1 is the path, group 2 the description or unmatched.
+
+More lenient than `a3madkour-org-bracket-link-re': org allows single
+brackets in a description (`[[./p.pdf][Paper [2024]]]'), and an asset
+scan must not skip such a link, or the asset is never collected,
+published or migrated.  Only `]' is excluded from either part.")
 
 (defgroup a3madkour-pub-assets nil
   "Asset link handling for the a3madkour-publish library."
@@ -217,7 +226,7 @@ A `::search' suffix (`[[file:paper.pdf::5]]') is split off first with
       (insert-file-contents org-file)
       (goto-char (point-min))
       (while (re-search-forward
-              a3madkour-org-bracket-link-re
+              a3madkour-pub-assets-link-re
               nil t)
         (let* ((raw-path (car (a3madkour-pub-rewrite--split-search
                                (match-string 1))))       ; drop `::search'
@@ -365,7 +374,7 @@ asset move and the link rewrite in `git status' after the publish."
       (goto-char (point-min))
       (let ((case-fold-search nil))
         (while (re-search-forward
-                a3madkour-org-bracket-link-re
+                a3madkour-pub-assets-link-re
                 nil t)
           (let* ((split (a3madkour-pub-rewrite--split-search (match-string 1)))
                  (path (replace-regexp-in-string "\\`file:" "" (car split)))

@@ -1110,6 +1110,14 @@ check, as before: an asset under another page's folder still publishes."
       (should (equal (mapcar #'car (a3madkour-pub--extract-asset-refs note))
                      '("./assets/page/n/paper.pdf"))))))
 
+(ert-deftest a3madkour-pub-assets-test-extract-refs-allows-brackets-in-description ()
+  "A description holding single brackets does not hide the link."
+  (a3-pub-assets-test--with-tmp-root root
+    (let ((note (expand-file-name "note.org" root)))
+      (with-temp-file note (insert "See [[./assets/page/foo/p.pdf][Paper [2024]]].\n"))
+      (should (equal (mapcar #'car (a3madkour-pub--extract-asset-refs note))
+                     '("./assets/page/foo/p.pdf"))))))
+
 (ert-deftest a3madkour-pub-assets-test-rewrite-source-links-to-keeps-search-suffix ()
   "A link with `::5' matches its target and keeps the suffix when rewritten."
   (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")

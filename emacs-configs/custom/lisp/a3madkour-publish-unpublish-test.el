@@ -1726,6 +1726,89 @@ Return (RENAME-CALLS REWRITE-CALLS OLD-BUNDLE-EXISTS-P)."
     (should (equal rename-calls '(("foo" "foo-bar"))))
     (should (equal rewrite-calls '(("foo" "foo-bar"))))))
 
+(ert-deftest a3madkour-pub-unpublish-test-finish-publish-surfaces-migration-warnings ()
+  "Warnings from the slug-change link migration reach finish-publish's
+returned warnings."
+  (let* ((content-root (make-temp-file "a3-pub-content-" t))
+         (asset-root   (make-temp-file "a3-pub-assets-" t))
+         (notes-dir    (make-temp-file "a3-pub-notes-" t))
+         (manifest-path (make-temp-file "a3-pub-history-" nil ".yaml"))
+         (a3madkour-pub-site-content-dir content-root)
+         (a3madkour-pub-canonical-asset-root asset-root)
+         (a3madkour-pub/org-notes-dir notes-dir))
+    (unwind-protect
+        (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                   (lambda () manifest-path))
+                  ((symbol-function 'vc-backend) (lambda (_) nil))
+                  ((symbol-function 'a3madkour-pub--unpublish-rename-asset-dir)
+                   (lambda (&rest _) nil))
+                  ((symbol-function 'a3madkour-pub--unpublish-bulk-rewrite-source-links)
+                   (lambda (&rest _)
+                     '(:modified nil :warnings ("WARN: cannot migrate link in F: P")))))
+          (a3madkour-pub-history/write-manifest
+           '((notes . [((id . "id-x") (current_url . "/garden/foo/")
+                        (history . []) (state . "live"))])))
+          (clrhash a3madkour-pub--publish-run-accumulator)
+          (puthash "id-x" (cons "/research/themes/foo-bar/" 'live)
+                   a3madkour-pub--publish-run-accumulator)
+          (let ((r (a3madkour-pub/finish-publish)))
+            (should (member "WARN: cannot migrate link in F: P"
+                            (plist-get r :orphan-warnings)))))
+      (clrhash a3madkour-pub--publish-run-accumulator)
+      (delete-directory content-root t)
+      (delete-directory asset-root t)
+      (delete-directory notes-dir t)
+      (when (file-exists-p manifest-path) (delete-file manifest-path)))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-migrates-link-description ()
+  "An asset path inside a link description migrates too, in links whose
+path migrates and in links whose path does not; each occurrence counts once."
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((note (expand-file-name "note.org" d)))
+      (a3-pub-unpublish-test--write-org d "note.org"
+        (concat "[[./assets/page/old/big.png][./assets/page/old/thumb.png]] "
+                "[[https://example.com][file:./assets/page/old/t2.png]] "
+                "[[./assets/page/old/a.png][plain words]]"))
+      (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new" d)))
+        (should (equal (plist-get r :modified) (list (cons note 4))))
+        (should (equal (a3-pub-unpublish-test--read-file note)
+                       (concat "[[./assets/page/new/big.png][./assets/page/new/thumb.png]] "
+                               "[[https://example.com][file:./assets/page/new/t2.png]] "
+                               "[[./assets/page/new/a.png][plain words]]")))))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-segment-boundaries ()
+  "Only a whole `old' path segment migrates, `::search' kept."
+  (a3-pub-unpublish-test--with-tmp-notes-dir d
+    (let ((note (expand-file-name "note.org" d)))
+      (a3-pub-unpublish-test--write-org d "note.org"
+        (concat "[[./assets/page/xold/a.png]] [[./assets/page/older/b.png]] "
+                "[[file:./assets/page/old/p.pdf::5][p5]]"))
+      (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new" d)))
+        (should (equal (plist-get r :modified) (list (cons note 1))))
+        (should (equal (a3-pub-unpublish-test--read-file note)
+                       (concat "[[./assets/page/xold/a.png]] [[./assets/page/older/b.png]] "
+                               "[[file:./assets/page/new/p.pdf::5][p5]]")))))))
+
+(ert-deftest a3madkour-pub-unpublish-test-bulk-rewrite-bracketed-description ()
+  "A link whose description holds single brackets is still a link."
+  (let* ((top (make-temp-file "a3-pub-living-" t))
+         (notes (expand-file-name "notes" top))
+         (recipes (expand-file-name "recipes" top))
+         (toast (expand-file-name "toast.org" recipes))
+         (a3madkour-pub/org-notes-dir notes)
+         (a3madkour-pub-recipes-dir recipes)
+         (a3madkour-pub-canonical-asset-root (expand-file-name "assets" notes)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (a3-pub-unpublish-test--write-org
+           recipes "toast.org" "[[../notes/assets/page/old/p.pdf][Paper [2024]]]")
+          (let ((r (a3madkour-pub--unpublish-bulk-rewrite-source-links "old" "new")))
+            (should (equal (plist-get r :modified) (list (cons toast 1))))
+            (should (equal (a3-pub-unpublish-test--read-file toast)
+                           "[[../notes/assets/page/new/p.pdf][Paper [2024]]]"))))
+      (delete-directory top t))))
+
 ;; -- a living folder that is not walked this run is not swept --
 
 (defun a3-pub-unpublish-test--sweep-with-recipes-dir (recipes-dir-fn)

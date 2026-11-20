@@ -28,9 +28,8 @@
 (require 'a3madkour-publish-paths)
 (require 'a3madkour-publish-registry)
 (require 'a3madkour-publish-async)
-(require 'a3madkour-org)              ; for bracket-link-re
 (require 'a3madkour-publish-rewrite)   ; for --split-search
-(require 'a3madkour-publish-assets)    ; for --asset-normalize-link-path
+(require 'a3madkour-publish-assets)    ; for --asset-normalize-link-path, link-re
 
 (defcustom a3madkour-pub-site-content-dir nil
   "Root of the Hugo `content/' tree for the site repo, or nil to derive.
@@ -435,7 +434,11 @@ Returns:
                   ;; and the source links have nothing to migrate.
                   (unless (equal old-slug new-slug)
                     (a3madkour-pub--unpublish-rename-asset-dir old-slug new-slug)
-                    (a3madkour-pub--unpublish-bulk-rewrite-source-links old-slug new-slug))
+                    (dolist (w (plist-get
+                                (a3madkour-pub--unpublish-bulk-rewrite-source-links
+                                 old-slug new-slug)
+                                :warnings))
+                      (push w orphan-warnings)))
                   ;; Delete the orphan Hugo content bundle at the old slug.
                   ;; The per-section handler already wrote a new bundle at the
                   ;; new slug; without this call the old bundle stays as dead
@@ -586,13 +589,17 @@ ORG-NOTES-DIR is given, every `.org' file under it, in two kinds of text:
   `./assets/' is its alias, other relative paths resolve against the
   file's directory).  Matching is by path, not by file existence: the
   asset directory has already been renamed when this runs.  Only the
-  `OLD-SLUG' path segment changes; spelling, `file:' prefix, `::search'
-  and description stay as written (see
-  `a3madkour-pub--unpublish-migrate-link-path').  A qualifying link that
+  `OLD-SLUG' path segment changes; spelling, `file:' prefix and
+  `::search' stay as written (see
+  `a3madkour-pub--unpublish-migrate-link-path').  A qualifying path that
   cannot be migrated that way is left as written and warned about.
-- All text outside bracket links (keyword lines, property drawers):
-  the literal forms of `a3madkour-pub--unpublish-literal-patterns' are
-  replaced in one left-to-right pass each.
+  Links are found with `a3madkour-pub-assets-link-re', so a description
+  may hold single brackets.
+- Every link description (an inline thumbnail `[[big.png][thumb.png]]'
+  names an asset there) and all text outside bracket links (keyword
+  lines, property drawers): the literal forms of
+  `a3madkour-pub--unpublish-literal-patterns' are replaced in one
+  left-to-right pass each.
 
 Returns a plist:
   :modified  ((file . rewritten-occurrence-count) ...)
@@ -628,13 +635,16 @@ Idempotent: after a successful pass nothing names the old folder."
                                     (setq count (1+ count))
                                     replacement)
                                   text t t)))))))
-          ;; Walk the text link by link: the gap before each link gets the
-          ;; literal patterns, the link itself the resolved-path rewrite.
-          (while (string-match a3madkour-org-bracket-link-re orig pos)
+          ;; Walk the text link by link: the gap before each link and the
+          ;; link's description get the literal patterns, the link's path
+          ;; the resolved-path rewrite.
+          (while (string-match a3madkour-pub-assets-link-re orig pos)
             (let* ((beg (match-beginning 0))
                    (end (match-end 0))
                    (path-beg (match-beginning 1))
                    (path-end (match-end 1))
+                   (desc-beg (match-beginning 2))
+                   (desc-end (match-end 2))
                    (raw (match-string 1 orig))
                    (split (a3madkour-pub-rewrite--split-search raw))
                    (prefix (if (string-prefix-p "file:" (car split)) "file:" ""))
@@ -643,19 +653,25 @@ Idempotent: after a successful pass nothing names the old folder."
                    (new-path (a3madkour-pub--unpublish-migrate-link-path
                               path file old-slug new-slug)))
               (push (funcall migrate-text (substring orig pos beg)) out)
+              (push (substring orig beg path-beg) out)
               (cond
                ((stringp new-path)
                 (setq count (1+ count))
-                (push (concat (substring orig beg path-beg)
-                              prefix new-path
-                              (and search (concat "::" search))
-                              (substring orig path-end end))
+                (push (concat prefix new-path
+                              (and search (concat "::" search)))
                       out))
                (t
                 (when (eq new-path 'unfixable)
                   (push (format "WARN: cannot migrate link in %s: %s" file path)
                         warnings))
-                (push (substring orig beg end) out)))
+                (push raw out)))
+              (if desc-beg
+                  (push (concat (substring orig path-end desc-beg)
+                                (funcall migrate-text
+                                         (substring orig desc-beg desc-end))
+                                (substring orig desc-end end))
+                        out)
+                (push (substring orig path-end end) out))
               (setq pos end)))
           (push (funcall migrate-text (substring orig pos)) out)
           (when (> count 0)
