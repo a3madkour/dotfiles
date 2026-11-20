@@ -40,5 +40,17 @@
     (should (null (a3madkour-org-ast-table-under (funcall hl "Empty"))))
     (should (null (a3madkour-org-ast-table-under (funcall hl "R"))))))
 
+(ert-deftest a3madkour-org-test-table-rows-under ()
+  (let ((p (lambda (line) (string-match-p "\\`\\*+ +Ingredients" line))))
+    (with-temp-buffer
+      (insert "* R\n** Ingredients :tag:\nnote\n  | qty | item |\n  |-----+------|\n  | 2 | egg |\n** Steps\n| x |\n")
+      (should (equal (a3madkour-org-table-rows-under p) '(("qty" "item") ("2" "egg")))))
+    (with-temp-buffer
+      (insert "** Ingredients\nnone here\n** Steps\n| x |\n")
+      (should (null (a3madkour-org-table-rows-under p))))
+    (with-temp-buffer
+      (insert "* Other\n| x |\n")
+      (should (null (a3madkour-org-table-rows-under p))))))
+
 (provide 'a3madkour-org-test)
 ;;; a3madkour-org-test.el ends here

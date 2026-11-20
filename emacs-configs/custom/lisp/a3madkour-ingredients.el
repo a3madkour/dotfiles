@@ -27,6 +27,7 @@
 (require 'subr-x)
 (require 'ucs-normalize)
 (require 'org)
+(require 'a3madkour-org)
 
 (defgroup a3madkour-ingredients nil
   "The shared ingredient registry."
@@ -509,28 +510,8 @@ its TODO keyword and its name are left alone."
 (defun a3madkour-ingredients--recipe-rows (&optional buffer)
   "Cell lists of the first table under BUFFER's Ingredients heading, rules
 dropped, header row first.  Nil when there is no such heading or table."
-  (with-current-buffer (or buffer (current-buffer))
-    (save-excursion
-      (save-restriction
-        (widen)
-        (goto-char (point-min))
-        (while (and (not (eobp))
-                    (not (a3madkour-ingredients--ingredients-heading-p
-                          (a3madkour-ingredients--current-line))))
-          (forward-line 1))
-        (unless (eobp)
-          (forward-line 1)
-          (while (and (not (eobp))
-                      (not (looking-at "\\*+ "))
-                      (not (looking-at "[ \t]*|")))
-            (forward-line 1))
-          (let ((rows '()))
-            (while (and (not (eobp)) (looking-at "[ \t]*|"))
-              (let ((line (a3madkour-ingredients--current-line)))
-                (unless (a3madkour-ingredients--rule-line-p line)
-                  (push (a3madkour-ingredients--row-cells line) rows)))
-              (forward-line 1))
-            (nreverse rows)))))))
+  (a3madkour-org-table-rows-under
+   #'a3madkour-ingredients--ingredients-heading-p buffer))
 
 (defun a3madkour-ingredients/recipe-items (&optional buffer)
   "The non-empty `item' cells of BUFFER's Ingredients table, in row order.

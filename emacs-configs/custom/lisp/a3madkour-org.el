@@ -75,6 +75,50 @@ text properties."
                                      (org-element-interpret-data c)))))))
                            (org-element-contents row))))
 
+(defun a3madkour-org--rule-line-p (line)
+  "Non-nil when LINE is a table rule (|---+---|)."
+  (string-match-p "\\`[ \t]*|[-+]" line))
+
+(defun a3madkour-org--row-cells (line)
+  "The trimmed cells of table row LINE."
+  (let ((s (string-trim line)))
+    (setq s (string-remove-suffix "|" (string-remove-prefix "|" s)))
+    (mapcar #'string-trim (split-string s "|"))))
+
+(defun a3madkour-org-table-rows-under (heading-p &optional buffer)
+  "Cell lists of the first table under the first heading HEADING-P accepts.
+HEADING-P is called with each heading line (text starting with stars) of
+BUFFER (default current) and picks the heading.  The table is the first one
+that follows it before the next heading; rule lines are dropped and the
+header row comes first.  Nil when there is no such heading or no table.
+Reads the whole buffer regardless of narrowing; point and restriction are
+left as they were."
+  (with-current-buffer (or buffer (current-buffer))
+    (save-excursion
+      (save-restriction
+        (widen)
+        (goto-char (point-min))
+        (while (and (not (eobp))
+                    (not (funcall heading-p
+                                  (buffer-substring-no-properties
+                                   (line-beginning-position)
+                                   (line-end-position)))))
+          (forward-line 1))
+        (unless (eobp)
+          (forward-line 1)
+          (while (and (not (eobp))
+                      (not (looking-at "\\*+ "))
+                      (not (looking-at "[ \t]*|")))
+            (forward-line 1))
+          (let ((rows '()))
+            (while (and (not (eobp)) (looking-at "[ \t]*|"))
+              (let ((line (buffer-substring-no-properties
+                           (line-beginning-position) (line-end-position))))
+                (unless (a3madkour-org--rule-line-p line)
+                  (push (a3madkour-org--row-cells line) rows)))
+              (forward-line 1))
+            (nreverse rows)))))))
+
 (provide 'a3madkour-org)
 
 ;;; a3madkour-org.el ends here
