@@ -95,6 +95,26 @@ out to the owner at hand-back.
   arriving through the environment, and argument order within the common
   block being made uniform. Permanent tests pin the invariants.
 
+## Deviations decided during the build
+
+These supersede the text above where they differ.
+
+- **A write clears the cache; it does not fill it.** yaml.el does not read
+  back every value it writes (`"1"` returns as the number 1, `"true"` as t),
+  so only a real parse of the file is ever cached. A run that changes notes
+  therefore parses once per changed note; a run that changes nothing parses
+  once.
+- **Module lists are not unified across modes.** Some modules act when they
+  are loaded (the multi-export filter installs an export hook; bib and
+  citations make `begin-publish` parse the bibliography). `--check-orphans`,
+  `--publish-living`, `--publish-deliberate` and `--sync-citations` each load
+  exactly the modules they loaded before, declared once near the top of the
+  script as named groups. Only the default pass-through mode loads the union.
+- **One existing test was rewritten.**
+  `a3madkour-pub-works--a3-pub-sh-wires-each-lint-flag-on-each-path` counted
+  `emacs --batch` blocks in the script text; it now checks the same property
+  on the arguments the script passes to Emacs.
+
 ## Constraints
 
 - Same test rules as before: ERT, temp directories, no real org-roam
