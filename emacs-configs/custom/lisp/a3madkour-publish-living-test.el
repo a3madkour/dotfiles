@@ -703,5 +703,35 @@ naming the fix, and its items never reach reading.yaml."
                        (or (a3madkour-pub-living/contract-gap file "essays") "")))
         (delete-file file)))))
 
+;; -- stale metadata across runs in one session --
+
+(ert-deftest a3madkour-pub-living-test-unmarked-note-is-not-collected-on-second-run ()
+  "A note that stops being marked between two runs is not dispatched on the
+second: `a3-publish-living' resets the metadata cache before collecting."
+  (let* ((dir (make-temp-file "living-stale-" t))
+         (note (expand-file-name "n.org" dir))
+         (a3madkour-pub/org-notes-dir dir)
+         (dispatched nil) (captured 'unset))
+    (unwind-protect
+        (progn
+          (with-temp-file note
+            (insert ":PROPERTIES:\n:ID: 3e650e6f-3333-0000-0000-000000000000\n:END:\n"
+                    "#+title: N\n#+HUGO_SECTION: garden\n#+HUGO_PUBLISH: t\n"))
+          (a3madkour-pub--reset-metadata-cache)
+          (should (a3madkour-pub/note-metadata note))
+          (with-temp-file note
+            (insert ":PROPERTIES:\n:ID: 3e650e6f-3333-0000-0000-000000000000\n:END:\n"
+                    "#+title: N\n#+HUGO_SECTION: garden\n"))
+          (a3-pub-living-test--capture-finish-status captured
+            (cl-letf (((symbol-function 'a3madkour-pub-registry/handler)
+                       (lambda (&rest _) 'stub-h))
+                      ((symbol-function 'stub-h)
+                       (lambda (f _r &rest rest)
+                         (push (list "garden" f) dispatched)
+                         (funcall (plist-get rest :on-done) 'ok))))
+              (a3-publish-living)))
+          (should-not (member note (mapcar #'cadr dispatched))))
+      (delete-directory dir t))))
+
 (provide 'a3madkour-publish-living-test)
 ;;; a3madkour-publish-living-test.el ends here

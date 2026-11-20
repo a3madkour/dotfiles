@@ -353,5 +353,32 @@ function, before `begin-publish' takes the run lock."
                "a3madkour-pub-deliberate-test--no-such-handler.*is not loaded"
                (error-message-string err))))))
 
+(ert-deftest a3madkour-pub-deliberate-test-second-run-sees-fixed-keywords ()
+  "After a failed first call, fixing the note's keywords makes the second
+call dispatch: `a3-publish-deliberate' resets the metadata cache first."
+  (let* ((dir (make-temp-file "delib-stale-" t))
+         (file (expand-file-name "e.org" dir))
+         (handler-called nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert ":PROPERTIES:\n:ID: 3e650e6f-4444-0000-0000-000000000000\n:END:\n"
+                    "#+title: E\n"))
+          (a3madkour-pub--reset-metadata-cache)
+          (should-error (a3-publish-deliberate file))
+          (with-temp-file file
+            (insert ":PROPERTIES:\n:ID: 3e650e6f-4444-0000-0000-000000000000\n:END:\n"
+                    "#+title: E\n#+HUGO_SECTION: essays\n#+HUGO_PUBLISH: t\n"))
+          (cl-letf (((symbol-function 'a3madkour-pub/begin-publish) (lambda (&rest _) nil))
+                    ((symbol-function 'a3-pub-async/finish-publish) #'ignore)
+                    ((symbol-function 'a3madkour-pub-living/contract-gap) (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-essays/publish-essay-file)
+                     (lambda (&rest _) (setq handler-called t))))
+            (let ((a3-pub-async--in-flight-run nil))
+              (with-a3-pub-async-sync
+               (a3-publish-deliberate file))))
+          (should handler-called))
+      (delete-directory dir t))))
+
 (provide 'a3madkour-publish-deliberate-test)
 ;;; a3madkour-publish-deliberate-test.el ends here

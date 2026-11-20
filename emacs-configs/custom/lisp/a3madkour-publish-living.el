@@ -133,6 +133,7 @@ Async lifecycle: walks every living section's source set into a flat
 rebuilds the library shelves once after the barrier reports done, then
 calls finish-publish."
   (interactive)
+  (a3madkour-pub--reset-metadata-cache)
   (let* ((triples (a3madkour-pub-living--collect-triples))
          (n (length triples))
          (run (a3-pub-async/begin-publish

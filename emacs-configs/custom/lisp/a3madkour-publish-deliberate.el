@@ -40,6 +40,7 @@ Async lifecycle: returns immediately after dispatching the handler.
 The handler is responsible for calling its :on-done callback when its
 sentinel chain completes; finish-publish then fires."
   (interactive "fOrg file or ID: ")
+  (a3madkour-pub--reset-metadata-cache)
   (let* ((file (a3madkour-pub--resolve-file-or-id file-or-id))
          (section (a3madkour-pub/note-section file))
          (handler (a3madkour-pub-deliberate--handler-for section file))
