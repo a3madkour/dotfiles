@@ -218,5 +218,16 @@
     (goto-char (point-min))
     (should-error (a3-recipe-import-org-chef) :type 'user-error)))
 
+(ert-deftest a3madkour-recipe-import-test-steps-all-shapes ()
+  (should (equal (a3madkour-recipe-import--steps "Chop.\nFry.") '("Chop." "Fry.")))
+  (should (equal (a3madkour-recipe-import--steps '("Chop." "Fry.")) '("Chop." "Fry.")))
+  (should (equal (a3madkour-recipe-import--steps '((@type . "HowToStep") (text . "Chop.")))
+                 '("Chop.")))
+  (should (equal (a3madkour-recipe-import--steps
+                  '(((@type . "HowToStep") (text . "Chop."))
+                    ((@type . "HowToSection")
+                     (itemListElement . (((text . "Fry.")) ((text . "Serve.")))))))
+                 '("Chop." "Fry." "Serve."))))
+
 (provide 'a3madkour-recipe-import-test)
 ;;; a3madkour-recipe-import-test.el ends here

@@ -193,7 +193,7 @@ range becomes its upper end and is kept verbatim in the note."
     (cl-remove-if #'string-empty-p
                   (mapcar #'a3madkour-recipe-import--clean
                           (split-string instructions "\n\\|</p>\\|</li>\\|<br ?/?>" t))))
-   ((and (consp instructions) (symbolp (car-safe (car instructions))))
+   ((and (consp (car-safe instructions)) (symbolp (caar instructions)))
     ;; One object: a step, or a section holding steps.
     (if (alist-get 'itemListElement instructions)
         (a3madkour-recipe-import--steps (alist-get 'itemListElement instructions))
