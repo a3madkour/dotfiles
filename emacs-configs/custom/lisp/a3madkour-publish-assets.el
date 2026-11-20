@@ -207,7 +207,10 @@ The org `file:' link type is normalized away before the shape check so
 same asset — without this normalization `[[file:…]]' forms used to
 fall through B.4's asset pipeline entirely (link-scheme \"file\" tripped
 the no-scheme filter), surfacing as publish-time errors when the
-referenced file wasn't somewhere ox-hugo expected."
+referenced file wasn't somewhere ox-hugo expected.
+
+A `::search' suffix (`[[file:paper.pdf::5]]') is split off first with
+`a3madkour-pub-rewrite--split-search'; PATH is the bare file path."
   (let ((refs nil))
     (with-temp-buffer
       (insert-file-contents org-file)
@@ -215,7 +218,8 @@ referenced file wasn't somewhere ox-hugo expected."
       (while (re-search-forward
               "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
               nil t)
-        (let* ((raw-path (match-string 1))
+        (let* ((raw-path (car (a3madkour-pub-rewrite--split-search
+                               (match-string 1))))       ; drop `::search'
                (path (replace-regexp-in-string "\\`file:" "" raw-path))
                (text (or (match-string 2) path)))
           (when (a3madkour-pub--asset-shaped-link-p path)
@@ -362,6 +366,8 @@ result equals ABS-TARGET have their path part replaced by NEW-PATH (the
 description, if any, is left as written).  Matching by resolved target
 rather than by literal text means every spelling of the link is caught —
 `[[file:../img/x.png]]', `[[../img/x.png][caption]]', an absolute path.
+A `::search' suffix is ignored for the comparison and kept on the
+rewritten link (`[[file:../img/x.pdf::5]]' → `[[NEW-PATH::5]]').
 
 Returns the number of matching links.  With COUNT-ONLY non-nil nothing is
 written; otherwise ORG-FILE is saved when at least one link matched.
@@ -377,12 +383,16 @@ asset move and the link rewrite in `git status' after the publish."
         (while (re-search-forward
                 "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
                 nil t)
-          (let ((path (replace-regexp-in-string "\\`file:" "" (match-string 1))))
+          (let* ((split (a3madkour-pub-rewrite--split-search (match-string 1)))
+                 (path (replace-regexp-in-string "\\`file:" "" (car split)))
+                 (search (cdr split)))
             (when (equal (a3madkour-pub--asset-normalize-link-path path org-file)
                          target)
               (setq count (1+ count))
               (unless count-only
-                (replace-match new-path t t nil 1))))))
+                ;; Keep a `::search' suffix (`::5' page) on the new path.
+                (replace-match (if search (concat new-path "::" search) new-path)
+                               t t nil 1))))))
       (when (and (not count-only) (> count 0))
         (write-region (point-min) (point-max) org-file nil 'silent)))
     count))

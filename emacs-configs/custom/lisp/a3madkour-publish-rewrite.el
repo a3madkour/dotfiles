@@ -313,6 +313,20 @@ into the rendered anchor.  :inert variants pass through unchanged
               :warnings (plist-get id-result :warnings))
       id-result)))
 
+(defun a3madkour-pub-rewrite--split-search (path)
+  "Split an org `::search' suffix off a file-like link PATH.
+
+Returns (PATH-PART . SEARCH).  When PATH starts with `file:', `./',
+`../', `/' or `~' and contains `::', PATH-PART is the text before the
+first `::' and SEARCH the text after it (`[[file:x.org::*Heading]]',
+`[[./paper.pdf::5]]').  Otherwise returns (PATH . nil) — URLs and
+`id:' links keep any `::' they contain."
+  (let ((pos (and (string-match-p "\\`\\(?:file:\\|\\./\\|\\.\\./\\|/\\|~\\)" path)
+                  (string-search "::" path))))
+    (if pos
+        (cons (substring path 0 pos) (substring path (+ pos 2)))
+      (cons path nil))))
+
 (defun a3madkour-pub/rewrite-link (org-link source-note-id &optional source-file)
   "Rewrite ORG-LINK to web HTML, inert text, or asset placeholder.
 
@@ -330,7 +344,12 @@ Returns one of:
 See parent spec §6 for the per-link-type rules."
   (let* ((parsed (a3madkour-pub--parse-org-link org-link))
          (raw-path (plist-get parsed :path))
-         (path (a3madkour-pub--strip-file-prefix-if-asset raw-path))
+         ;; A `::search' suffix (`file:x.org::*Heading', `./x.pdf::5') is
+         ;; split off first so classification sees the bare path.  Note
+         ;; links drop it with a WARN; asset links drop it silently.
+         (split (a3madkour-pub-rewrite--split-search raw-path))
+         (search (cdr split))
+         (path (a3madkour-pub--strip-file-prefix-if-asset (car split)))
          ;; Bug 1.9: when `--parse-org-link' synthesized text from path
          ;; (the `[[path]]` no-display form returns text = path), and we
          ;; stripped `file:' from path above, strip it from text too —
@@ -348,7 +367,14 @@ See parent spec §6 for the per-link-type rules."
       (a3madkour-pub--rewrite-id-link path text source-note-id))
      ;; file-link — auto-convert to id-link via target's :ID:
      ((equal scheme "file")
-      (a3madkour-pub--rewrite-file-link path text source-note-id source-file))
+      (let ((result (a3madkour-pub--rewrite-file-link
+                     path text source-note-id source-file)))
+        (if search
+            (plist-put result :warnings
+                       (append (plist-get result :warnings)
+                               (list (format "heading target dropped: ::%s (%s)"
+                                             search path))))
+          result)))
      ;; Custom typed link (`[[supports:UUID][text]]` etc.) — id-link with
      ;; class=\"link-<type>\" injected on the rendered anchor.
      ((member scheme a3madkour-pub-typed-link-types)

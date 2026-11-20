@@ -1112,6 +1112,26 @@ Called as `asset-validate-and-copy' calls it: PATH is the absolute form."
     (let ((result (a3madkour-pub--asset-do-move "/src" "/dst" nil)))
       (should (eq (plist-get result :method) 'git-mv)))))
 
+;; -- `::search' suffixes on asset links --
+
+(ert-deftest a3madkour-pub-assets-test-extract-refs-drops-search-suffix ()
+  "`[[file:./assets/page/n/paper.pdf::5]]' yields the bare asset path."
+  (a3-pub-assets-test--with-tmp-root root
+    (let ((note (expand-file-name "note.org" root)))
+      (with-temp-file note (insert "See [[file:./assets/page/n/paper.pdf::5]].\n"))
+      (should (equal (mapcar #'car (a3madkour-pub--extract-asset-refs note))
+                     '("./assets/page/n/paper.pdf"))))))
+
+(ert-deftest a3madkour-pub-assets-test-rewrite-source-links-to-keeps-search-suffix ()
+  "A link with `::5' matches its target and keeps the suffix when rewritten."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")
+      "Page [[file:../img/x.pdf::5][p5]] here."
+    (should (= 1 (a3madkour-pub--asset-rewrite-source-links-to
+                  note (expand-file-name "img/x.pdf" root)
+                  "./assets/page/note/x.pdf")))
+    (should (string-match-p (regexp-quote "[[./assets/page/note/x.pdf::5][p5]]")
+                            (a3-pub-assets-test--file-contents note)))))
+
 (provide 'a3madkour-publish-assets-test)
 
 ;;; a3madkour-publish-assets-test.el ends here

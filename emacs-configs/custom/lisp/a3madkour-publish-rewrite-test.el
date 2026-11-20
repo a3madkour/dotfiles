@@ -1014,6 +1014,69 @@ intent must survive the file→id hop into `--rewrite-id-link'."
                             "<a href=\"/garden/target/\">/garden/target/</a>")))))
       (delete-file tgt))))
 
+;;; `::search' suffixes on file links
+
+(ert-deftest a3madkour-pub-rewrite-test-split-search ()
+  "Path-shaped links split at the first `::'; URLs and id links do not."
+  (should (equal (a3madkour-pub-rewrite--split-search "file:other.org::*Setup")
+                 '("file:other.org" . "*Setup")))
+  (should (equal (a3madkour-pub-rewrite--split-search "./paper.pdf::5") '("./paper.pdf" . "5")))
+  (should (equal (a3madkour-pub-rewrite--split-search "file:other.org") '("file:other.org" . nil)))
+  (should (equal (a3madkour-pub-rewrite--split-search "https://example.com/a::b")
+                 '("https://example.com/a::b" . nil)))
+  (should (equal (a3madkour-pub-rewrite--split-search "id:abc::x") '("id:abc::x" . nil))))
+
+(ert-deftest a3madkour-pub-rewrite-test-file-link-with-heading-links-the-note ()
+  "`[[file:other.org::*Setup]]' links the note and warns that the heading is dropped."
+  (let* ((tmp-dir (make-temp-file "a3pub-search-" t))
+         (src-file (expand-file-name "src.org" tmp-dir))
+         (src-id "source-id")
+         (other-file (expand-file-name "other.org" tmp-dir)))
+    (unwind-protect
+        (progn
+          (with-temp-file other-file
+            (insert "#+title: Other\n:PROPERTIES:\n:ID: other-id\n:END:\n* Setup\n"))
+          (with-temp-file src-file (insert ""))
+          (a3madkour-pub-rewrite-test--with-stubbed
+           (("other-id" :state live :section "garden" :slug "other")
+            ("source-id" :state live :section "garden" :slug "src"))
+           (cl-letf (((symbol-function 'a3madkour-pub--id-to-file)
+                      (lambda (id) (and (equal id "other-id") other-file))))
+             (let ((r (a3madkour-pub/rewrite-link
+                       "[[file:other.org::*Setup][see setup]]" src-id src-file)))
+               (should (string-match-p "href=\"/garden/other/\"" (plist-get r :html)))
+               (should-not (string-match-p "::" (plist-get r :html)))
+               (should (cl-some (lambda (w) (string-match-p "heading target dropped.*\\*Setup" w))
+                                (plist-get r :warnings)))))))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest a3madkour-pub-rewrite-test-asset-link-with-search-resolves-the-asset ()
+  "`[[file:./assets/page/src/paper.pdf::5]]' resolves the asset and drops `::5'."
+  (let* ((tmp-dir (make-temp-file "a3pub-search-asset-" t))
+         (src-file (expand-file-name "src.org" tmp-dir))
+         (src-id "source-id")
+         (a3madkour-pub-canonical-asset-root
+          (file-name-as-directory (expand-file-name "assets" tmp-dir))))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "page/src" a3madkour-pub-canonical-asset-root) t)
+          (with-temp-file (expand-file-name "page/src/paper.pdf"
+                                            a3madkour-pub-canonical-asset-root)
+            (insert "pdf"))
+          (with-temp-file src-file (insert ""))
+          (cl-letf (((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+                    ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "src")))
+            (let ((r (a3madkour-pub/rewrite-link
+                      "[[file:./assets/page/src/paper.pdf::5]]" src-id src-file)))
+              (should (plist-get r :html))
+              (should-not (string-match-p "::" (plist-get r :html))))))
+      (delete-directory tmp-dir t))))
+
+(ert-deftest a3madkour-pub-rewrite-test-url-with-double-colon-passes-through ()
+  "A URL containing `::' is not split."
+  (let ((r (a3madkour-pub/rewrite-link "[[https://example.com/a::b][x]]" "source-id" nil)))
+    (should (string-match-p (regexp-quote "https://example.com/a::b") (plist-get r :html)))))
+
 (provide 'a3madkour-publish-rewrite-test)
 
 ;;; a3madkour-publish-rewrite-test.el ends here
