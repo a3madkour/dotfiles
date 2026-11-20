@@ -487,16 +487,6 @@ its TODO keyword and its name are left alone."
 ;; The module reads the table itself, line by line, so that it depends on
 ;; nothing from the publish pipeline.
 
-(defun a3madkour-ingredients--rule-line-p (line)
-  "Non-nil when LINE is a table rule (|---+---|)."
-  (string-match-p "\\`[ \t]*|[-+]" line))
-
-(defun a3madkour-ingredients--row-cells (line)
-  "The trimmed cells of table row LINE."
-  (let ((s (string-trim line)))
-    (setq s (string-remove-suffix "|" (string-remove-prefix "|" s)))
-    (mapcar #'string-trim (split-string s "|"))))
-
 (defun a3madkour-ingredients--ingredients-heading-p (line)
   "Non-nil when LINE is a heading titled Ingredients (any level, any case)."
   (and (string-match "\\`\\*+ +\\(.*\\)\\'" line)
@@ -550,7 +540,7 @@ closing bar or at end of line."
            (line (a3madkour-ingredients--current-line))
            (bars 0) (cell-start nil) (first-row nil) (header-pos nil))
       (when (and (string-match-p "\\`[ \t]*|" line)
-                 (not (a3madkour-ingredients--rule-line-p line)))
+                 (not (a3madkour-org-table-rule-line-p line)))
         (goto-char bol)
         (while (search-forward "|" pt t)
           (cl-incf bars)
@@ -563,7 +553,7 @@ closing bar or at end of line."
             (setq first-row (point)))
           (goto-char first-row)
           (while (and (< (point) bol)
-                      (a3madkour-ingredients--rule-line-p
+                      (a3madkour-org-table-rule-line-p
                        (a3madkour-ingredients--current-line)))
             (forward-line 1))
           (setq header-pos (point))
@@ -571,7 +561,7 @@ closing bar or at end of line."
                      (string= "item"
                               (downcase
                                (or (nth (1- bars)
-                                        (a3madkour-ingredients--row-cells
+                                        (a3madkour-org-table-row-cells
                                          (a3madkour-ingredients--current-line)))
                                    ""))))
             ;; The nearest heading above the table.

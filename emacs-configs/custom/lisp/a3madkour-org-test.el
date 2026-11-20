@@ -52,5 +52,11 @@
       (insert "* Other\n| x |\n")
       (should (null (a3madkour-org-table-rows-under p))))))
 
+(ert-deftest a3madkour-org-test-table-line-helpers ()
+  (should (a3madkour-org-table-rule-line-p "  |---+---|"))
+  (should-not (a3madkour-org-table-rule-line-p "| a | b |"))
+  (should (equal (a3madkour-org-table-row-cells "  | 2 | egg |  ") '("2" "egg")))
+  (should (equal (a3madkour-org-table-row-cells "| a |  | b |") '("a" "" "b"))))
+
 (provide 'a3madkour-org-test)
 ;;; a3madkour-org-test.el ends here
