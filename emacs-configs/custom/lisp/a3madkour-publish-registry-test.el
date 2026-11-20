@@ -132,6 +132,27 @@ and pulls in no handler or dispatch module."
   (should (eq (a3madkour-pub-registry/get "recipes" :folder)
               'a3madkour-pub-recipes-dir)))
 
+(ert-deftest a3madkour-pub-registry-test-section-walked-p ()
+  "A section is walked when it has no folder, or its folder is one of the
+living folders this run; recipes is not walked while its folder is unset
+or missing."
+  (let* ((root (make-temp-file "a3-registry-walked-" t))
+         (notes (expand-file-name "notes" root))
+         (recipes (expand-file-name "recipes" root)))
+    (unwind-protect
+        (progn
+          (make-directory notes t)
+          (let ((a3madkour-pub/org-notes-dir notes))
+            (let ((a3madkour-pub-recipes-dir nil))
+              (should (a3madkour-pub-registry-section-walked-p "garden"))
+              (should (a3madkour-pub-registry-section-walked-p "library/reading"))
+              (should-not (a3madkour-pub-registry-section-walked-p "recipes")))
+            (let ((a3madkour-pub-recipes-dir recipes))
+              (should-not (a3madkour-pub-registry-section-walked-p "recipes"))
+              (make-directory recipes t)
+              (should (a3madkour-pub-registry-section-walked-p "recipes")))))
+      (delete-directory root t))))
+
 (provide 'a3madkour-publish-registry-test)
 
 ;;; a3madkour-publish-registry-test.el ends here

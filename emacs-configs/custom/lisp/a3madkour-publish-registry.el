@@ -21,6 +21,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'a3madkour-publish-paths)
 
 (defconst a3madkour-pub-registry
@@ -128,19 +129,43 @@ an existing directory; an unset (nil) or missing folder, such as an
 unset `a3madkour-pub-recipes-dir', is skipped."
   (let (out)
     (dolist (section (a3madkour-pub-registry/sections-with-mode 'living))
-      (let* ((var (a3madkour-pub-registry/get section :folder))
-             (value (and var (boundp var) (symbol-value var)))
-             (dir (cond
-                   ((eq var 'a3madkour-pub/org-notes-dir)
-                    (a3madkour-pub/path var))
-                   ((and (stringp value) (not (string-empty-p value))
-                         (file-directory-p (expand-file-name value)))
-                    (expand-file-name value)))))
-        (when dir
-          (let ((dir (file-name-as-directory dir)))
-            (unless (member dir out)
-              (push dir out))))))
+      (let ((dir (a3madkour-pub-registry--folder-dir
+                  (a3madkour-pub-registry/get section :folder))))
+        (when (and dir (not (member dir out)))
+          (push dir out))))
     (nreverse out)))
+
+(defun a3madkour-pub-registry--folder-dir (var)
+  "The directory folder variable VAR names, as a directory name, or nil.
+Resolved as `a3madkour-pub-registry-living-folders' describes: nil when
+VAR is nil, unset, empty or names no existing directory."
+  (let* ((value (and var (boundp var) (symbol-value var)))
+         (dir (cond
+               ((eq var 'a3madkour-pub/org-notes-dir)
+                (a3madkour-pub/path var))
+               ((and (stringp value) (not (string-empty-p value))
+                     (file-directory-p (expand-file-name value)))
+                (expand-file-name value)))))
+    (and dir (file-name-as-directory dir))))
+
+(defun a3madkour-pub-registry-section-walked-p (section)
+  "Non-nil when living publish walks SECTION's folder this run.
+True when SECTION has no `:folder' (or is not registered), or when its
+folder is among `a3madkour-pub-registry-living-folders'.  False for a
+section whose folder is unset or missing, such as recipes while
+`a3madkour-pub-recipes-dir' is nil: its pages are absent from the walk
+because nothing was looked at, not because they were unpublished.
+
+The notes folder is always walked (the walk signals without it), so it
+counts as walked without being resolved; this predicate never signals."
+  (let ((var (plist-get (cdr (assoc section a3madkour-pub-registry)) :folder)))
+    (or (null var)
+        (eq var 'a3madkour-pub/org-notes-dir)
+        (and (a3madkour-pub-registry--folder-dir var)
+             (cl-some (lambda (living)
+                        (eq var (a3madkour-pub-registry/get living :folder)))
+                      (a3madkour-pub-registry/sections-with-mode 'living))
+             t))))
 
 (defun a3madkour-pub-registry-living-files ()
   "Every `.org' file under `a3madkour-pub-registry-living-folders'.

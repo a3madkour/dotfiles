@@ -362,7 +362,12 @@ write-if-different → record-publish."
                               'recipes (plist-get exported :frontmatter) file)))
                (final-fm   (a3madkour-pub-recipes--assemble-frontmatter src-ast normalized))
                (body       (plist-get exported :body)))
-          (a3madkour-pub/asset-validate-and-copy file bundle-dir id)
+          ;; Never auto-move a recipe's out-of-root asset: an image beside
+          ;; the recipe would be moved out of the recipes folder into
+          ;; <asset-root>/page/<slug>/ and the recipe rewritten.  The walk
+          ;; warns instead, and the drawer image is copied below.
+          (let ((a3madkour-pub-asset-auto-remediate nil))
+            (a3madkour-pub/asset-validate-and-copy file bundle-dir id))
           (unless (a3madkour-pub-recipes--copy-drawer-image
                    file (alist-get 'image final-fm) bundle-dir)
             (setq final-fm (assq-delete-all 'image final-fm)))

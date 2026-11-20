@@ -1634,5 +1634,91 @@ Return (RENAME-CALLS REWRITE-CALLS OLD-BUNDLE-EXISTS-P)."
     (should (equal rename-calls '(("foo" "foo-bar"))))
     (should (equal rewrite-calls '(("foo" "foo-bar"))))))
 
+;; -- a living folder that is not walked this run is not swept --
+
+(defun a3-pub-unpublish-test--sweep-with-recipes-dir (recipes-dir-fn)
+  "Run a standalone living `finish-publish' over an empty notes folder.
+The manifest holds a live recipe /recipes/toast/ and a live garden note
+/garden/gone/, both with bundles on disk.  RECIPES-DIR-FN is called with
+a scratch root and returns the value to bind `a3madkour-pub-recipes-dir'
+to.  Returns (RESULT TOAST-BUNDLE-EXISTS GONE-BUNDLE-EXISTS
+TOAST-STATE GONE-STATE)."
+  (a3-pub-unpublish-test--with-tmp-notes-dir notes
+    (let* ((scratch (make-temp-file "a3-pub-recipes-sweep-" t))
+           (content-root (expand-file-name "content" scratch))
+           (manifest-path (expand-file-name "history.yaml" scratch))
+           (toast (expand-file-name "recipes/toast" content-root))
+           (gone (expand-file-name "garden/gone" content-root)))
+      (unwind-protect
+          (progn
+            (dolist (dir (list toast gone))
+              (make-directory dir t)
+              (with-temp-file (expand-file-name "index.md" dir) (insert "x")))
+            (let ((a3madkour-pub-site-content-dir content-root)
+                  (a3madkour-pub-recipes-dir (funcall recipes-dir-fn scratch)))
+              (cl-letf (((symbol-function 'a3madkour-pub-history--manifest-path)
+                         (lambda () manifest-path))
+                        ((symbol-function 'a3madkour-pub--unpublish-recheck-live-note-links)
+                         (lambda (&rest _) nil)))
+                (a3madkour-pub-history/write-manifest
+                 '((notes . [((id . "id-gone") (current_url . "/garden/gone/")
+                              (history . []) (state . "live"))
+                             ((id . "id-toast") (current_url . "/recipes/toast/")
+                              (history . []) (state . "live"))])))
+                (clrhash a3madkour-pub--publish-run-accumulator)
+                (let* ((result (a3madkour-pub/finish-publish))
+                       (notes (alist-get 'notes (a3madkour-pub-history/read-manifest)))
+                       (state-of
+                        (lambda (id)
+                          (let ((idx (a3madkour-pub-history--find-note-by-id notes id)))
+                            (alist-get 'state (aref notes idx))))))
+                  (list result
+                        (file-directory-p toast)
+                        (file-directory-p gone)
+                        (funcall state-of "id-toast")
+                        (funcall state-of "id-gone"))))))
+        (clrhash a3madkour-pub--publish-run-accumulator)
+        (delete-directory scratch t)))))
+
+(ert-deftest a3madkour-pub-unpublish-test-unset-recipes-dir-keeps-recipes ()
+  "An unset recipes folder is not walked, so its recipes are not removed.
+The garden orphan is still swept."
+  (pcase-let ((`(,result ,toast-p ,gone-p ,toast-state ,gone-state)
+               (a3-pub-unpublish-test--sweep-with-recipes-dir
+                (lambda (_scratch) nil))))
+    (should (equal (plist-get result :removed) '("id-gone")))
+    (should toast-p)
+    (should (equal toast-state "live"))
+    (should-not gone-p)
+    (should (equal gone-state "removed"))))
+
+(ert-deftest a3madkour-pub-unpublish-test-missing-recipes-dir-keeps-recipes ()
+  "A recipes folder that does not exist is not walked, so its recipes are
+not removed.  The garden orphan is still swept."
+  (pcase-let ((`(,result ,toast-p ,gone-p ,toast-state ,gone-state)
+               (a3-pub-unpublish-test--sweep-with-recipes-dir
+                (lambda (scratch) (expand-file-name "no-such-recipes" scratch)))))
+    (should (equal (plist-get result :removed) '("id-gone")))
+    (should toast-p)
+    (should (equal toast-state "live"))
+    (should-not gone-p)
+    (should (equal gone-state "removed"))))
+
+(ert-deftest a3madkour-pub-unpublish-test-empty-recipes-dir-removes-recipes ()
+  "An existing but empty recipes folder IS walked: a recipe missing from it
+is removed, alongside the garden orphan."
+  (pcase-let ((`(,result ,toast-p ,gone-p ,toast-state ,gone-state)
+               (a3-pub-unpublish-test--sweep-with-recipes-dir
+                (lambda (scratch)
+                  (let ((dir (expand-file-name "recipes-src" scratch)))
+                    (make-directory dir t)
+                    dir)))))
+    (should (equal (sort (copy-sequence (plist-get result :removed)) #'string<)
+                   '("id-gone" "id-toast")))
+    (should-not toast-p)
+    (should (equal toast-state "removed"))
+    (should-not gone-p)
+    (should (equal gone-state "removed"))))
+
 (provide 'a3madkour-publish-unpublish-test)
 ;;; a3madkour-publish-unpublish-test.el ends here

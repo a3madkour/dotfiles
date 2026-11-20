@@ -622,6 +622,38 @@ Called as `asset-validate-and-copy' calls it: PATH is the absolute form."
       (should (file-exists-p stray))
       (should (equal before (a3-pub-assets-test--file-contents note))))))
 
+(ert-deftest a3madkour-pub-assets-test-remediate-failed-move-leaves-source-alone ()
+  "When the move fails, the asset stays inert and the source is not rewritten."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")
+      "See [[../img/x.png]] here."
+    (let ((before (a3-pub-assets-test--file-contents note)))
+      (cl-letf (((symbol-function 'a3madkour-pub--asset-do-move)
+                 (lambda (&rest _) '(:method failed :rc 1))))
+        (let ((result (a3madkour-pub/rewrite-asset-link
+                       stray "../img/x.png" "note-id" nil note)))
+          (should (plist-get result :inert))
+          (should-not (plist-get result :html))
+          (should (string-match-p (regexp-quote (format "asset move failed: %s" stray))
+                                  (car (plist-get result :warnings))))
+          (should (equal before (a3-pub-assets-test--file-contents note)))
+          (should (file-exists-p stray)))))))
+
+(ert-deftest a3madkour-pub-assets-test-cross-namespace-check-unchanged-for-non-roam-source ()
+  "A source outside org-roam (no id-derived slug) skips the cross-namespace
+check, as before: an asset under another page's folder still publishes."
+  (a3-pub-assets-test--with-remediation-fixture
+      (lambda (file-or-id) (and (equal file-or-id note) "my-essay"))
+      "[[./assets/page/other-slug/y.png]]"
+    (let ((asset (expand-file-name "page/other-slug/y.png" asset-root)))
+      (make-directory (file-name-directory asset) t)
+      (with-temp-file asset (insert "data"))
+      (let ((result (a3madkour-pub/rewrite-asset-link
+                     asset "./assets/page/other-slug/y.png" "essay-id" nil note)))
+        (should (plist-get result :html))
+        (should-not (plist-get result :inert))
+        (should-not (cl-find-if (lambda (w) (string-match-p "cross-namespace" w))
+                                (plist-get result :warnings)))))))
+
 ;; -- --extract-asset-refs --
 
 (ert-deftest a3madkour-pub-assets-test/extract-refs-finds-relative-and-absolute ()

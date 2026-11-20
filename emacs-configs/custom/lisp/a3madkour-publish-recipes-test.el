@@ -291,3 +291,74 @@ Headnote.
     (with-temp-file src (insert "x"))
     (should-not (a3madkour-pub-recipes--copy-drawer-image src "missing.svg" bundle))
     (should-not (a3madkour-pub-recipes--copy-drawer-image src nil bundle))))
+
+(ert-deftest a3madkour-pub-recipes-test-publish-never-moves-body-images ()
+  "Publishing a recipe never moves a body-linked image out of the recipes
+folder, even with auto-remediation on: the image stays beside the recipe,
+the recipe source is unchanged, and the asset walk warns instead.
+Export, frontmatter and history are stubbed (they need the site's section
+contract); the asset walk itself is the real one."
+  (let* ((root (make-temp-file "a3-pub-recipes-assets-" t))
+         (recipes (expand-file-name "recipes" root))
+         (recipe (expand-file-name "toast.org" recipes))
+         (image (expand-file-name "photo.png" recipes))
+         (asset-root (expand-file-name "notes/assets" root))
+         (site-root (expand-file-name "site" root))
+         (orig-walk (symbol-function 'a3madkour-pub/asset-validate-and-copy))
+         (a3madkour-pub-canonical-asset-root asset-root)
+         (a3madkour-pub-asset-auto-remediate t)
+         (a3madkour-recipe-lint-enabled nil)
+         walk-result outcome before)
+    (unwind-protect
+        (progn
+          (make-directory recipes t)
+          (make-directory asset-root t)
+          (with-temp-file image (insert "data"))
+          (with-temp-file recipe
+            (insert ":PROPERTIES:\n:ID: R1\n:END:\n#+TITLE: Toast\n"
+                    "#+HUGO_PUBLISH: t\n#+HUGO_SECTION: recipes\n\n"
+                    "[[./photo.png][the toast]]\n"))
+          (setq before (with-temp-buffer
+                         (insert-file-contents-literally recipe)
+                         (buffer-string)))
+          (cl-letf (((symbol-function 'a3madkour-pub/note-metadata)
+                     (lambda (_) '(:id "R1" :state live)))
+                    ((symbol-function 'a3madkour-pub/note-slug) (lambda (_) "toast"))
+                    ((symbol-function 'a3madkour-pub/note-url)
+                     (lambda (_) "/recipes/toast/"))
+                    ((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+                    ((symbol-function 'vc-backend) (lambda (_) nil))
+                    ((symbol-function 'a3madkour-pub-yaml/site-root)
+                     (lambda () site-root))
+                    ((symbol-function 'a3madkour-pub-rewrite/rewrite-to-tmp-file)
+                     (lambda (&rest _) (make-temp-file "a3-pub-recipes-tmp-" nil ".org")))
+                    ((symbol-function 'a3madkour-pub-export/export-file)
+                     (lambda (_) '(:frontmatter nil :body "body\n")))
+                    ((symbol-function 'a3madkour-pub-history/recorded-last-modified)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-frontmatter/normalize)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-recipes--assemble-frontmatter)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-recipes--copy-drawer-image)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-recipes--render-frontmatter)
+                     (lambda (_) ""))
+                    ((symbol-function 'a3madkour-pub-yaml/write-if-different)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub-history/record-publish)
+                     (lambda (&rest _) nil))
+                    ((symbol-function 'a3madkour-pub/asset-validate-and-copy)
+                     (lambda (&rest args)
+                       (setq walk-result (apply orig-walk args)))))
+            (a3madkour-pub-recipes/publish-recipe-file
+             recipe nil :on-done (lambda (status) (setq outcome status))))
+          (should (eq outcome 'ok))
+          (should (file-exists-p image))
+          (should-not (file-exists-p (expand-file-name "page/toast/photo.png" asset-root)))
+          (should (equal before (with-temp-buffer
+                                  (insert-file-contents-literally recipe)
+                                  (buffer-string))))
+          (should (cl-find-if (lambda (w) (string-match-p "out-of-canonical-root" w))
+                              (plist-get walk-result :warnings))))
+      (delete-directory root t))))

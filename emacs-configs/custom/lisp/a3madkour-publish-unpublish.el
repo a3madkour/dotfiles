@@ -256,6 +256,14 @@ yield (\"research/questions\" . \"q\")."
   (member (car (a3madkour-pub--unpublish-url-to-section-slug url))
           a3madkour-pub-deliberate-sections))
 
+(defun a3madkour-pub--unpublish-unwalked-url-p (url)
+  "Non-nil when URL's section lives in a folder this run did not walk.
+See `a3madkour-pub-registry-section-walked-p': a recipe is missing from
+the new-set when `a3madkour-pub-recipes-dir' is unset or missing, and
+that absence is not a removal."
+  (let ((section (car (a3madkour-pub--unpublish-url-to-section-slug url))))
+    (and section (not (a3madkour-pub-registry-section-walked-p section)))))
+
 (cl-defun a3madkour-pub/finish-publish (&key dry-run (scope 'living) (reap t))
   "Orchestrate the unpublish flow.  Returns a plist.
 
@@ -323,11 +331,15 @@ Returns:
          ;; S1 dogfood row 2: a living run never publishes a deliberate
          ;; section, so those ids are always missing from its new-set.
          ;; Missing is not removed — they are only unpublished deliberately.
+         ;; Likewise a living section whose folder was not walked this run
+         ;; (recipes with `a3madkour-pub-recipes-dir' unset or missing).
          (removed (cl-remove-if
                    (lambda (id)
                      (let ((idx (a3madkour-pub-history--find-note-by-id notes id)))
-                       (and idx (a3madkour-pub--unpublish-deliberate-url-p
-                                 (alist-get 'current_url (aref notes idx))))))
+                       (and idx
+                            (let ((url (alist-get 'current_url (aref notes idx))))
+                              (or (a3madkour-pub--unpublish-deliberate-url-p url)
+                                  (a3madkour-pub--unpublish-unwalked-url-p url))))))
                    (plist-get diff :removed)))
          (removed-set (make-hash-table :test 'equal))
          ;; P1.1c mass-removal circuit-breaker.  Refuse a real (non-dry-run,
@@ -339,6 +351,8 @@ Returns:
                           (lambda (n)
                             (and (member (alist-get 'state n) '("live" "draft"))
                                  (not (a3madkour-pub--unpublish-deliberate-url-p
+                                       (alist-get 'current_url n)))
+                                 (not (a3madkour-pub--unpublish-unwalked-url-p
                                        (alist-get 'current_url n)))))
                           notes))
          (sweep-refused

@@ -402,8 +402,11 @@ asset move and the link rewrite in `git status' after the publish."
 
 PATH is the link path (relative `./assets/...', absolute `~/...' or `/...').
 TEXT is the link display text (may equal PATH for [[no-text]] form).
-SOURCE-NOTE-ID is the source note's UUID — used to derive source slug
-for cross-namespace validation + auto-remediation destination.
+SOURCE-NOTE-ID is the source note's UUID — used to derive the source slug
+for cross-namespace validation.  The auto-remediation destination uses
+the slug of SOURCE-FILE (or of SOURCE-NOTE-ID when no file is known).
+An out-of-root asset whose move fails is left inert and the source is
+not rewritten.
 DRY-RUN, when non-nil, prevents auto-remediation I/O (Task 15).
 SOURCE-FILE, when supplied, is the source note's absolute file path —
 used directly instead of `--id-to-file' so essays under directories
@@ -424,8 +427,14 @@ Returns one of:
 See parent spec §7 + design doc §5."
   (let* ((source-file (or source-file
                           (a3madkour-pub--id-to-file source-note-id)))
-         (source-slug (let ((key (or source-file source-note-id)))
-                        (and key (a3madkour-pub/note-slug key))))
+         ;; The cross-namespace check keys on the org-roam id only, so a
+         ;; source outside org-roam (essay, poem) is not checked.
+         (source-slug (and source-note-id
+                           (a3madkour-pub/note-slug source-note-id)))
+         ;; Auto-remediation places the asset under the file's own slug,
+         ;; which a source outside org-roam has too.
+         (remediate-slug (let ((key (or source-file source-note-id)))
+                           (and key (a3madkour-pub/note-slug key))))
          (resolved (a3madkour-pub--asset-resolve-path path source-file))
          (kind (plist-get resolved :kind))
          (abs (plist-get resolved :abs-path))
@@ -454,7 +463,7 @@ See parent spec §7 + design doc §5."
                          (format "out-of-canonical-root: %s; set auto-remediate or move manually"
                                  abs))))
        (t
-        (let* ((dest (a3madkour-pub--asset-remediate-dest abs source-slug))
+        (let* ((dest (a3madkour-pub--asset-remediate-dest abs remediate-slug))
                (dest-rel (concat "./" (file-relative-name
                                        dest
                                        (file-name-directory (or source-file ""))))))
@@ -464,7 +473,7 @@ See parent spec §7 + design doc §5."
               (list :resolved-path nil :source-path abs :kind html-kind
                     :warnings (list (plist-get move-result :info)))))
            ;; No slug → no page/<slug>/ to place it under; leave it alone.
-           ((null source-slug)
+           ((null remediate-slug)
             (list :inert (a3madkour-pub--asset-emit-inert filename)
                   :warnings (list
                              (format "cannot place asset %s: no slug for %s"
@@ -479,17 +488,22 @@ See parent spec §7 + design doc §5."
                                      abs source-file))))
            (t
             (let ((move-result (a3madkour-pub--asset-do-move abs dest nil)))
-              ;; Rewrite the .org source links to the new canonical relative form:
-              (when source-file
-                (a3madkour-pub--asset-rewrite-source-links-to source-file abs dest-rel))
-              ;; Re-dispatch as page-kind with the new dest:
-              (let* ((new-filename (file-name-nondirectory dest))
-                     (src new-filename))
-                (list :html (a3madkour-pub--asset-emit-html src display html-kind)
-                      :resolved-path src
-                      :source-path dest
-                      :kind html-kind
-                      :warnings (list (plist-get move-result :info)))))))))))
+              (if (eq (plist-get move-result :method) 'failed)
+                  ;; The asset did not move: rewriting the links would
+                  ;; point them at a file that is not there.
+                  (list :inert (a3madkour-pub--asset-emit-inert filename)
+                        :warnings (list (format "asset move failed: %s" abs)))
+                ;; Rewrite the .org source links to the new canonical relative form:
+                (when source-file
+                  (a3madkour-pub--asset-rewrite-source-links-to source-file abs dest-rel))
+                ;; Re-dispatch as page-kind with the new dest:
+                (let* ((new-filename (file-name-nondirectory dest))
+                       (src new-filename))
+                  (list :html (a3madkour-pub--asset-emit-html src display html-kind)
+                        :resolved-path src
+                        :source-path dest
+                        :kind html-kind
+                        :warnings (list (plist-get move-result :info))))))))))))
      ;; page + same namespace → emit page-relative HTML.
 
      ((eq kind 'page)
