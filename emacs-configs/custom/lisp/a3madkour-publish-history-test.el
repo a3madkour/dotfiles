@@ -606,6 +606,121 @@ half-written file that later feeds spurious `:removed' classifications."
         (let ((m (a3madkour-pub-history/read-manifest)))
           (should (equal (alist-get 'id (aref (alist-get 'notes m) 0)) "keep")))))))
 
+;; -- Manifest parse cache --
+
+(defconst a3-pub-history-test--three-notes
+  (concat "notes: \n"
+          "- id: id-1\n  current_url: \"/garden/one/\"\n  history: []\n"
+          "  state: live\n  last_modified: 2026-01-01\n"
+          "- id: id-2\n  current_url: \"/garden/two/\"\n  history: \n"
+          "  - url: \"/garden/two-old/\"\n    replaced_at: \"2026-06-01T19:24:54Z\"\n"
+          "    reason: title_change\n  state: live\n"
+          "- id: id-3\n  current_url: \"/garden/three/\"\n  history: []\n"
+          "  state: draft\n")
+  "A hand-written three-note manifest for the parse-cache tests.")
+
+(defmacro a3-pub-history-test--with-cached-manifest (path-sym parses-sym &rest body)
+  "Eval BODY in a fresh tmp data dir with an empty parse cache.
+PATH-SYM is bound to the manifest path, which holds
+`a3-pub-history-test--three-notes'; PARSES-SYM counts the calls to
+`yaml-parse-string' made while BODY runs."
+  (declare (indent 2) (debug (sexp sexp body)))
+  (let ((orig (make-symbol "orig")))
+    `(a3-pub-history-test--with-tmp-manifest ,path-sym
+       (a3madkour-pub-history--cache-clear)
+       (with-temp-file ,path-sym (insert a3-pub-history-test--three-notes))
+       (let* ((,parses-sym 0)
+              (,orig (symbol-function 'yaml-parse-string)))
+         (cl-letf (((symbol-function 'yaml-parse-string)
+                    (lambda (&rest args)
+                      (cl-incf ,parses-sym)
+                      (apply ,orig args))))
+           (unwind-protect (progn ,@body)
+             (a3madkour-pub-history--cache-clear)))))))
+
+(ert-deftest a3madkour-pub-history-test-read-manifest-parses-once ()
+  "Repeated reads of an unchanged manifest parse the file once."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (a3madkour-pub-history/read-manifest)
+    (a3madkour-pub-history/read-manifest)
+    (should (equal "2026-01-01"
+                   (a3madkour-pub-history/recorded-last-modified "id-1" "/garden/one/")))
+    (should (equal '("/garden/two-old/") (a3madkour-pub-history/aliases-for "id-2")))
+    (should (= parses 1))))
+
+(ert-deftest a3madkour-pub-history-test-record-publish-does-not-reparse ()
+  "`record-publish' reads its own last write from the cache, and every
+change still reaches the file."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (a3madkour-pub-history/read-manifest)
+    (should (= parses 1))
+    (a3madkour-pub-history/record-publish "id-1" "/garden/one-renamed/" 'live)
+    (a3madkour-pub-history/record-publish "id-9" "/garden/nine/" 'live)
+    (should (= parses 1))
+    (a3madkour-pub-history--cache-clear)
+    (let* ((m (a3madkour-pub-history/read-manifest))
+           (notes (alist-get 'notes m)))
+      (should (= (length notes) 4))
+      (should (equal "/garden/one-renamed/" (alist-get 'current_url (aref notes 0))))
+      (should (equal "id-9" (alist-get 'id (aref notes 3)))))))
+
+(ert-deftest a3madkour-pub-history-test-read-manifest-sees-external-change ()
+  "A file rewritten behind the cache's back (new content, new size) is reparsed."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (a3madkour-pub-history/read-manifest)
+    (with-temp-file path
+      (insert (replace-regexp-in-string "/garden/one/" "/garden/changed-on-disk/"
+                                        a3-pub-history-test--three-notes)))
+    (should (equal (alist-get 'current_url
+                              (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+                   "/garden/changed-on-disk/"))
+    (should (= parses 2))))
+
+(ert-deftest a3madkour-pub-history-test-read-manifest-sees-same-size-change ()
+  "A same-size rewrite is caught by its modification time."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (a3madkour-pub-history/read-manifest)
+    (with-temp-file path
+      (insert (replace-regexp-in-string "/garden/one/" "/garden/uno/"
+                                        a3-pub-history-test--three-notes)))
+    (set-file-times path '(0 0))
+    (should (equal (alist-get 'current_url
+                              (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+                   "/garden/uno/"))
+    (should (= parses 2))))
+
+(ert-deftest a3madkour-pub-history-test-read-manifest-returns-a-copy ()
+  "Mutating a returned manifest never reaches the cache."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (let ((m (a3madkour-pub-history/read-manifest)))
+      (aset (alist-get 'notes m) 0 '((id . "mutated")))
+      (setf (alist-get 'notes m) [])
+      (should (equal (alist-get 'id (aref (alist-get 'notes (a3madkour-pub-history/read-manifest)) 0))
+                     "id-1")))))
+
+(ert-deftest a3madkour-pub-history-test-read-manifest-after-delete ()
+  "A deleted manifest reads as the empty shape, not as the cached one."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (a3madkour-pub-history/read-manifest)
+    (delete-file path)
+    (should (equal (a3madkour-pub-history/read-manifest) '((notes . []))))))
+
+(ert-deftest a3madkour-pub-history-test-cache-matches-a-real-read-after-write ()
+  "What a write leaves in the cache is `equal' to parsing the written file."
+  (a3-pub-history-test--with-cached-manifest path parses
+    (dolist (call '(("id-9" "/garden/nine/" live "2026-02-02")      ; new note
+                    ("id-1" "/garden/one-renamed/" live nil)        ; url change
+                    ("id-3" "/garden/three/" live nil)              ; state change
+                    ("id-2" nil removed nil)))                      ; removal
+      (a3madkour-pub-history/record-publish (nth 0 call) (nth 1 call) (nth 2 call)
+                                            :last-modified (nth 3 call))
+      (let* ((before parses)
+             (cached (a3madkour-pub-history/read-manifest)))
+        ;; The comparison means something only if this read was a cache hit.
+        (should (= parses before))
+        (a3madkour-pub-history--cache-clear)
+        (should (equal cached (a3madkour-pub-history/read-manifest)))))))
+
 (provide 'a3madkour-publish-history-test)
 
 ;;; a3madkour-publish-history-test.el ends here
