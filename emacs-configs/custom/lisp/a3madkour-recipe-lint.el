@@ -8,6 +8,7 @@
 ;;; Code:
 (require 'cl-lib)
 (require 'org-element)
+(require 'a3madkour-org)
 (require 'a3madkour-ingredients)
 
 (defvar a3madkour-recipe-lint-enabled t
@@ -25,14 +26,6 @@
   "1-based source line of ELEMENT's :begin (1 if absent)."
   (let ((b (and element (org-element-property :begin element))))
     (if b (line-number-at-pos b) 1)))
-
-(defun a3madkour-recipe-lint--kw (ast name)
-  "Value of `#+NAME:'-style keyword NAME (upcased) in AST, or nil."
-  (org-element-map ast 'keyword
-    (lambda (kw)
-      (when (string-equal (upcase (org-element-property :key kw)) name)
-        (org-element-property :value kw)))
-    nil t))
 
 (defun a3madkour-recipe-lint--drawer-value (ast key)
   "Value of :PROPERTIES: drawer KEY (upcased) in AST, or nil.
@@ -73,9 +66,9 @@ Reuses the handler's position-robust extraction so a drawer authored after
                            (t 'missing)))
            (misses '()))
       ;; Rule 6: required metadata.
-      (unless (a3madkour-recipe-lint--kw ast "TITLE")
+      (unless (a3madkour-org-ast-keyword ast "TITLE")
         (funcall emit 1 "missing #+TITLE:"))
-      (let ((summary (a3madkour-recipe-lint--kw ast "HUGO_SUMMARY")))
+      (let ((summary (a3madkour-org-ast-keyword ast "HUGO_SUMMARY")))
         (cond ((null summary) (funcall emit 1 "missing #+HUGO_SUMMARY:"))
               ((string-blank-p summary) (funcall emit 1 "empty #+HUGO_SUMMARY:"))))
       (let ((sv (a3madkour-recipe-lint--drawer-value ast "SERVINGS")))

@@ -15,6 +15,7 @@
 
 (require 'cl-lib)
 (require 'org-element)
+(require 'a3madkour-org)
 (require 'a3madkour-sections)
 (require 'a3madkour-publish-registry)
 ;; `a3madkour-pub--extract-id' lives here.  The note ID must be read from the
@@ -32,14 +33,6 @@
 
 (defvar a3madkour-works-lint-enabled t
   "When non-nil, the works handler runs this linter before publishing.")
-
-(defun a3madkour-works-lint--kw (ast name)
-  "Value of keyword NAME (upcased) in AST, or nil."
-  (org-element-map ast 'keyword
-    (lambda (kw)
-      (when (string-equal (upcase (org-element-property :key kw)) name)
-        (org-element-property :value kw)))
-    nil t))
 
 (defun a3madkour-works-lint--parse-plist (s)
   "Parse `:key value :key \"quoted value\"' string S into ((SYMBOL . STRING) ...)."
@@ -115,7 +108,7 @@ post-push CI failure into a file:line error."
     (org-mode)
     (let* ((ast     (org-element-parse-buffer))
            (base    (file-name-nondirectory file))
-           (section (a3madkour-works-lint--kw ast "HUGO_SECTION"))
+           (section (a3madkour-org-ast-keyword ast "HUGO_SECTION"))
            (errs    '()))
       (when (member section (a3madkour-pub-registry/sections-for-handler
                              'a3madkour-pub-works/publish-works-file))

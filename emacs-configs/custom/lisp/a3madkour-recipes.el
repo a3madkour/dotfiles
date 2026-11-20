@@ -23,6 +23,7 @@
 (require 'org)
 (require 'org-id)
 (require 'org-table)
+(require 'a3madkour-org)
 (require 'a3madkour-ingredients)
 
 (declare-function a3madkour-recipe-lint/lint-file "a3madkour-recipe-lint")
@@ -122,20 +123,14 @@ never written over an existing one.  Point is left in the first `item' cell."
         (insert-file-contents file)
         (buffer-string)))))
 
-(defun a3madkour-recipes--text-keyword (text key)
-  "The trimmed value of the first #+KEY: line in TEXT, or nil."
-  (let ((case-fold-search t))
-    (when (string-match (format "^#\\+%s:\\(.*\\)$" (regexp-quote key)) text)
-      (string-trim (match-string 1 text)))))
-
 (defun a3madkour-recipes/title (file)
   "The title of recipe FILE, or nil when FILE is not a recipe.
 A recipe is an org file whose #+HUGO_SECTION: is recipes, published or not."
   (when (and (file-regular-p file) (string-suffix-p ".org" file))
     (let ((text (a3madkour-recipes--file-text file)))
-      (when (equal (a3madkour-recipes--text-keyword text "HUGO_SECTION")
+      (when (equal (a3madkour-org-keyword-in-string text "HUGO_SECTION")
                    a3madkour-recipes--section)
-        (let ((title (a3madkour-recipes--text-keyword text "TITLE")))
+        (let ((title (a3madkour-org-keyword-in-string text "TITLE")))
           (if (or (null title) (string-empty-p title))
               (file-name-base file)
             title))))))
@@ -169,17 +164,6 @@ Rows with an empty item are dropped; :qty and :unit are strings or nil."
                  when item
                  collect (list :item item :qty (cell row qty-i) :unit (cell row unit-i)))))))
 
-(defun a3madkour-recipes--keyword (key)
-  "The trimmed value of the first #+KEY: line in the buffer, or nil."
-  (save-excursion
-    (save-restriction
-      (widen)
-      (goto-char (point-min))
-      (let ((case-fold-search t))
-        (when (re-search-forward
-               (format "^#\\+%s:\\(.*\\)$" (regexp-quote key)) nil t)
-          (string-trim (match-string 1)))))))
-
 (defun a3madkour-recipes--set-keyword (key value after)
   "Set the buffer's #+KEY: line to VALUE, adding it below #+AFTER: if absent."
   (save-excursion
@@ -200,13 +184,13 @@ are listed in *Recipe problems* and nothing changes."
   (interactive)
   (unless (and (derived-mode-p 'org-mode)
                (buffer-file-name)
-               (equal (a3madkour-recipes--keyword "HUGO_SECTION")
+               (equal (a3madkour-org-keyword "HUGO_SECTION")
                       a3madkour-recipes--section))
     (user-error "This buffer is not a recipe (no #+HUGO_SECTION: %s)"
                 a3madkour-recipes--section))
-  (let ((title (or (a3madkour-recipes--keyword "TITLE")
+  (let ((title (or (a3madkour-org-keyword "TITLE")
                    (file-name-base (buffer-file-name))))
-        (public (let ((v (a3madkour-recipes--keyword "HUGO_PUBLISH")))
+        (public (let ((v (a3madkour-org-keyword "HUGO_PUBLISH")))
                   (and v (string-match-p "\\`[Tt]\\'" v)))))
     (if public
         (progn

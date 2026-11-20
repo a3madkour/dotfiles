@@ -7,20 +7,11 @@
 
 ;;; Code:
 
-(defun a3madkour-pub-keywords/extract (key)
-  "Return the value of org keyword KEY in the current buffer, or nil if absent.
+(require 'a3madkour-org)
 
-Matches `#+KEY: value' lines case-insensitively on the key.  The value is
-trimmed of surrounding whitespace.  A keyword present with no value returns
-an empty string \"\" (distinguishable from absent → nil)."
-  (save-excursion
-    (save-restriction
-      (widen)
-      (goto-char (point-min))
-      (let ((case-fold-search t)
-            (re (format "^#\\+%s:\\(.*\\)$" (regexp-quote key))))
-        (when (re-search-forward re nil t)
-          (string-trim (match-string 1)))))))
+(defalias 'a3madkour-pub-keywords/extract #'a3madkour-org-keyword
+  "Return the value of org keyword KEY in the current buffer, or nil if absent.
+Alias of `a3madkour-org-keyword', kept until the rename pass.")
 
 (defun a3madkour-pub-keywords/boolean-p (v)
   "Return non-nil iff V is the string \"t\" (case-insensitive).
