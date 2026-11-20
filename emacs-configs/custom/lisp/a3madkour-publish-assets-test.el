@@ -535,6 +535,93 @@
                                 :test (lambda (n s) (string-match-p n s))))))
         (when (file-exists-p src-asset) (delete-file src-asset))))))
 
+;; -- rewrite-asset-link: auto-remediation rewrites the link the author wrote --
+
+(defun a3-pub-assets-test--file-contents (file)
+  "Return FILE's contents as a string."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (buffer-string)))
+
+(defmacro a3-pub-assets-test--with-remediation-fixture (slug-fn note-body &rest body)
+  "Run BODY in a temp tree with an out-of-root asset and a note linking it.
+
+Layout under a fresh tmpdir ROOT:
+  ROOT/notes/note.org   the source note, contents NOTE-BODY
+  ROOT/notes/assets/    canonical asset root (bound), as in production
+  ROOT/img/x.png        the stray asset, outside the canonical root
+
+Binds `root', `asset-root', `note' and `stray' for BODY.  SLUG-FN stubs
+`a3madkour-pub/note-slug'; `--id-to-file' returns nil and `vc-backend'
+returns nil, so the move is a plain rename inside ROOT and nothing
+touches the org-roam DB."
+  (declare (indent 2))
+  `(a3-pub-assets-test--with-tmp-root root
+     (let* ((asset-root (file-name-as-directory (expand-file-name "notes/assets" root)))
+            (note (expand-file-name "notes/note.org" root))
+            (stray (expand-file-name "img/x.png" root))
+            (a3madkour-pub-canonical-asset-root asset-root)
+            (a3madkour-pub-asset-auto-remediate t))
+       (make-directory asset-root t)
+       (make-directory (file-name-directory note) t)
+       (make-directory (file-name-directory stray) t)
+       (with-temp-file stray (insert "data"))
+       (with-temp-file note (insert ,note-body))
+       (cl-letf (((symbol-function 'a3madkour-pub/note-slug) ,slug-fn)
+                 ((symbol-function 'a3madkour-pub--id-to-file) (lambda (_) nil))
+                 ((symbol-function 'vc-backend) (lambda (_) nil)))
+         ,@body))))
+
+(ert-deftest a3madkour-pub-assets-test-remediate-rewrites-relative-file-link ()
+  "A relative `file:' link is rewritten when its asset is auto-moved.
+Called as `asset-validate-and-copy' calls it: PATH is the absolute form."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")
+      "See [[file:../img/x.png]] here."
+    (a3madkour-pub/rewrite-asset-link stray "../img/x.png" "note-id" nil note)
+    (should (file-exists-p (expand-file-name "page/note/x.png" asset-root)))
+    (should (string-match-p (regexp-quote "[[./assets/page/note/x.png]]")
+                            (a3-pub-assets-test--file-contents note)))
+    (should-not (string-match-p "\\.\\./img/x\\.png"
+                                (a3-pub-assets-test--file-contents note)))))
+
+(ert-deftest a3madkour-pub-assets-test-remediate-rewrites-both-spellings ()
+  "Two links to one asset, spelt differently, are both rewritten."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")
+      "[[file:../img/x.png]] and [[../img/x.png][the figure]]"
+    (a3madkour-pub/rewrite-asset-link stray "../img/x.png" "note-id" nil note)
+    (should (equal (a3-pub-assets-test--file-contents note)
+                   "[[./assets/page/note/x.png]] and [[./assets/page/note/x.png][the figure]]"))))
+
+(ert-deftest a3madkour-pub-assets-test-remediate-uses-source-file-slug ()
+  "An essay outside org-roam gets its slug from SOURCE-FILE, not the ID."
+  (a3-pub-assets-test--with-remediation-fixture
+      (lambda (file-or-id) (and (equal file-or-id note) "my-essay"))
+      "[[../img/x.png]]"
+    (a3madkour-pub/rewrite-asset-link stray "../img/x.png" "essay-id" nil note)
+    (should (file-exists-p (expand-file-name "page/my-essay/x.png" asset-root)))
+    (should-not (file-exists-p (expand-file-name "page/nil" asset-root)))))
+
+(ert-deftest a3madkour-pub-assets-test-remediate-refuses-without-slug ()
+  "With no slug to place the asset under, nothing moves."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) nil)
+      "[[../img/x.png]]"
+    (let ((result (a3madkour-pub/rewrite-asset-link
+                   stray "../img/x.png" "note-id" nil note)))
+      (should (plist-get result :inert))
+      (should (file-exists-p stray))                       ; not moved
+      (should (string-match-p "no slug" (car (plist-get result :warnings)))))))
+
+(ert-deftest a3madkour-pub-assets-test-remediate-refuses-when-no-link-matches ()
+  "When SOURCE-FILE does not link the asset, nothing moves or changes."
+  (a3-pub-assets-test--with-remediation-fixture (lambda (_) "note")
+      "No asset here, only [[../img/other.png]]."
+    (let* ((before (a3-pub-assets-test--file-contents note))
+           (result (a3madkour-pub/rewrite-asset-link
+                    stray "../img/x.png" "note-id" nil note)))
+      (should (plist-get result :inert))
+      (should (file-exists-p stray))
+      (should (equal before (a3-pub-assets-test--file-contents note))))))
+
 ;; -- --extract-asset-refs --
 
 (ert-deftest a3madkour-pub-assets-test/extract-refs-finds-relative-and-absolute ()

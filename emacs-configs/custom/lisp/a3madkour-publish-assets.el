@@ -352,6 +352,41 @@ asset move and the link rewrite in `git status' after the publish."
         (replace-match new-link t t)))
     (write-region (point-min) (point-max) org-file nil 'silent)))
 
+(defun a3madkour-pub--asset-rewrite-source-links-to
+    (org-file abs-target new-path &optional count-only)
+  "Point every bracket link in ORG-FILE that resolves to ABS-TARGET at NEW-PATH.
+
+Each link's path has a leading `file:' stripped and is normalised with
+`a3madkour-pub--asset-normalize-link-path' against ORG-FILE; links whose
+result equals ABS-TARGET have their path part replaced by NEW-PATH (the
+description, if any, is left as written).  Matching by resolved target
+rather than by literal text means every spelling of the link is caught —
+`[[file:../img/x.png]]', `[[../img/x.png][caption]]', an absolute path.
+
+Returns the number of matching links.  With COUNT-ONLY non-nil nothing is
+written; otherwise ORG-FILE is saved when at least one link matched.
+
+This is the visible side effect of auto-remediation — author sees both the
+asset move and the link rewrite in `git status' after the publish."
+  (let ((target (expand-file-name abs-target))
+        (count 0))
+    (with-temp-buffer
+      (insert-file-contents org-file)
+      (goto-char (point-min))
+      (let ((case-fold-search nil))
+        (while (re-search-forward
+                "\\[\\[\\([^]]+\\)\\(?:\\]\\[\\([^]]+\\)\\)?\\]\\]"
+                nil t)
+          (let ((path (replace-regexp-in-string "\\`file:" "" (match-string 1))))
+            (when (equal (a3madkour-pub--asset-normalize-link-path path org-file)
+                         target)
+              (setq count (1+ count))
+              (unless count-only
+                (replace-match new-path t t nil 1))))))
+      (when (and (not count-only) (> count 0))
+        (write-region (point-min) (point-max) org-file nil 'silent)))
+    count))
+
 (defun a3madkour-pub/rewrite-asset-link (path text source-note-id &optional dry-run source-file)
   "Resolve an asset link to HTML + path metadata.
 
@@ -379,8 +414,8 @@ Returns one of:
 See parent spec §7 + design doc §5."
   (let* ((source-file (or source-file
                           (a3madkour-pub--id-to-file source-note-id)))
-         (source-slug (and source-note-id
-                           (a3madkour-pub/note-slug source-note-id)))
+         (source-slug (let ((key (or source-file source-note-id)))
+                        (and key (a3madkour-pub/note-slug key))))
          (resolved (a3madkour-pub--asset-resolve-path path source-file))
          (kind (plist-get resolved :kind))
          (abs (plist-get resolved :abs-path))
@@ -410,27 +445,33 @@ See parent spec §7 + design doc §5."
                                  abs))))
        (t
         (let* ((dest (a3madkour-pub--asset-remediate-dest abs source-slug))
-               (move-result (a3madkour-pub--asset-do-move abs dest dry-run)))
+               (dest-rel (concat "./" (file-relative-name
+                                       dest
+                                       (file-name-directory (or source-file ""))))))
           (cond
            (dry-run
-            (list :resolved-path nil :source-path abs :kind html-kind
-                  :warnings (list (plist-get move-result :info))))
+            (let ((move-result (a3madkour-pub--asset-do-move abs dest dry-run)))
+              (list :resolved-path nil :source-path abs :kind html-kind
+                    :warnings (list (plist-get move-result :info)))))
+           ;; No slug → no page/<slug>/ to place it under; leave it alone.
+           ((null source-slug)
+            (list :inert (a3madkour-pub--asset-emit-inert filename)
+                  :warnings (list
+                             (format "cannot place asset %s: no slug for %s"
+                                     abs (or source-file source-note-id)))))
+           ;; Moving it without a link to rewrite would break the source.
+           ((and source-file
+                 (zerop (a3madkour-pub--asset-rewrite-source-links-to
+                         source-file abs dest-rel t)))
+            (list :inert (a3madkour-pub--asset-emit-inert filename)
+                  :warnings (list
+                             (format "cannot move asset %s: no link to it found in %s"
+                                     abs source-file))))
            (t
-            ;; Rewrite the .org source link to the new canonical relative form:
-            (let* ((dest-rel (concat "./" (file-relative-name
-                                            dest
-                                            (file-name-directory (or source-file ""))))))
+            (let ((move-result (a3madkour-pub--asset-do-move abs dest nil)))
+              ;; Rewrite the .org source links to the new canonical relative form:
               (when source-file
-                (a3madkour-pub--asset-rewrite-source-link
-                 source-file
-                 (format "[[%s]]" path)
-                 (format "[[%s]]" dest-rel))
-                ;; Also handle [[path][text]] form:
-                (when (and text (not (equal text path)))
-                  (a3madkour-pub--asset-rewrite-source-link
-                   source-file
-                   (format "[[%s][%s]]" path text)
-                   (format "[[%s][%s]]" dest-rel text))))
+                (a3madkour-pub--asset-rewrite-source-links-to source-file abs dest-rel))
               ;; Re-dispatch as page-kind with the new dest:
               (let* ((new-filename (file-name-nondirectory dest))
                      (src new-filename))
