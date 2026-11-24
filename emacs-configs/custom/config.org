@@ -3,7 +3,7 @@
 :PROPERTIES:
 #+property: header-args:emacs-lisp :tangle yes :cache yes :results silent :comments link
 #+property: header-args :tangle no :results silent
-:LAST_MODIFIED: [2026-10-09 Fri]
+:LAST_MODIFIED: [2026-11-14 Sat]
 :END:
 
 * Bootstrap
@@ -213,7 +213,9 @@ login shell so =exec-path= matches the terminal.
 #+begin_src emacs-lisp
 (use-package exec-path-from-shell
   :config
-  (when (memq window-system '(mac ns x))
+  ;; `window-system' is nil while a daemon (systemd emacs.service) starts, and
+  ;; the daemon does not inherit the PATH exported from ~/.zshrc either.
+  (when (or (daemonp) (memq window-system '(mac ns x pgtk)))
     (exec-path-from-shell-initialize)))
 #+end_src
 
@@ -1897,7 +1899,7 @@ The =org-cite-*-processor= setup and =citar-embark= activation follow the [[http
 	  (when (search-forward ":END:" nil t)
 		(beginning-of-line)
 		(let ((doc (and note-path-clean
-						(or (a3madkour/normalize-library-path note-path-clean)
+						(or (a3madkour/portable-library-path note-path-clean)
 							note-path-clean))))
 		  (insert ":NOTER_DOCUMENT: ")
 		  (when doc (insert doc))
@@ -2183,6 +2185,23 @@ when PATH is empty or contains no `Sync/' segment."
           (case-fold-search nil))
       (when (string-match "\\`\\(?:.*?/\\)?\\(Sync/.*\\)\\'" trimmed)
         (expand-file-name (match-string 1 trimmed) "~")))))
+
+(defun a3madkour/portable-library-path (path)
+  "Return PATH as a `~/Sync/...' string that resolves on every machine.
+This is the form to write into a note: notes sync between machines whose
+home directories differ (/Users/a3madkour, /home/a3madkour), so an absolute
+path recorded on one is dead on the other.  Emacs and org-noter expand the
+leading `~' at the point of use.  Return nil when PATH is empty or contains
+no `Sync/' segment, exactly as `a3madkour/normalize-library-path' does."
+  (when-let* ((local (a3madkour/normalize-library-path path)))
+    (concat "~/" (file-relative-name local "~"))))
+
+(defun a3madkour/local-library-path (path)
+  "Return PATH as it resolves on this machine.
+The reading counterpart of `a3madkour/portable-library-path': a path read
+out of a note may have been written on another machine.  A PATH outside the
+library is returned unchanged."
+  (or (a3madkour/normalize-library-path path) path))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "./boox-core.el"
@@ -2374,6 +2393,58 @@ writing an empty highlight section."
     (should (equal (a3madkour/normalize-library-path
                     "/Users/a3madkour/Sync/Books/b.pdf")
                    (expand-file-name "Sync/Books/b.pdf" "~")))))
+
+(ert-deftest boox-portable-path-is-home-relative-on-every-machine ()
+  (should (equal (a3madkour/portable-library-path
+                  "/Users/a3madkour/Sync/Zotero/storage/AB12/paper.pdf")
+                 "~/Sync/Zotero/storage/AB12/paper.pdf"))
+  (should (equal (a3madkour/portable-library-path
+                  "/home/a3madkour/Sync/Books/b.pdf")
+                 "~/Sync/Books/b.pdf"))
+  (should (equal (a3madkour/portable-library-path "~/Sync/Books/b.pdf")
+                 "~/Sync/Books/b.pdf")))
+
+(ert-deftest boox-portable-path-nil-outside-the-library ()
+  (should (null (a3madkour/portable-library-path "/tmp/elsewhere/paper.pdf")))
+  (should (null (a3madkour/portable-library-path nil))))
+
+(ert-deftest boox-record-documents-writes-portable-paths ()
+  (let ((f (make-temp-file "boox-note-" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file f (insert ":PROPERTIES:\n:ID: x\n:END:\n#+title: t\n"))
+          (cl-letf (((symbol-function 'a3madkour/boox--note-for-key)
+                     (lambda (_key) f)))
+            (a3madkour/boox--record-documents
+             "k" "/Users/a3madkour/Sync/Zotero/storage/AB12/p.pdf"
+             "/Users/a3madkour/Sync/Zotero/storage/AB12/p-annotated.pdf" "sha"))
+          (with-current-buffer (find-file-noselect f)
+            (revert-buffer t t t)
+            (should (equal (org-entry-get (point-min) "NOTER_DOCUMENT")
+                           "~/Sync/Zotero/storage/AB12/p-annotated.pdf"))
+            (should (equal (org-entry-get (point-min) "ANNOTATED_DOCUMENT")
+                           "~/Sync/Zotero/storage/AB12/p-annotated.pdf"))
+            (should (equal (org-entry-get (point-min) "ORIGINAL_DOCUMENT")
+                           "~/Sync/Zotero/storage/AB12/p.pdf"))))
+      (when-let* ((b (find-buffer-visiting f))) (kill-buffer b))
+      (ignore-errors (delete-file f)))))
+
+(ert-deftest boox-archive-path-resolves-a-path-written-on-another-machine ()
+  (let* ((home (make-temp-file "boox-home-" t))
+         (pdf (expand-file-name "Sync/Books/b-annotated.pdf" home))
+         (f (make-temp-file "boox-note-" nil ".org"))
+         (process-environment (cons (concat "HOME=" home) process-environment)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory pdf) t)
+          (with-temp-file pdf (insert "pdf"))
+          (with-temp-file f
+            (insert ":PROPERTIES:\n:ANNOTATED_DOCUMENT: /Users/someone/Sync/Books/b-annotated.pdf\n:END:\n"))
+          (with-current-buffer (find-file-noselect f)
+            (should (equal (a3madkour/boox--archive-path) pdf))))
+      (when-let* ((b (find-buffer-visiting f))) (kill-buffer b))
+      (ignore-errors (delete-file f))
+      (ignore-errors (delete-directory home t)))))
 
 (ert-deftest boox-key-from-filename-extracts-prefix ()
   (should (equal (a3madkour/boox--key-from-filename
@@ -3157,7 +3228,9 @@ save hook moves it off `<key>.org' on its first save, so a new note records
       (with-current-buffer (find-file-noselect (a3madkour-ref-notes/new-file key))
         (insert (format ":PROPERTIES:\n:ID: %s\n:BOOX_KEY: %s\n:NOTER_DOCUMENT: %s\n:ORIGINAL_DOCUMENT: %s\n:DATE_CREATED: %s\n:LAST_MODIFIED: %s\n:END:\n#+title: %s\n#+filetags: :Ref:Book:\n\n"
                         (org-id-new)
-                        key source source
+                        key
+                        (or (a3madkour/portable-library-path source) source)
+                        (or (a3madkour/portable-library-path source) source)
                         (format-time-string "[%Y-%m-%d %a]")
                         (format-time-string "[%Y-%m-%d %a]")
                         (file-name-base source)))
@@ -3202,9 +3275,13 @@ after the note is settled."
 (defun a3madkour/boox--record-documents (key source dest sha)
   "Point KEY's ref note at DEST, remembering SOURCE and SHA.
 Run last, so nothing downstream can rewrite the note over these values.
-Signals a `user-error' if the properties do not survive the save, rather
-than reporting a success that did not happen."
-  (let ((note (a3madkour/boox--note-for-key key)))
+Paths are recorded in their portable `~/Sync/...' form, because the note
+syncs to machines with a different home directory.  Signals a `user-error'
+if the properties do not survive the save, rather than reporting a success
+that did not happen."
+  (let ((note (a3madkour/boox--note-for-key key))
+        (source (or (a3madkour/portable-library-path source) source))
+        (dest (or (a3madkour/portable-library-path dest) dest)))
     (with-current-buffer (find-file-noselect note)
       (org-entry-put (point-min) "ORIGINAL_DOCUMENT" source)
       (org-entry-put (point-min) "ANNOTATED_DOCUMENT" dest)
@@ -3337,7 +3414,8 @@ so the file still appears in `a3madkour/boox-import' if you later decide
 you do want its highlights."
   (interactive)
   (let* ((key (a3madkour/boox--note-key))
-         (dest (org-entry-get (point-min) "ANNOTATED_DOCUMENT"))
+         (dest (a3madkour/local-library-path
+                (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
          (src (and key (a3madkour/boox--reading-file-for-key key))))
     (cond
      ((null key) (user-error "Cannot determine the citekey for this note"))
@@ -3386,7 +3464,8 @@ you do want its highlights."
   "Return the current note's `:ANNOTATED_DOCUMENT:' if it is readable.
 Nil means no archive exists, which is the condition retirement refuses on:
 deleting the tablet copy would then destroy the only annotated version."
-  (when-let* ((p (org-entry-get (point-min) "ANNOTATED_DOCUMENT")))
+  (when-let* ((p (a3madkour/local-library-path
+                  (org-entry-get (point-min) "ANNOTATED_DOCUMENT"))))
     (and (file-readable-p p) p)))
 
 (defun a3madkour/boox--stale-p (key file)
